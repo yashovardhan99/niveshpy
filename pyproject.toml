@@ -70,6 +70,8 @@ dev = [
     { include-group = "linting" },
     { include-group = "stubs" },
     { include-group = "docs" },
+    "pandas >= 2.2.2, < 3.0.0",
+    "pyarrow >= 20.0.0, < 21.0.0",
 ]
 
 [tool.ruff.lint]

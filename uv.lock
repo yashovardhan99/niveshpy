@@ -711,8 +711,10 @@ dev = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "mypy" },
+    { name = "pandas" },
     { name = "pandas-stubs", version = "2.2.2.240807", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "pandas-stubs", version = "2.3.2.250926", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+    { name = "pyarrow" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -754,7 +756,9 @@ dev = [
     { name = "mkdocs-material", specifier = "==9.*" },
     { name = "mkdocstrings", extras = ["python"] },
     { name = "mypy", specifier = ">=1.15.0,<2.0.0" },
+    { name = "pandas", specifier = ">=2.2.2,<3.0.0" },
     { name = "pandas-stubs", specifier = ">=2.2.2,<3.0.0" },
+    { name = "pyarrow", specifier = ">=20.0.0,<21.0.0" },
     { name = "pytest", specifier = ">=8.3.5,<9.0.0" },
     { name = "ruff", specifier = ">=0.11.9,<0.12.0" },
 ]
