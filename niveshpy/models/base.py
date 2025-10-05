@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 from enum import Flag, auto
-from typing import Optional, NamedTuple
+from typing import NamedTuple
 
 import polars as pl
 
@@ -13,7 +13,7 @@ class Ticker(NamedTuple):
 
     symbol: str
     name: str
-    isin: Optional[str]
+    isin: str | None
 
     @classmethod
     def get_polars_schema(cls) -> pl.Schema:
@@ -113,7 +113,7 @@ class SourceStrategy(Flag):
 class SourceConfig(NamedTuple):
     """Class to hold source configuration."""
 
-    ticker_refresh_interval: Optional[timedelta] = None
+    ticker_refresh_interval: timedelta | None = None
     """The time interval at which the source can be checked for new tickers.
     
     If this value is None, the source will not be checked for new tickers.
@@ -126,7 +126,7 @@ class SourceConfig(NamedTuple):
     
     This frequency will be ticker-specific unless the source uses the `ALL_TICKERS` strategy,
     in which case it will be source-specific."""
-    data_group_period: Optional[timedelta] = None
+    data_group_period: timedelta | None = None
     """The time period for which data can be grouped at source.
     
     This is used to limit the amount of calls made to the source.

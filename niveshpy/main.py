@@ -439,6 +439,12 @@ class Nivesh:
                 start = row.get("start_date", row.get("date"))
                 end = row.get("end_date", row.get("date"))
 
+                if not isinstance(start, date) or not isinstance(end, date):
+                    logger.warning(
+                        f"Invalid date range received from source {source_key}: start={start}, end={end}"
+                    )
+                    continue
+
                 if SourceStrategy.ALL_TICKERS in source_strategy:
                     # CASE 1: ALL_TICKERS
                     if start > data_refresh_threshold:

@@ -42,7 +42,7 @@ def handle_input(
     schema: pl.Schema | None = None,
 ) -> pl.LazyFrame:
     """Handle input data and convert it to a Polars LazyFrame."""
-    if isinstance(data, (pl.DataFrame, pl.LazyFrame)):
+    if isinstance(data, pl.DataFrame | pl.LazyFrame):
         return data.lazy()
     else:
         return pl.from_dicts(map(lambda x: x._asdict(), data), schema=schema).lazy()

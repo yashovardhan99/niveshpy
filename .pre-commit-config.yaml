@@ -12,5 +12,4 @@ repos:
     rev: v1.15.0
     hooks:
       - id: mypy
-        args: [--ignore-missing-imports, --python-version=3.9]
-
+        args: [--ignore-missing-imports, --python-version=3.11]
