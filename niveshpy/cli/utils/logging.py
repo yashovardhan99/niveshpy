@@ -4,12 +4,12 @@ from logging import Formatter
 from logging.handlers import RotatingFileHandler
 import platformdirs
 from rich.logging import RichHandler
+from rich.console import Console
 from logging import DEBUG, INFO, WARNING
-
 from niveshpy.core import logging
 
 
-def setup(debug: bool) -> None:
+def setup(debug: bool, console: Console) -> None:
     """Set up logging configuration for CLI."""
     log_path = (
         platformdirs.user_log_path("niveshpy", ensure_exists=True) / "niveshpy.log"
@@ -21,6 +21,7 @@ def setup(debug: bool) -> None:
 
     console_handler = RichHandler(
         level=INFO if debug else WARNING,
+        console=console,
         show_path=False,
         log_time_format="[%Y-%m-%d %H:%M:%S]",
     )
@@ -28,9 +29,9 @@ def setup(debug: bool) -> None:
     logging.setup(file_handler, console_handler)
 
 
-def update(debug: bool) -> None:
-    """Update logging level for CLI."""
-    logging.update(
-        DEBUG if debug else INFO,
-        INFO if debug else WARNING,
-    )
+# def update(debug: bool) -> None:
+#     """Update logging level for CLI."""
+#     logging.update(
+#         DEBUG if debug else INFO,
+#         INFO if debug else WARNING,
+#     )

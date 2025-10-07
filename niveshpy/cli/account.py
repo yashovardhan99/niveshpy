@@ -8,7 +8,7 @@ from niveshpy.models.account import AccountWrite
 from niveshpy.cli.app import AppState
 from InquirerPy import inquirer, get_style
 from InquirerPy.validator import EmptyInputValidator
-from rich.console import Console
+from niveshpy.cli.utils.style import console
 
 
 @group(invoke_without_command=True)
@@ -23,7 +23,6 @@ def accounts(ctx: click.Context) -> None:
 @click.pass_obj
 def show(state: AppState) -> None:
     """Show all Accounts."""
-    console = Console(color_system=None if state.no_color else "auto")
     console.print(state.app.account_service.get_accounts())
 
 
@@ -31,7 +30,6 @@ def show(state: AppState) -> None:
 @click.pass_obj
 def add(state: AppState) -> None:
     """Add a new account."""
-    console = Console(color_system=None if state.no_color else "auto")
     console.print(
         dedent("""
                Adding new account.
@@ -41,7 +39,6 @@ def add(state: AppState) -> None:
                """)
     )
     inquirer_style = get_style({}, style_override=state.no_color)
-    console = Console(color_system=None if state.no_color else "auto")
     name = inquirer.text(
         message="Account Name",
         validate=EmptyInputValidator(),

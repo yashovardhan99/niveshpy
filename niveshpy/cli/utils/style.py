@@ -7,6 +7,9 @@ from rich.console import Console
 from collections.abc import Generator
 from contextlib import contextmanager
 
+console = Console()  # Global console instance for utility functions
+error_console = Console(stderr=True)  # Console for error messages
+
 
 @contextmanager
 def rich_click_pager(console: "Console") -> Generator[None, None, None]:

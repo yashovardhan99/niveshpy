@@ -2,7 +2,6 @@
 
 from textwrap import dedent
 import click
-from rich.console import Console
 
 from niveshpy.cli.utils.overrides import command, group
 from niveshpy.cli.utils import flags
@@ -14,6 +13,7 @@ from niveshpy.cli.app import AppState
 from InquirerPy import inquirer, get_style
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import EmptyInputValidator
+from niveshpy.cli.utils.style import console, error_console
 
 
 @group(invoke_without_command=True)
@@ -33,10 +33,6 @@ def securities(ctx: click.Context) -> None:
 def show(state: AppState, query: str = "", limit: int = 30) -> None:
     """List all securities."""
     app = state.app
-    console = Console(color_system=None if state.no_color else "auto")
-    error_console = Console(
-        stderr=True, color_system=None if state.no_color else "auto"
-    )
     with error_console.status("Loading securities..."):
         n = app.security_service.count_securities(
             QueryOptions(text_query=query if query else None)
@@ -98,7 +94,6 @@ def add(
 
     """
     app = state.app
-    console = Console(width=80, color_system=None if state.no_color else "auto")
     console.rule("[bold blue]Add New Security")
     console.print(
         dedent("""
@@ -178,7 +173,6 @@ def delete(state: AppState, key: str | None = None, all: bool = False) -> None:
     """Delete a security by its key."""
     app = state.app
     inquirer_style = get_style({}, style_override=state.no_color)
-    console = Console(width=80, color_system=None if state.no_color else "auto")
     if not key:
         # If no key provided, get user to select from existing securities
 

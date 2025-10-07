@@ -6,7 +6,6 @@ from collections.abc import Callable
 import click
 
 from niveshpy.cli.app import AppState
-from niveshpy.cli.utils import logging
 
 _AnyCallable = Callable[..., Any]
 FC = TypeVar("FC", bound="_AnyCallable | click.Command")
@@ -32,7 +31,6 @@ def _callback(ctx: click.Context, param: click.Parameter, value: Any) -> Any:
             state.no_input = value
         elif param.name == "debug" and value:
             state.debug = value
-            logging.update(debug=value)
         elif param.name == "no_color" and value:
             state.no_color = value
     return value
@@ -79,8 +77,6 @@ def no_color() -> Callable[[FC], FC]:
 def common_options(f: Callable[..., Any]) -> Callable[..., Any]:
     """Apply common options to a Click command."""
     options = [
-        debug(),
-        no_color(),
         click.version_option(None, "--version", "-v", prog_name="NiveshPy"),
     ]
     return functools.reduce(lambda x, opt: opt(x), options, f)

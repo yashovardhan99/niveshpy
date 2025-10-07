@@ -14,7 +14,7 @@ from niveshpy.models.transaction import Transaction, TransactionType
 from InquirerPy import inquirer, get_style
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import NumberValidator, EmptyInputValidator
-from rich.console import Console
+from niveshpy.cli.utils.style import console
 
 
 @group(invoke_without_command=True)
@@ -31,7 +31,6 @@ def transactions(ctx: click.Context) -> None:
 @click.pass_obj
 def show(state: AppState) -> None:
     """List all transactions."""
-    console = Console(color_system=None if state.no_color else "auto")
     console.print(state.app.transaction_service.get_transactions())
 
 
@@ -43,7 +42,6 @@ def add(
 ) -> None:
     """Add new transactions."""
     app = state.app
-    console = Console(color_system=None if state.no_color else "auto")
     inquirer_style = get_style({}, style_override=state.no_color)
     console.print(
         dedent("""

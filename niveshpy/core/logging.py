@@ -16,12 +16,12 @@ def setup(*handlers: logging.Handler) -> None:
     logger.debug("Logging initialized with handlers: %s.", handlers)
 
 
-def update(*levels: int) -> None:
-    """Update logging level."""
-    for level, handler in zip(levels, logger.handlers, strict=False):
-        handler.setLevel(level)
-        logger.debug(
-            "%s Logging level updated to %s.",
-            handler.__class__.__name__,
-            logging.getLevelName(level),
-        )
+# def update(*levels: int) -> None:
+#     """Update logging level."""
+#     for level, handler in zip(levels, logger.handlers, strict=False):
+#         handler.setLevel(level)
+#         logger.debug(
+#             "%s Logging level updated to %s.",
+#             handler.__class__.__name__,
+#             logging.getLevelName(level),
+#         )
