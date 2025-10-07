@@ -49,6 +49,3 @@ class Database:
     def __exit__(self, exc_type, exc, tb) -> None:
         """Exit context, closing the connection."""
         self.close()
-
-
-app_database = Database()  # Global database instance

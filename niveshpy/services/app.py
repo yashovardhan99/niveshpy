@@ -1,6 +1,6 @@
 """Application-level services for Niveshpy."""
 
-from niveshpy.db import Database
+from niveshpy.db.database import Database
 from niveshpy.services.account import AccountService
 from niveshpy.services.security import SecurityService
 from niveshpy.services.transaction import TransactionService

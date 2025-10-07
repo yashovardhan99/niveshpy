@@ -15,6 +15,7 @@ dependencies = [
     "casparser>=0.8.1",
     "click>=8.3.0",
     "inquirerpy>=0.3.4",
+    "rich>=13.9.4",
 ]
 requires-python = ">=3.11"
 authors = [

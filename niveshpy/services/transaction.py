@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from niveshpy.db import Database
+    from niveshpy.db.database import Database
     import polars as pl
     import pandas as pd
 

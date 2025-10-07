@@ -5,7 +5,7 @@ import click
 
 from niveshpy.cli.account import accounts
 from niveshpy.cli.security import securities
-from niveshpy.db import Database
+from niveshpy.db.database import Database
 from niveshpy.services.app import Application
 from niveshpy.cli.transaction import transactions
 

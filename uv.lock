@@ -788,6 +788,7 @@ dependencies = [
     { name = "numpy" },
     { name = "platformdirs" },
     { name = "polars", extra = ["pyarrow"] },
+    { name = "rich" },
     { name = "scipy" },
 ]
 
@@ -843,6 +844,7 @@ requires-dist = [
     { name = "polars", extras = ["pyarrow"], specifier = ">=1.29.0,<2.0.0" },
     { name = "pyarrow", marker = "extra == 'all'", specifier = ">=20.0.0,<21.0.0" },
     { name = "pyarrow", marker = "extra == 'pandas'", specifier = ">=20.0.0,<21.0.0" },
+    { name = "rich", specifier = ">=13.9.4" },
     { name = "scipy", specifier = ">=1.13.1,<2.0.0" },
 ]
 provides-extras = ["all", "pandas"]

@@ -72,7 +72,7 @@ def add(
         ).execute()
     )
 
-    securities = app.security_service.get_securities()
+    securities = app.security_service.get_securities().pl()
     if securities.is_empty():
         click.secho("No securities found. Please add a security first.", fg="red")
         return

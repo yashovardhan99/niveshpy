@@ -3,7 +3,7 @@
 from itertools import starmap
 from collections.abc import Iterable
 from typing import Literal, overload
-from niveshpy.db import Database
+from niveshpy.db.database import Database
 from niveshpy.models.account import AccountRead, AccountWrite
 import polars as pl
 
@@ -31,7 +31,7 @@ class AccountService:
         self._db_conn.commit()
 
     @overload
-    def get_accounts(self, lazy: Literal[True] = ...) -> pl.LazyFrame: ...
+    def get_accounts(self, lazy: Literal[True]) -> pl.LazyFrame: ...
 
     @overload
     def get_accounts(self, lazy: Literal[False] = ...) -> pl.DataFrame: ...
