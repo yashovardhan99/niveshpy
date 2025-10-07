@@ -6,16 +6,19 @@ from textwrap import dedent
 
 import click
 import polars as pl
+from niveshpy.cli.utils import flags
 from niveshpy.cli.utils.overrides import command, group
 from niveshpy.cli.app import AppState
 from niveshpy.core.validators import validate_date
 from niveshpy.models.transaction import Transaction, TransactionType
-from InquirerPy import inquirer
+from InquirerPy import inquirer, get_style
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import NumberValidator, EmptyInputValidator
+from rich.console import Console
 
 
 @group(invoke_without_command=True)
+@flags.common_options
 @click.pass_context
 def transactions(ctx: click.Context) -> None:
     """List, add, or delete transactions."""
@@ -24,20 +27,25 @@ def transactions(ctx: click.Context) -> None:
 
 
 @command("list")
+@flags.common_options
 @click.pass_obj
 def show(state: AppState) -> None:
     """List all transactions."""
-    click.echo(state.app.transaction_service.get_transactions())
+    console = Console(color_system=None if state.no_color else "auto")
+    console.print(state.app.transaction_service.get_transactions())
 
 
 @command()
+@flags.common_options
 @click.pass_obj
 def add(
     state: AppState,
 ) -> None:
     """Add new transactions."""
     app = state.app
-    click.echo(
+    console = Console(color_system=None if state.no_color else "auto")
+    inquirer_style = get_style({}, style_override=state.no_color)
+    console.print(
         dedent("""
                Adding new transaction.
                Any command-line arguments will be used as defaults.
@@ -51,6 +59,7 @@ def add(
         default=date.today().strftime("%Y-%m-%d"),
         validate=validate_date,
         invalid_message="Please enter a valid date in YYYY-MM-DD format.",
+        style=inquirer_style,
     ).execute()
 
     txn_date = datetime.strptime(txn_date, "%Y-%m-%d").date()
@@ -58,23 +67,30 @@ def add(
     txn_type = inquirer.select(
         message="Transaction Type",
         choices=[Choice(t, name=t.name) for t in TransactionType],
+        style=inquirer_style,
     ).execute()
 
-    description: str = inquirer.text(message="Description").execute()
+    description: str = inquirer.text(
+        message="Description", style=inquirer_style
+    ).execute()
     units = Decimal(
         inquirer.text(
-            message="Units", validate=NumberValidator(float_allowed=True)
+            message="Units",
+            validate=NumberValidator(float_allowed=True),
+            style=inquirer_style,
         ).execute()
     )
     amount = Decimal(
         inquirer.text(
-            message="Amount", validate=NumberValidator(float_allowed=True)
+            message="Amount",
+            validate=NumberValidator(float_allowed=True),
+            style=inquirer_style,
         ).execute()
     )
 
     securities = app.security_service.get_securities().pl()
     if securities.is_empty():
-        click.secho("No securities found. Please add a security first.", fg="red")
+        console.print("No securities found. Please add a security first.", style="red")
         return
 
     security_choices = [
@@ -92,11 +108,12 @@ def add(
         choices=security_choices,
         instruction="(Type to filter, use arrow keys to navigate, Enter to select)",
         validate=EmptyInputValidator(),
+        style=inquirer_style,
     ).execute()
 
     accounts = app.account_service.get_accounts()
     if accounts.is_empty():
-        click.secho("No accounts found. Please add an account first.", fg="red")
+        console.print("No accounts found. Please add an account first.", style="red")
         return
 
     account_choices = [
@@ -109,6 +126,7 @@ def add(
         choices=account_choices,
         instruction="(Type to filter, use arrow keys to navigate, Enter to select)",
         validate=EmptyInputValidator(),
+        style=inquirer_style,
     ).execute()
 
     transaction = Transaction(
@@ -120,9 +138,9 @@ def add(
         security_key=security_key,
         account_key=account_key,
     )
-    click.echo(transaction)
+    console.print(transaction)
     app.transaction_service.add_transactions(pl.DataFrame([transaction.__dict__]))
-    click.secho("Transaction added successfully.", fg="green")
+    console.print("Transaction added successfully.", style="green")
 
 
 transactions.add_command(show)

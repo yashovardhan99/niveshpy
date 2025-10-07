@@ -5,18 +5,19 @@ import click
 from rich.console import Console
 
 from niveshpy.cli.utils.overrides import command, group
-from niveshpy.cli.utils.flags import option_limit
+from niveshpy.cli.utils import flags
 from niveshpy.cli.utils.style import rich_click_pager
 from niveshpy.core.style import get_polars_print_config
 from niveshpy.db.query import QueryOptions
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
 from niveshpy.cli.app import AppState
-from InquirerPy import inquirer
+from InquirerPy import inquirer, get_style
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import EmptyInputValidator
 
 
 @group(invoke_without_command=True)
+@flags.common_options
 @click.pass_context
 def securities(ctx: click.Context) -> None:
     """Work with securities."""
@@ -26,13 +27,16 @@ def securities(ctx: click.Context) -> None:
 
 @command("list")
 @click.argument("query", default="", required=False, metavar="[<query>]")
-@option_limit("securities", default=30)
+@flags.limit("securities", default=30)
+@flags.common_options
 @click.pass_obj
 def show(state: AppState, query: str = "", limit: int = 30) -> None:
     """List all securities."""
     app = state.app
-    console = Console()
-    error_console = Console(stderr=True)
+    console = Console(color_system=None if state.no_color else "auto")
+    error_console = Console(
+        stderr=True, color_system=None if state.no_color else "auto"
+    )
     with error_console.status("Loading securities..."):
         n = app.security_service.count_securities(
             QueryOptions(text_query=query if query else None)
@@ -78,6 +82,8 @@ def show(state: AppState, query: str = "", limit: int = 30) -> None:
     type=click.Choice(SecurityType, case_sensitive=False),
     metavar="[<type>]",
 )
+@flags.no_input()
+@flags.common_options
 @click.pass_obj
 def add(
     state: AppState,
@@ -92,7 +98,7 @@ def add(
 
     """
     app = state.app
-    console = Console(width=80)
+    console = Console(width=80, color_system=None if state.no_color else "auto")
     console.rule("[bold blue]Add New Security")
     console.print(
         dedent("""
@@ -101,6 +107,7 @@ def add(
             Use [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.
         """)
     )
+    inquirer_style = get_style({}, style_override=state.no_color)
 
     while True:
         security_key = inquirer.text(
@@ -109,22 +116,26 @@ def add(
             long_instruction="If another security with the same key exists, it will be updated.",
             validate=EmptyInputValidator(),
             default=default_key,
+            style=inquirer_style,
         ).execute()
         name = inquirer.text(
             message="Security Name",
             instruction="(The full name of the security)",
             validate=EmptyInputValidator(),
             default=default_name,
+            style=inquirer_style,
         ).execute()
         category = inquirer.select(
             message="Security Category",
             choices=[Choice(cat, name=cat.name) for cat in SecurityCategory],
             default=default_category,
+            style=inquirer_style,
         ).execute()
         security_type = inquirer.select(
             message="Security Type",
             choices=[Choice(t, name=t.name) for t in SecurityType],
             default=default_type,
+            style=inquirer_style,
         ).execute()
 
         security = Security(
@@ -139,6 +150,7 @@ def add(
         confirm = inquirer.confirm(
             message="Add this security to the database?",
             default=True,
+            style=inquirer_style,
         ).execute()
         if not confirm:
             console.print("[bold red]Aborted![/bold red] Security not added.")
@@ -160,11 +172,13 @@ def add(
 @command()
 @click.argument("key", required=False)
 @click.option("--all", "-a", is_flag=True, help="List all securities before deletion.")
+@flags.common_options
 @click.pass_obj
 def delete(state: AppState, key: str | None = None, all: bool = False) -> None:
     """Delete a security by its key."""
     app = state.app
-    console = Console(width=80)
+    inquirer_style = get_style({}, style_override=state.no_color)
+    console = Console(width=80, color_system=None if state.no_color else "auto")
     if not key:
         # If no key provided, get user to select from existing securities
 
@@ -194,6 +208,7 @@ def delete(state: AppState, key: str | None = None, all: bool = False) -> None:
             message="Select a security to delete",
             choices=choices,
             validate=EmptyInputValidator(),
+            style=inquirer_style,
         ).execute()
 
     if not key:
@@ -204,6 +219,7 @@ def delete(state: AppState, key: str | None = None, all: bool = False) -> None:
     if not inquirer.confirm(
         f"Are you sure you want to delete the security with key '{key}'?",
         default=False,
+        style=inquirer_style,
     ).execute():
         console.print("[bold red]Aborted![/bold red] Security not deleted.")
         return

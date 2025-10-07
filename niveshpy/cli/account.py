@@ -6,8 +6,9 @@ import click
 from niveshpy.cli.utils.overrides import command, group
 from niveshpy.models.account import AccountWrite
 from niveshpy.cli.app import AppState
-from InquirerPy import inquirer
+from InquirerPy import inquirer, get_style
 from InquirerPy.validator import EmptyInputValidator
+from rich.console import Console
 
 
 @group(invoke_without_command=True)
@@ -22,14 +23,16 @@ def accounts(ctx: click.Context) -> None:
 @click.pass_obj
 def show(state: AppState) -> None:
     """Show all Accounts."""
-    click.echo(state.app.account_service.get_accounts())
+    console = Console(color_system=None if state.no_color else "auto")
+    console.print(state.app.account_service.get_accounts())
 
 
 @command()
 @click.pass_obj
 def add(state: AppState) -> None:
     """Add a new account."""
-    click.echo(
+    console = Console(color_system=None if state.no_color else "auto")
+    console.print(
         dedent("""
                Adding new account.
                Any command-line arguments will be used as defaults.
@@ -37,20 +40,24 @@ def add(state: AppState) -> None:
                Use Ctrl+C to cancel.
                """)
     )
+    inquirer_style = get_style({}, style_override=state.no_color)
+    console = Console(color_system=None if state.no_color else "auto")
     name = inquirer.text(
         message="Account Name",
         validate=EmptyInputValidator(),
+        style=inquirer_style,
     ).execute()
     institution = inquirer.text(
         message="Institution Name",
         validate=EmptyInputValidator(),
+        style=inquirer_style,
     ).execute()
     account = AccountWrite(
         name=name,
         institution=institution,
     )
     state.app.account_service.add_accounts([account])
-    click.secho(f"Account '{name}' added successfully.", fg="green")
+    console.print(f"Account [b]{name}[/b] added successfully.", style="green")
 
 
 accounts.add_command(show)

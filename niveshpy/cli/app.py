@@ -24,6 +24,7 @@ class AppState:
 
     debug: bool = False
     no_input: bool = False
+    no_color: bool = False
 
     @property
     def app(self) -> Application:

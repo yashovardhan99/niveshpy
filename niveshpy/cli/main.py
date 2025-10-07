@@ -8,20 +8,22 @@ from niveshpy.cli.account import accounts
 from niveshpy.cli.security import securities
 from niveshpy.cli.utils import flags
 from niveshpy.cli.utils.overrides import group
+from niveshpy.cli.utils import logging
 from niveshpy.db.database import Database
 from niveshpy.cli.transaction import transactions
 
 
 @group()
-@click.version_option(prog_name="NiveshPy")
 @flags.common_options
 @click.pass_context
 def cli(ctx: click.Context) -> None:
     """Simple CLI command to greet the user."""
+    state = ctx.ensure_object(AppState)
+    logging.setup(state.debug)  # Initialize logging with debug flag
     db = Database()
     ctx.with_resource(db)
     application = Application(db)
-    ctx.ensure_object(AppState).app = application
+    state.app = application
 
 
 cli.add_command(transactions)

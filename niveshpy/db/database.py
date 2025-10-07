@@ -7,6 +7,8 @@ from pathlib import Path
 import duckdb
 import platformdirs
 
+from niveshpy.core import logging
+
 # Resolve application data directory and database file
 app_path = platformdirs.user_data_path("niveshpy")
 app_path.mkdir(parents=True, exist_ok=True)
@@ -30,6 +32,7 @@ class Database:
         """Get a cursor, opening the connection if necessary."""
         if self._conn is None:
             self._conn = duckdb.connect(database=self._path)
+            logging.logger.info(f"Database initialized with path: {self._path}")
         return self._conn.cursor()
 
     def close(self) -> None:
