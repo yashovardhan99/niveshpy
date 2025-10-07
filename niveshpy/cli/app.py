@@ -1,29 +1,35 @@
-"""Main CLI entry point for Niveshpy."""
+"""Main application class to hold state for the CLI."""
 
-import sys
-import click
-
-from niveshpy.cli.account import accounts
-from niveshpy.cli.security import securities
+from dataclasses import dataclass
 from niveshpy.db.database import Database
-from niveshpy.services.app import Application
-from niveshpy.cli.transaction import transactions
+from niveshpy.services.account import AccountService
+from niveshpy.services.security import SecurityService
+from niveshpy.services.transaction import TransactionService
 
 
-@click.group()
-@click.version_option(prog_name="NiveshPy")
-@click.pass_context
-def cli(ctx: click.Context) -> None:
-    """Simple CLI command to greet the user."""
-    db = Database()
-    ctx.with_resource(db)
-    application = Application(db)
-    ctx.obj = application
+class Application:
+    """Main application class to hold state for the CLI."""
+
+    def __init__(self, db: Database):
+        """Initialize the application with its services."""
+        self._db = db
+        self.security_service = SecurityService(db)
+        self.account_service = AccountService(db)
+        self.transaction_service = TransactionService(db)
 
 
-cli.add_command(transactions)
-cli.add_command(securities)
-cli.add_command(accounts)
+@dataclass
+class AppState:
+    """State for the application."""
 
-if __name__ == "__main__":
-    sys.exit(cli())
+    debug: bool = False
+    no_input: bool = False
+
+    @property
+    def app(self) -> Application:
+        """The main application instance."""
+        return self._app
+
+    @app.setter
+    def app(self, value: Application) -> None:
+        self._app = value

@@ -1,5 +1,6 @@
 """Service for managing investment accounts."""
 
+from dataclasses import asdict
 from itertools import starmap
 from collections.abc import Iterable
 from typing import Literal, overload
@@ -46,7 +47,7 @@ class AccountService:
     def add_accounts(self, accounts: Iterable[AccountWrite]) -> Iterable[AccountRead]:
         """Add new accounts to the database."""
         self._create_table()
-        self._db_conn.register("new_accounts", pl.from_dicts(accounts))
+        self._db_conn.register("new_accounts", pl.from_dicts(map(asdict, accounts)))
         data = self._db_conn.execute(
             f"""MERGE INTO {self._table_name} target
             USING (SELECT * FROM new_accounts) AS new

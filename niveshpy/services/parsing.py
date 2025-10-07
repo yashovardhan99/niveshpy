@@ -2,7 +2,7 @@
 
 import polars as pl
 from niveshpy.models.parser import Parser
-from niveshpy.services.app import Application
+from niveshpy.cli.app import Application
 
 
 class ParsingService:

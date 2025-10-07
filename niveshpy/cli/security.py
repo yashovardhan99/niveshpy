@@ -4,35 +4,33 @@ from textwrap import dedent
 import click
 from rich.console import Console
 
-from niveshpy.core.style import get_polars_print_config, rich_click_pager
+from niveshpy.cli.utils.overrides import command, group
+from niveshpy.cli.utils.flags import option_limit
+from niveshpy.cli.utils.style import rich_click_pager
+from niveshpy.core.style import get_polars_print_config
 from niveshpy.db.query import QueryOptions
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
-from niveshpy.services.app import Application
+from niveshpy.cli.app import AppState
 from InquirerPy import inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import EmptyInputValidator
 
 
-@click.group(invoke_without_command=True)
+@group(invoke_without_command=True)
 @click.pass_context
 def securities(ctx: click.Context) -> None:
-    """Manage securities."""
+    """Work with securities."""
     if ctx.invoked_subcommand is None:
-        ctx.invoke(show)
+        ctx.forward(show)
 
 
-@securities.command("list")
-@click.argument("query", default="", required=False)
-@click.option(
-    "--limit",
-    "-l",
-    default=30,
-    help="Number of securities to display.",
-    show_default=True,
-)
+@command("list")
+@click.argument("query", default="", required=False, metavar="[<query>]")
+@option_limit("securities", default=30)
 @click.pass_obj
-def show(app: Application, query: str = "", limit: int = 30) -> None:
-    """Show all securities."""
+def show(state: AppState, query: str = "", limit: int = 30) -> None:
+    """List all securities."""
+    app = state.app
     console = Console()
     error_console = Console(stderr=True)
     with error_console.status("Loading securities..."):
@@ -65,30 +63,35 @@ def show(app: Application, query: str = "", limit: int = 30) -> None:
         console.print(out)
 
 
-@securities.command()
-@click.argument("default_key", metavar="[KEY]", default="")
-@click.argument("default_name", metavar="[NAME]", default="")
+@command()
+@click.argument("default_key", metavar="[<key>]", default="")
+@click.argument("default_name", metavar="[<name>]", default="")
 @click.argument(
     "default_category",
     required=False,
     type=click.Choice(SecurityCategory, case_sensitive=False),
-    metavar="[CATEGORY]",
+    metavar="[<category>]",
 )
 @click.argument(
     "default_type",
     required=False,
     type=click.Choice(SecurityType, case_sensitive=False),
-    metavar="[TYPE]",
+    metavar="[<type>]",
 )
 @click.pass_obj
 def add(
-    app: Application,
+    state: AppState,
     default_key: str = "",
     default_name: str = "",
     default_category: str | None = None,
     default_type: str | None = None,
 ) -> None:
-    """Add a new security."""
+    """Add a new security.
+
+    To create securities interactively, run the command with no arguments.
+
+    """
+    app = state.app
     console = Console(width=80)
     console.rule("[bold blue]Add New Security")
     console.print(
@@ -154,12 +157,13 @@ def add(
         console.print("Press [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.")
 
 
-@securities.command()
+@command()
 @click.argument("key", required=False)
 @click.option("--all", "-a", is_flag=True, help="List all securities before deletion.")
 @click.pass_obj
-def delete(app: Application, key: str | None = None, all: bool = False) -> None:
+def delete(state: AppState, key: str | None = None, all: bool = False) -> None:
     """Delete a security by its key."""
+    app = state.app
     console = Console(width=80)
     if not key:
         # If no key provided, get user to select from existing securities
@@ -211,3 +215,8 @@ def delete(app: Application, key: str | None = None, all: bool = False) -> None:
             console.print(
                 f"[bold yellow]No security found with key '{key}'.[/bold yellow]"
             )
+
+
+securities.add_command(show)
+securities.add_command(add)
+securities.add_command(delete)

@@ -6,6 +6,8 @@ from textwrap import dedent
 
 import click
 import polars as pl
+from niveshpy.cli.utils.overrides import command, group
+from niveshpy.cli.app import AppState
 from niveshpy.core.validators import validate_date
 from niveshpy.models.transaction import Transaction, TransactionType
 from InquirerPy import inquirer
@@ -13,10 +15,7 @@ from InquirerPy.base.control import Choice
 from InquirerPy.validator import NumberValidator, EmptyInputValidator
 
 
-from niveshpy.services.app import Application
-
-
-@click.group(invoke_without_command=True)
+@group(invoke_without_command=True)
 @click.pass_context
 def transactions(ctx: click.Context) -> None:
     """List, add, or delete transactions."""
@@ -24,19 +23,20 @@ def transactions(ctx: click.Context) -> None:
         ctx.invoke(show)
 
 
-@transactions.command("list")
+@command("list")
 @click.pass_obj
-def show(app: Application) -> None:
+def show(state: AppState) -> None:
     """List all transactions."""
-    click.echo(app.transaction_service.get_transactions())
+    click.echo(state.app.transaction_service.get_transactions())
 
 
-@transactions.command()
+@command()
 @click.pass_obj
 def add(
-    app: Application,
+    state: AppState,
 ) -> None:
     """Add new transactions."""
+    app = state.app
     click.echo(
         dedent("""
                Adding new transaction.
@@ -123,3 +123,7 @@ def add(
     click.echo(transaction)
     app.transaction_service.add_transactions(pl.DataFrame([transaction.__dict__]))
     click.secho("Transaction added successfully.", fg="green")
+
+
+transactions.add_command(show)
+transactions.add_command(add)

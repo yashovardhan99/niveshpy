@@ -16,10 +16,10 @@ class Result:
         self._conn = connection
 
     @overload
-    def get(self, n: Literal[1], cls: Literal[None]) -> tuple: ...  # type: ignore[misc]
+    def get(self, n: Literal[1], cls: Literal[None]) -> tuple | None: ...  # type: ignore[misc]
 
     @overload
-    def get(self, n: Literal[1], cls: type[T]) -> T: ...  # type: ignore[misc]
+    def get(self, n: Literal[1], cls: type[T]) -> T | None: ...  # type: ignore[misc]
 
     @overload
     def get(self, n: int, cls: Literal[None]) -> list[tuple]: ...
@@ -29,11 +29,11 @@ class Result:
 
     def get(
         self, n: int = 1, cls: type[T] | None = None
-    ) -> T | list[T] | tuple | list[tuple]:
+    ) -> T | list[T] | tuple | list[tuple] | None:
         """Fetch n results from the last executed query."""
         if n == 1:
             row = self._conn.fetchone()
-            if cls is None:
+            if cls is None or row is None:
                 return row
             return cls(*row)
 

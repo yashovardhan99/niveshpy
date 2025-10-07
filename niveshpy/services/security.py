@@ -46,9 +46,11 @@ class SecurityService:
             RETURNING merge_action;
             """,
             (security.key, security.name, security.type, security.category),
-        )
+        ).fetchone()
+        if res is None:
+            raise RuntimeError("Failed to add or update the security.")
         self._db_conn.commit()
-        return res.fetchone()[0]
+        return res[0]
 
     def add_securities(self, securities: Iterable[Security]) -> None:
         """Add new securities to the database."""
@@ -74,8 +76,8 @@ class SecurityService:
             query += " WHERE key LIKE $1 OR name LIKE $1"
             like_pattern = f"%{options.text_query}%"
             params.append(like_pattern)
-        res = self._db_conn.execute(query, tuple(params))
-        return res.fetchone()[0]
+        res = self._db_conn.execute(query, tuple(params)).fetchone()
+        return res[0] if res else 0
 
     def get_securities(self, options: QueryOptions = DEFAULT_QUERY_OPTIONS) -> Result:
         """Retrieve all securities from the database."""

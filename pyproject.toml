@@ -11,7 +11,7 @@ dependencies = [
     "scipy >= 1.13.1, < 2.0.0",
     "numpy >= 2.0.2, < 3.0.0",
     "platformdirs >= 4.3.8, < 5.0.0",
-    "duckdb>=1.4.0",
+    "duckdb>=1.4.0, !=1.4.0",
     "casparser>=0.8.1",
     "click>=8.3.0",
     "inquirerpy>=0.3.4",
@@ -61,7 +61,7 @@ funding = "https://github.com/yashovardhan99/niveshpy"
 releasenotes = "https://github.com/yashovardhan99/niveshpy/releases"
 
 [project.scripts]
-niveshpy = "niveshpy.cli.app:cli"
+niveshpy = "niveshpy.cli.main:cli"
 
 [dependency-groups]
 testing = ["pytest >= 8.3.5, < 9.0.0", "coverage[toml] >= 7.8.0, < 8.0.0"]

@@ -3,13 +3,14 @@
 from textwrap import dedent
 import click
 
+from niveshpy.cli.utils.overrides import command, group
 from niveshpy.models.account import AccountWrite
-from niveshpy.services.app import Application
+from niveshpy.cli.app import AppState
 from InquirerPy import inquirer
 from InquirerPy.validator import EmptyInputValidator
 
 
-@click.group(invoke_without_command=True)
+@group(invoke_without_command=True)
 @click.pass_context
 def accounts(ctx: click.Context) -> None:
     """Manage accounts."""
@@ -17,16 +18,16 @@ def accounts(ctx: click.Context) -> None:
         ctx.invoke(show)
 
 
-@accounts.command("list")
+@command("list")
 @click.pass_obj
-def show(app: Application) -> None:
+def show(state: AppState) -> None:
     """Show all Accounts."""
-    click.echo(app.account_service.get_accounts())
+    click.echo(state.app.account_service.get_accounts())
 
 
-@accounts.command()
+@command()
 @click.pass_obj
-def add(app: Application) -> None:
+def add(state: AppState) -> None:
     """Add a new account."""
     click.echo(
         dedent("""
@@ -48,5 +49,9 @@ def add(app: Application) -> None:
         name=name,
         institution=institution,
     )
-    app.account_service.add_accounts([account])
+    state.app.account_service.add_accounts([account])
     click.secho(f"Account '{name}' added successfully.", fg="green")
+
+
+accounts.add_command(show)
+accounts.add_command(add)
