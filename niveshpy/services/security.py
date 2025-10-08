@@ -1,115 +1,135 @@
-"""Service for handling security-related tasks."""
+"""Security service for managing securities."""
 
-from collections.abc import Iterable
-from dataclasses import asdict
-from niveshpy.db.database import Database
-from niveshpy.db.query import DEFAULT_QUERY_OPTIONS, QueryOptions
-from niveshpy.db.result import Result
-from niveshpy.models.security import Security
+from niveshpy.db.query import QueryOptions, ResultFormat
+from niveshpy.db.repositories import Repositories
+from niveshpy.models.security import Security, SecurityCategory, SecurityType
 import polars as pl
+from niveshpy.core.logging import logger
+
+from niveshpy.services.result import (
+    InsertResult,
+    ListResult,
+    MergeAction,
+    ResolutionStatus,
+    SearchResolution,
+)
 
 
 class SecurityService:
-    """Service for managing securities."""
+    """Service handler for the securities command group."""
 
-    _table_name = "securities"
+    def __init__(self, repos: Repositories):
+        """Initialize the SecurityService with repositories."""
+        self._repos = repos
 
-    def __init__(self, db: Database):
-        """Initialize the SecurityService with a database connection."""
-        self._db_conn = db.cursor()
-
-    def _create_table(self) -> None:
-        """Create the securities table if it doesn't exist."""
-        query = f"""
-        CREATE TABLE IF NOT EXISTS {self._table_name} (
-            key VARCHAR PRIMARY KEY,
-            name VARCHAR NOT NULL,
-            type VARCHAR NOT NULL,
-            category VARCHAR NOT NULL
-        );
-        """
-        self._db_conn.execute(query)
-        self._db_conn.commit()
-
-    def add_single_security(self, security: Security) -> str:
-        """Add a single security to the database.
-
-        If a security with the same key exists, it will be updated.
-        Returns 'INSERT' if a new security was added, 'UPDATE' if an existing security
-        was updated.
-        """
-        self._create_table()
-        res = self._db_conn.execute(
-            f"""INSERT OR REPLACE INTO {self._table_name} 
-            (key, name, type, category)
-            VALUES (?, ?, ?, ?)
-            RETURNING merge_action;
-            """,
-            (security.key, security.name, security.type, security.category),
-        ).fetchone()
-        if res is None:
-            raise RuntimeError("Failed to add or update the security.")
-        self._db_conn.commit()
-        return res[0]
-
-    def add_securities(self, securities: Iterable[Security]) -> None:
-        """Add new securities to the database."""
-        securities_dicts = map(asdict, securities)
-        self._create_table()
-        self._db_conn.register("new_securities", pl.from_dicts(securities_dicts))
-        self._db_conn.execute(
-            f"""MERGE INTO {self._table_name} target
-            USING (SELECT * FROM new_securities) AS new
-            ON target.key = new.key
-            WHEN MATCHED THEN UPDATE
-            WHEN NOT MATCHED THEN INSERT BY NAME;
-            """
+    def list_securities(
+        self, query: str | None = None, limit: int | None = 30
+    ) -> ListResult[pl.DataFrame]:
+        """List securities matching the query."""
+        options = QueryOptions(
+            text_query=query.strip() if query else None,
+            limit=limit,
         )
-        self._db_conn.commit()
 
-    def count_securities(self, options: QueryOptions = DEFAULT_QUERY_OPTIONS) -> int:
-        """Count the number of securities in the database."""
-        self._create_table()
-        query = f"SELECT COUNT(*) FROM {self._table_name}"
-        params = []
-        if options.text_query:
-            query += " WHERE key LIKE $1 OR name LIKE $1"
-            like_pattern = f"%{options.text_query}%"
-            params.append(like_pattern)
-        res = self._db_conn.execute(query, tuple(params)).fetchone()
-        return res[0] if res else 0
+        if limit is not None and limit < 1:
+            logger.debug("Received non-positive limit: %d", limit)
+            raise ValueError("Limit must be positive.")
 
-    def get_securities(self, options: QueryOptions = DEFAULT_QUERY_OPTIONS) -> Result:
-        """Retrieve all securities from the database."""
-        self._create_table()
-        query = f"SELECT * FROM {self._table_name}"
-        params = []
-        if options.text_query:
-            query += " WHERE key LIKE $1 OR name LIKE $1"
-            like_pattern = f"%{options.text_query}%"
-            params.append(like_pattern)
+        N = self._repos.security.count_securities(options)
+        if N == 0:
+            return ListResult(pl.DataFrame(), 0)
 
-        query += " ORDER BY key"
+        res = self._repos.security.search_securities(options, ResultFormat.POLARS)
+        return ListResult(res, N)
 
-        if options.limit is not None:
-            query += " LIMIT ?"
-            params.append(str(options.limit))
-        if options.offset is not None:
-            query += " OFFSET ?"
-            params.append(str(options.offset))
-        query += ";"
-        res = self._db_conn.execute(query, tuple(params))
-        return Result(res)
+    def add_security(
+        self, key: str, name: str, stype: SecurityType, category: SecurityCategory
+    ) -> InsertResult[Security]:
+        """Add a single security to the database."""
+        if not key.strip() or not name.strip():
+            raise ValueError("Security key and name cannot be empty.")
+        if stype not in SecurityType:
+            raise ValueError(f"Invalid security type: {stype}")
+        if category not in SecurityCategory:
+            raise ValueError(f"Invalid security category: {category}")
+
+        security = Security(key.strip(), name.strip(), stype, category)
+
+        action = self._repos.security.insert_single_security(security)
+        try:
+            if action is None:
+                raise ValueError("Action could not be determined.")
+            return InsertResult(MergeAction(action), security)
+        except ValueError as e:
+            raise ValueError("Failed to add security.") from e
 
     def delete_security(self, key: str) -> bool:
         """Delete a security by its key.
 
         Returns True if a security was deleted, False otherwise.
         """
-        self._create_table()
-        res = self._db_conn.execute(
-            f"DELETE FROM {self._table_name} WHERE key = ? RETURNING *;",
-            (key,),
-        )
-        self._db_conn.commit()
-        return res.fetchone() is not None
+        return self._repos.security.delete_security(key.strip()) is not None
+
+    def resolve_security_key(
+        self, input: str | None, limit: int, allow_ambiguous: bool = True
+    ) -> SearchResolution[Security]:
+        """Resolve a security key to a Security object if it exists.
+
+        Logic:
+        - If the input is None or empty:
+            - If `allow_ambiguous` is True, return AMBIGUOUS with top `limit` candidates.
+            - Else return AMBIGUOUS with no candidates.
+        - If the input matches exactly one security key, return EXACT with that security.
+        - Else If `allow_ambiguous` is false, return NOT_FOUND.
+        - Else perform a text search:
+            - 0 matches: return NOT_FOUND
+            - 1 match: return EXACT with that security
+            - >1 matches: return AMBIGUOUS with the list of candidates
+        """
+        if input is None or input.strip() == "":
+            if not allow_ambiguous:
+                return SearchResolution(ResolutionStatus.AMBIGUOUS, original=input)
+
+            # Return top `limit` securities as candidates
+            options = QueryOptions(limit=limit)
+            res = self._repos.security.search_securities(options, ResultFormat.LIST)
+            securities = [Security(*row) for row in res] if res else []
+            return SearchResolution(
+                status=ResolutionStatus.AMBIGUOUS,
+                candidates=securities,
+                original=input,
+            )
+
+        input = input.strip()
+
+        # First, try to find an exact match by key
+        exact_security = self._repos.security.get_security(input)
+        if exact_security:
+            return SearchResolution(
+                status=ResolutionStatus.EXACT,
+                exact=exact_security,
+                original=input,
+            )
+
+        if not allow_ambiguous:
+            # If ambiguous results are not allowed, return NOT_FOUND
+            return SearchResolution(ResolutionStatus.NOT_FOUND, original=input)
+
+        # Perform a text search for candidates
+        options = QueryOptions(text_query=input, limit=limit)
+        res = self._repos.security.search_securities(options, ResultFormat.LIST)
+        if not res:
+            return SearchResolution(ResolutionStatus.NOT_FOUND, original=input)
+        elif len(res) == 1:
+            return SearchResolution(
+                status=ResolutionStatus.EXACT,
+                exact=Security(*res[0]),
+                original=input,
+            )
+        else:
+            return SearchResolution(
+                status=ResolutionStatus.AMBIGUOUS,
+                candidates=[Security(*row) for row in res],
+                original=input,
+            )
+            # If we reach here, it means we have ambiguous results

@@ -9,9 +9,10 @@ from niveshpy.cli.security import securities
 from niveshpy.cli.utils import flags
 from niveshpy.cli.utils.overrides import group
 from niveshpy.cli.utils import logging
-from niveshpy.db.database import Database
+from niveshpy.db.database import Database, DatabaseError
 from niveshpy.cli.transaction import transactions
 from niveshpy.cli.utils.style import error_console, console
+from niveshpy.core.logging import logger
 
 
 @group()
@@ -23,14 +24,22 @@ def cli(ctx: click.Context) -> None:
     """Simple CLI command to greet the user."""
     state = ctx.ensure_object(AppState)
 
+    if not state.no_input:
+        # If no_input is not set, determine interactivity from console
+        state.no_input = not console.is_interactive
+
     if state.no_color:
         console.no_color = True
         error_console.no_color = True
 
     logging.setup(state.debug, error_console)  # Initialize logging with debug flag
-    db = Database()
-    ctx.with_resource(db)
-    application = Application(db)
+    try:
+        db = Database()
+        ctx.with_resource(db)
+        application = Application(db)
+    except DatabaseError as e:
+        logger.critical(e, exc_info=True)
+        ctx.exit(1)
     state.app = application
 
 

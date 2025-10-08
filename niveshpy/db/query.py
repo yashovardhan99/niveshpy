@@ -1,6 +1,15 @@
 """Database query utilities."""
 
 from dataclasses import dataclass
+from enum import StrEnum, auto
+
+
+class ResultFormat(StrEnum):
+    """Result format options."""
+
+    POLARS = auto()
+    SINGLE = auto()
+    LIST = auto()
 
 
 @dataclass

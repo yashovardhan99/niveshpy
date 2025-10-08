@@ -15,6 +15,12 @@ app_path.mkdir(parents=True, exist_ok=True)
 _db_path = (app_path / "niveshpy.db").resolve()
 
 
+class DatabaseError(Exception):
+    """Exception for database-related errors."""
+
+    ...
+
+
 class Database:
     """Manages a DuckDB connection lifecycle."""
 
@@ -30,23 +36,31 @@ class Database:
 
     def cursor(self) -> duckdb.DuckDBPyConnection:
         """Get a cursor, opening the connection if necessary."""
-        if self._conn is None:
-            self._conn = duckdb.connect(database=self._path)
-            logging.logger.info(f"Database initialized with path: {self._path}")
-        return self._conn.cursor()
+        try:
+            if self._conn is None:
+                self._conn = duckdb.connect(database=self._path)
+                logging.logger.info(f"Database initialized with path: {self._path}")
+            return self._conn.cursor()
+        except duckdb.ConnectionException as e:
+            raise DatabaseError("Failed to connect to the database.") from e
+        except duckdb.IOException as e:
+            raise DatabaseError(
+                "I/O error occurred while accessing the database."
+            ) from e
 
     def close(self) -> None:
         """Close the database connection if open."""
         if self._conn is not None:
+            logging.logger.info("Closing database connection.")
             try:
                 self._conn.close()
+                logging.logger.debug("Database connection closed.")
             finally:
                 self._conn = None
 
     # Context manager support
     def __enter__(self) -> Database:
-        """Enter context, ensuring connection is open."""
-        self.cursor().close()  # Ensure connection is established
+        """Enter context."""
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

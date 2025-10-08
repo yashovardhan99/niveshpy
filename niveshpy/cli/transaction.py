@@ -31,7 +31,7 @@ def transactions(ctx: click.Context) -> None:
 @click.pass_obj
 def show(state: AppState) -> None:
     """List all transactions."""
-    console.print(state.app.transaction_service.get_transactions())
+    console.print(state.app.transaction.get_transactions())
 
 
 @command()
@@ -86,7 +86,7 @@ def add(
         ).execute()
     )
 
-    securities = app.security_service.get_securities().pl()
+    securities = app.transaction.get_securities().pl()
     if securities.is_empty():
         console.print("No securities found. Please add a security first.", style="red")
         return
@@ -109,7 +109,7 @@ def add(
         style=inquirer_style,
     ).execute()
 
-    accounts = app.account_service.get_accounts()
+    accounts = app.transaction.get_accounts()
     if accounts.is_empty():
         console.print("No accounts found. Please add an account first.", style="red")
         return
@@ -137,7 +137,7 @@ def add(
         account_key=account_key,
     )
     console.print(transaction)
-    app.transaction_service.add_transactions(pl.DataFrame([transaction.__dict__]))
+    app.transaction.add_transactions(pl.DataFrame([transaction.__dict__]))
     console.print("Transaction added successfully.", style="green")
 
 

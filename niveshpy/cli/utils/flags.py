@@ -6,6 +6,8 @@ from collections.abc import Callable
 import click
 
 from niveshpy.cli.app import AppState
+from niveshpy.cli.utils.style import OutputFormat
+from niveshpy.core.logging import logger
 
 _AnyCallable = Callable[..., Any]
 FC = TypeVar("FC", bound="_AnyCallable | click.Command")
@@ -24,10 +26,10 @@ def limit(name: str, default: int = 30) -> Callable[[FC], FC]:
 
 def _callback(ctx: click.Context, param: click.Parameter, value: Any) -> Any:
     """Callback to handle common flag."""
+    logger.debug("Flag %s set to %s", param.name, value)
     if not ctx.resilient_parsing:
         state = ctx.ensure_object(AppState)
         if param.name == "no_input" and value:
-            print("Running in no-input mode.")
             state.no_input = value
         elif param.name == "debug" and value:
             state.debug = value
@@ -45,6 +47,16 @@ def no_input() -> Callable[[FC], FC]:
         help="Run without user input, using defaults or skipping prompts.",
         expose_value=False,
         callback=_callback,
+    )
+
+
+def force() -> Callable[[FC], FC]:
+    """Common force option for CLI commands."""
+    return click.option(
+        "--force",
+        "-f",
+        is_flag=True,
+        help="Force the operation without confirmation.",
     )
 
 
@@ -72,6 +84,30 @@ def no_color() -> Callable[[FC], FC]:
         callback=_callback,
         envvar=("NIVESHPY_NO_COLOR", "NO_COLOR"),
     )
+
+
+def output(name: str = "output") -> Callable[[FC], FC]:
+    """Common output option for CLI commands."""
+    options = [
+        click.option(
+            "--csv",
+            name,
+            flag_value=OutputFormat.CSV,
+        ),
+        click.option(
+            "--json",
+            name,
+            flag_value=OutputFormat.JSON,
+        ),
+        click.option(
+            "--table",
+            name,
+            flag_value=OutputFormat.TABLE,
+            default=True,
+            hidden=True,
+        ),
+    ]
+    return functools.partial(functools.reduce, lambda x, opt: opt(x), options)
 
 
 def common_options(f: Callable[..., Any]) -> Callable[..., Any]:

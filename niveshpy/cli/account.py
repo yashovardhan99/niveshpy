@@ -23,7 +23,7 @@ def accounts(ctx: click.Context) -> None:
 @click.pass_obj
 def show(state: AppState) -> None:
     """Show all Accounts."""
-    console.print(state.app.account_service.get_accounts())
+    console.print(state.app.account.get_accounts())
 
 
 @command()
@@ -53,7 +53,7 @@ def add(state: AppState) -> None:
         name=name,
         institution=institution,
     )
-    state.app.account_service.add_accounts([account])
+    state.app.account.add_accounts([account])
     console.print(f"Account [b]{name}[/b] added successfully.", style="green")
 
 
