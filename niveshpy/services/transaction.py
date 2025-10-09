@@ -1,12 +1,12 @@
 """Transaction service for managing user transactions."""
 
-from niveshpy.db.repositories import Repositories
+from niveshpy.db.repositories import RepositoryContainer
 
 
 class TransactionService:
     """Service handler for the transactions command group."""
 
-    def __init__(self, repos: Repositories):
+    def __init__(self, repos: RepositoryContainer):
         """Initialize the TransactionService with repositories."""
         self._repos = repos
 

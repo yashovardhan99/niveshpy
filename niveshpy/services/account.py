@@ -1,7 +1,7 @@
 """Account service for managing investment accounts."""
 
 from collections.abc import Iterable
-from niveshpy.db.repositories import Repositories
+from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.account import AccountRead, AccountWrite
 import polars as pl
 
@@ -9,7 +9,7 @@ import polars as pl
 class AccountService:
     """Service handler for the accounts command group."""
 
-    def __init__(self, repos: Repositories):
+    def __init__(self, repos: RepositoryContainer):
         """Initialize the AccountService with repositories."""
         self._repos = repos
 

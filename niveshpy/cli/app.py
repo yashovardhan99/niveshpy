@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from niveshpy.db.database import Database
-from niveshpy.db.repositories import Repositories
+from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.services.account import AccountService
 from niveshpy.services.security import SecurityService
 from niveshpy.services.transaction import TransactionService
@@ -13,7 +13,7 @@ class Application:
 
     def __init__(self, db: Database):
         """Initialize the application with its services."""
-        self._repos = Repositories(db)
+        self._repos = RepositoryContainer(db)
         self._security: SecurityService | None = None
         self._account: AccountService | None = None
         self._transaction: TransactionService | None = None

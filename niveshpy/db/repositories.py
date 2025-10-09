@@ -6,7 +6,7 @@ from niveshpy.db.security import SecurityRepository
 from niveshpy.db.transaction import TransactionRepository
 
 
-class Repositories:
+class RepositoryContainer:
     """Holds the database repositories for the application."""
 
     def __init__(self, db: Database):

@@ -1,7 +1,7 @@
 """Service for parsing financial documents."""
 
 # import polars as pl
-from niveshpy.db.repositories import Repositories
+from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.parser import Parser
 
 
@@ -11,7 +11,7 @@ class ParsingService:
     def __init__(
         self,
         parser: Parser,
-        repos: Repositories,
+        repos: RepositoryContainer,
     ):
         """Initialize the ParsingService."""
         self._parser = parser

@@ -1,7 +1,7 @@
 """Security service for managing securities."""
 
 from niveshpy.db.query import QueryOptions, ResultFormat
-from niveshpy.db.repositories import Repositories
+from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
 import polars as pl
 from niveshpy.core.logging import logger
@@ -18,7 +18,7 @@ from niveshpy.services.result import (
 class SecurityService:
     """Service handler for the securities command group."""
 
-    def __init__(self, repos: Repositories):
+    def __init__(self, repos: RepositoryContainer):
         """Initialize the SecurityService with repositories."""
         self._repos = repos
 
