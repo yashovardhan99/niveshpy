@@ -17,6 +17,7 @@ class QueryOptions:
     """Options for querying the database."""
 
     text_query: str | None = None
+    filters: dict[str, list[str]] | None = None
     limit: int | None = None
     offset: int | None = None
 

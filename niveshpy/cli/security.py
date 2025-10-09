@@ -7,7 +7,7 @@ from niveshpy.cli.utils.overrides import command, group
 from niveshpy.cli.utils import flags
 from niveshpy.cli.utils.style import OutputFormat, format_dataframe, rich_click_pager
 from niveshpy.db.database import DatabaseError
-from niveshpy.models.security import SecurityCategory, SecurityType
+from niveshpy.models.security import Security, SecurityCategory, SecurityType
 from niveshpy.cli.app import AppState
 from InquirerPy import inquirer, get_style
 from InquirerPy.base.control import Choice
@@ -28,19 +28,45 @@ def securities(ctx: click.Context) -> None:
 
 @command("list")
 @click.argument("query", default="", required=False, metavar="[<query>]")
+@click.option(
+    "--type",
+    "stype",
+    type=click.Choice(SecurityType, case_sensitive=False),
+    help="Filter by security type.",
+    multiple=True,
+)
+@click.option(
+    "--category",
+    "category",
+    type=click.Choice(SecurityCategory, case_sensitive=False),
+    help="Filter by security category.",
+    multiple=True,
+)
 @flags.limit("securities", default=30)
 @flags.output("format")
 @flags.common_options
 @click.pass_context
-def show(ctx: click.Context, query: str, limit: int, format: OutputFormat) -> None:
+def show(
+    ctx: click.Context,
+    query: str,
+    limit: int,
+    format: OutputFormat,
+    stype: list[SecurityType] | None,
+    category: list[SecurityCategory] | None,
+) -> None:
     """List all securities.
 
     Optionally provide a text QUERY to filter securities by key or name.
+
+    You can also filter by security TYPE and CATEGORY using the respective flags.
+    These flags can be repeated to include multiple types or categories.
     """
     state = ctx.ensure_object(AppState)
     with error_console.status("Loading securities..."):
         try:
-            result = state.app.security.list_securities(query=query, limit=limit)
+            result = state.app.security.list_securities(
+                query=query, stype=stype, category=category, limit=limit
+            )
         except ValueError as e:
             logger.error(e, exc_info=True)
             ctx.exit(1)
@@ -55,7 +81,7 @@ def show(ctx: click.Context, query: str, limit: int, format: OutputFormat) -> No
             error_console.print(msg, style="yellow")
             ctx.exit()
 
-        out = format_dataframe(result.data, format)
+        out = format_dataframe(result.data, format, Security.rich_format_map())
 
     with rich_click_pager(console):
         if result.total > limit and console.is_terminal:

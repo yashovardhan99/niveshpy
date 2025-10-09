@@ -23,15 +23,25 @@ class SecurityService:
         self._repos = repos
 
     def list_securities(
-        self, query: str | None = None, limit: int | None = 30
+        self,
+        query: str | None = None,
+        stype: list[SecurityType] | None = None,
+        category: list[SecurityCategory] | None = None,
+        limit: int = 30,
     ) -> ListResult[pl.DataFrame]:
         """List securities matching the query."""
+        filters = {}
+        if stype:
+            filters["type"] = [SecurityType(s).value for s in stype]
+        if category:
+            filters["category"] = [SecurityCategory(c).value for c in category]
         options = QueryOptions(
             text_query=query.strip() if query else None,
+            filters=filters if filters else None,
             limit=limit,
         )
 
-        if limit is not None and limit < 1:
+        if limit < 1:
             logger.debug("Received non-positive limit: %d", limit)
             raise ValueError("Limit must be positive.")
 

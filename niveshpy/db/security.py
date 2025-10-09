@@ -17,7 +17,7 @@ class SecurityRepository:
     _table_name = "securities"
 
     def __init__(self, db: Database):
-        """Initialize the SecurityRepository with a database connection."""
+        """Initialize the SecurityRepository."""
         self._db = db
         logger.info("Initializing SecurityRepository")
         self._create_table()
@@ -39,11 +39,17 @@ class SecurityRepository:
     def count_securities(self, options: QueryOptions = DEFAULT_QUERY_OPTIONS) -> int:
         """Count the number of securities matching the query options."""
         query = f"SELECT COUNT(*) FROM {self._table_name}"
-        params = []
+        params: list[tuple[str, ...] | str] = []
+        query += " WHERE 1=1"
         if options.text_query:
-            query += " WHERE key ILIKE $1 OR name ILIKE $1"
+            query += " AND (key ILIKE $1 OR name ILIKE $1)"
             like_pattern = f"%{options.text_query}%"
             params.append(like_pattern)
+
+        if options.filters:
+            for k, v in options.filters.items():
+                query += f" AND {k} IN ?"
+                params.append(tuple(v))
         query += ";"
 
         with self._db.cursor() as cursor:
@@ -73,12 +79,17 @@ class SecurityRepository:
     ) -> pl.DataFrame | tuple | None | list[tuple]:
         """Search for securities matching the query options."""
         query = f"SELECT * FROM {self._table_name}"
-        params = []
+        params: list[tuple[str, ...] | str] = []
+        query += " WHERE 1=1"
         if options.text_query:
-            query += " WHERE key ILIKE $1 OR name ILIKE $1"
+            query += " AND (key ILIKE $1 OR name ILIKE $1)"
             like_pattern = f"%{options.text_query}%"
             params.append(like_pattern)
 
+        if options.filters:
+            for k, v in options.filters.items():
+                query += f" AND {k} IN ?"
+                params.append(tuple(v))
         query += " ORDER BY key"
 
         if options.limit is not None:

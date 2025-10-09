@@ -2,11 +2,14 @@
 
 from decimal import Decimal
 from enum import StrEnum, auto
+from itertools import starmap, zip_longest
+from typing import Literal
+from collections.abc import Callable
 import click
 from rich.console import Console
+from rich import box
 
-
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 import polars as pl
 from rich.table import Table
@@ -46,31 +49,50 @@ class OutputFormat(StrEnum):
     JSON = auto()
 
 
-def format_dataframe(df: pl.DataFrame, fmt: OutputFormat) -> str | Table:
+def format_dataframe(
+    df: pl.DataFrame,
+    fmt: OutputFormat,
+    fmt_map: Sequence[str | Callable[[str], str] | None] | None = None,
+) -> str | Table:
     """Format a Polars DataFrame according to the specified output format."""
     if fmt == OutputFormat.CSV:
         return df.write_csv()
     elif fmt == OutputFormat.JSON:
         return df.write_json()
     else:
-        with get_polars_print_config():
-            return (
-                convert_polars_to_rich_table(df)
-                if console.is_terminal
-                else df.write_csv(separator="\t")
-            )
+        return (
+            convert_polars_to_rich_table(df, fmt_map)
+            if console.is_terminal
+            else df.write_csv(separator="\t")
+        )
 
 
-def convert_polars_to_rich_table(df: pl.DataFrame) -> Table:
+def convert_polars_to_rich_table(
+    df: pl.DataFrame, fmt_map: Sequence[str | Callable[[str], str] | None] | None
+) -> Table:
     """Convert a Polars DataFrame to a Rich Table for pretty printing."""
-    table = Table()
-    for col, dtype in df.schema.to_python().items():
-        if dtype in (int, float, Decimal):
-            table.add_column(col, justify="right")
+    table = Table(header_style="dim", box=box.SIMPLE)
+    for i, (col, dtype) in enumerate(df.schema.to_python().items()):
+        style = fmt_map[i] if fmt_map and i < len(fmt_map) else None
+        style = style if isinstance(style, str) else None
+        justify: Literal["left", "right"] = (
+            "right" if dtype in (int, float, Decimal) else "left"
+        )
+
+        table.add_column(col.upper(), justify=justify, style=style)
+
+    def mapper(data: object, fmt: str | None | Callable[[str], str]) -> str:
+        if fmt is None:
+            return str(data)
+        elif callable(fmt):
+            return fmt(str(data))
         else:
-            table.add_column(col)
+            return str(data)
 
     for row in df.iter_rows():
-        table.add_row(*map(str, row))
+        if fmt_map is None:
+            table.add_row(*map(str, row))
+        else:
+            table.add_row(*starmap(mapper, zip_longest(row, fmt_map, fillvalue=None)))
 
     return table
