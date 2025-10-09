@@ -32,6 +32,7 @@ class SecurityCategory(StrEnum):
     EQUITY = auto()
     DEBT = auto()
     COMMODITY = auto()
+    REAL_ESTATE = auto()
     OTHER = auto()
 
     @staticmethod
@@ -41,6 +42,7 @@ class SecurityCategory(StrEnum):
             SecurityCategory.EQUITY.value: "[white]Equity",
             SecurityCategory.DEBT.value: "[cyan]Debt",
             SecurityCategory.COMMODITY.value: "[yellow]Commodity",
+            SecurityCategory.REAL_ESTATE.value: "[bright_red]Real Estate",
             SecurityCategory.OTHER.value: "[dim]Other",
         }.get(category, "[reverse]Unknown")
 
