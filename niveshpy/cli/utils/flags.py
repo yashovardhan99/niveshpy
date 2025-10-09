@@ -42,7 +42,6 @@ def no_input() -> Callable[[FC], FC]:
     """Common no-input option for CLI commands."""
     return click.option(
         "--no-input",
-        "-N",
         is_flag=True,
         help="Run without user input, using defaults or skipping prompts.",
         expose_value=False,
@@ -57,6 +56,16 @@ def force() -> Callable[[FC], FC]:
         "-f",
         is_flag=True,
         help="Force the operation without confirmation.",
+    )
+
+
+def dry_run() -> Callable[[FC], FC]:
+    """Common dry-run option for CLI commands."""
+    return click.option(
+        "--dry-run",
+        "-n",
+        is_flag=True,
+        help="Simulate the operation without making any changes.",
     )
 
 

@@ -227,14 +227,19 @@ def add(
 @flags.limit("limit", default=100)
 @flags.no_input()
 @flags.force()
+@flags.dry_run()
 @flags.common_options
 @click.pass_context
-def delete(ctx: click.Context, query: str | None, limit: int, force: bool) -> None:
+def delete(
+    ctx: click.Context, query: str | None, limit: int, force: bool, dry_run: bool
+) -> None:
     """Delete a security based on a query.
 
     If no key is provided, you will be prompted to select from existing securities.
     The query will be used to search for securities by key or name.
     If multiple securities match the provided query, you will be prompted to select one.
+
+    Associated transactions and holdings are not deleted but will no longer be visible in reports.
 
     When running in a non-interactive mode, --force must be provided to confirm deletion. Additionally, the <query> must match exactly one security key.
     """
@@ -266,14 +271,17 @@ def delete(ctx: click.Context, query: str | None, limit: int, force: bool) -> No
             logger.debug("Resolution object: %s", resolution)
             ctx.exit(1)
 
-        if not state.no_input and not force:
+        if dry_run or not force:
             console.print("The following security will be deleted:")
             console.print(security)
-            if not inquirer.confirm(
-                "Are you sure you want to delete this security?",
-                default=False,
-                style=inquirer_style,
-            ).execute():
+            if (
+                not dry_run
+                and not inquirer.confirm(
+                    "Are you sure you want to delete this security?",
+                    default=False,
+                    style=inquirer_style,
+                ).execute()
+            ):
                 logger.info("Security deletion aborted by user.")
                 ctx.abort()
 
@@ -306,13 +314,20 @@ def delete(ctx: click.Context, query: str | None, limit: int, force: bool) -> No
         if not force:
             console.print("You have selected the following security:")
             console.print(security)
-            if not inquirer.confirm(
-                "Are you sure you want to delete this security?",
-                default=False,
-                style=inquirer_style,
-            ).execute():
+            if (
+                not dry_run
+                and not inquirer.confirm(
+                    "Are you sure you want to delete this security?",
+                    default=False,
+                    style=inquirer_style,
+                ).execute()
+            ):
                 logger.info("Security deletion aborted by user.")
                 ctx.abort()
+
+    if dry_run:
+        console.print("[bold yellow]Dry Run:[/bold yellow] No changes were made.")
+        ctx.exit()
 
     with error_console.status(f"Deleting security '{security.key}'..."):
         deleted = state.app.security.delete_security(security.key)

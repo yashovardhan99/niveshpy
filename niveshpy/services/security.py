@@ -77,7 +77,7 @@ class SecurityService:
 
         Logic:
         - If the input is None or empty:
-            - If `allow_ambiguous` is True, return AMBIGUOUS with top `limit` candidates.
+            - If `allow_ambiguous` is False, return NOT_FOUND.
             - Else return AMBIGUOUS with no candidates.
         - If the input matches exactly one security key, return EXACT with that security.
         - Else If `allow_ambiguous` is false, return NOT_FOUND.
@@ -88,7 +88,7 @@ class SecurityService:
         """
         if input is None or input.strip() == "":
             if not allow_ambiguous:
-                return SearchResolution(ResolutionStatus.AMBIGUOUS, original=input)
+                return SearchResolution(ResolutionStatus.NOT_FOUND, original=input)
 
             # Return top `limit` securities as candidates
             options = QueryOptions(limit=limit)
