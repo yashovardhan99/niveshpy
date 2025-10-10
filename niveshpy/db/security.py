@@ -8,7 +8,6 @@ from niveshpy.db.database import Database
 from niveshpy.db.query import DEFAULT_QUERY_OPTIONS, QueryOptions, ResultFormat
 import polars as pl
 from niveshpy.models.security import Security
-from niveshpy.core.logging import logger
 
 
 class SecurityRepository:
@@ -19,22 +18,6 @@ class SecurityRepository:
     def __init__(self, db: Database):
         """Initialize the SecurityRepository."""
         self._db = db
-        logger.info("Initializing SecurityRepository")
-        self._create_table()
-
-    def _create_table(self) -> None:
-        """Create the securities table if it doesn't exist."""
-        query = f"""
-        CREATE TABLE IF NOT EXISTS {self._table_name} (
-            key VARCHAR PRIMARY KEY,
-            name VARCHAR NOT NULL,
-            type VARCHAR NOT NULL,
-            category VARCHAR NOT NULL
-        );
-        """
-        with self._db.cursor() as cursor:
-            cursor.execute(query)
-            cursor.commit()
 
     def count_securities(self, options: QueryOptions = DEFAULT_QUERY_OPTIONS) -> int:
         """Count the number of securities matching the query options."""

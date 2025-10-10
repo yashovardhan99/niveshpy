@@ -34,19 +34,35 @@ class Database:
         self._path = path.as_posix() if path else ":memory:"
         self._conn = None
 
+    def _initialize_tables(self) -> None:
+        """Initialize required tables in the database."""
+        sql_file_path = Path(__file__).parent / "init.sql"
+        with open(sql_file_path) as file:
+            sql_script = file.read()
+        with self.cursor() as cursor:
+            cursor.begin()
+            cursor.execute(sql_script)
+            cursor.commit()
+        logging.logger.info("Initialized database tables.")
+
+    def _initialize(self) -> duckdb.DuckDBPyConnection:
+        """Initialize the database connection."""
+        if self._conn is None:
+            try:
+                self._conn = duckdb.connect(database=self._path)
+                logging.logger.info("Connected to database at path: %s", self._path)
+                self._initialize_tables()
+            except duckdb.ConnectionException as e:
+                raise DatabaseError("Failed to connect to the database.") from e
+            except duckdb.IOException as e:
+                raise DatabaseError(
+                    "I/O error occurred while accessing the database."
+                ) from e
+        return self._conn
+
     def cursor(self) -> duckdb.DuckDBPyConnection:
         """Get a cursor, opening the connection if necessary."""
-        try:
-            if self._conn is None:
-                self._conn = duckdb.connect(database=self._path)
-                logging.logger.info(f"Database initialized with path: {self._path}")
-            return self._conn.cursor()
-        except duckdb.ConnectionException as e:
-            raise DatabaseError("Failed to connect to the database.") from e
-        except duckdb.IOException as e:
-            raise DatabaseError(
-                "I/O error occurred while accessing the database."
-            ) from e
+        return self._initialize().cursor()
 
     def close(self) -> None:
         """Close the database connection if open."""

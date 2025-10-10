@@ -8,7 +8,6 @@ from niveshpy.db.database import Database
 from niveshpy.db.query import DEFAULT_QUERY_OPTIONS, QueryOptions, ResultFormat
 from niveshpy.models.account import AccountRead, AccountWrite
 import polars as pl
-from niveshpy.core.logging import logger
 
 
 class AccountRepository:
@@ -19,22 +18,6 @@ class AccountRepository:
     def __init__(self, db: Database):
         """Initialize the AccountRepository."""
         self._db = db
-        logger.info("Initializing AccountRepository")
-        self._create_table()
-
-    def _create_table(self):
-        """Create the accounts table if it doesn't exist."""
-        query = f"""
-        CREATE SEQUENCE IF NOT EXISTS account_id_seq;
-        CREATE TABLE IF NOT EXISTS {self._table_name} (
-            id INTEGER PRIMARY KEY DEFAULT nextval('account_id_seq'),
-            name VARCHAR NOT NULL,
-            institution VARCHAR NOT NULL
-        );
-        """
-        with self._db.cursor() as cursor:
-            cursor.execute(query)
-            cursor.commit()
 
     def count_accounts(self, options: QueryOptions = DEFAULT_QUERY_OPTIONS) -> int:
         """Count the number of accounts matching the query options."""
