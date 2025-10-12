@@ -1,8 +1,9 @@
 """Module defining the AST nodes for the query parser."""
 
 from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
 from enum import Enum, auto
-from typing import Any
 
 
 class Field(Enum):
@@ -51,10 +52,15 @@ class Operator(Enum):
         }.get(self, self)
 
 
+FilterValue = (
+    str | tuple[str, ...] | Decimal | tuple[Decimal, ...] | date | tuple[date, ...]
+)
+
+
 @dataclass(slots=True, frozen=True)
 class FilterNode:
     """Class representing a filter node in the query AST."""
 
     field: Field
     operator: Operator
-    value: Any
+    value: FilterValue

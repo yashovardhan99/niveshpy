@@ -166,7 +166,7 @@ class QueryParser:
         first_token = self.lexer.next_token()
         field: ast.Field
         operator: ast.Operator
-        value: str | Decimal | tuple[Decimal, Decimal] | date | tuple[date, date]
+        value: ast.FilterValue
 
         match first_token:
             case Tokens.Keyword.Not:
