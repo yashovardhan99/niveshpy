@@ -37,27 +37,27 @@ Amount expressions also support inequality comparisons and range expressions wit
 
 Do note that amounts can be negative, so you might need to prefix it with a `-` sign to match sale transactions.
 
-## `date:DATE`
+## `date:<date>`
 
-`date:DATE` will match either the full date or part of a date.
+`date:<date>` will match either the full date or part of a date.
 This expects dates in the format `YYYY-MM-DD`. However, it can also be used with only a part of the format. For example:
 
 - `date:2025` matches all dates between `2025-01-01` and `2025-12-31`
 - `date:2025-01` matches all dates in January 2025.
 
-A period can also be provided with the syntax `date:FROM..TO`. Examples:
+A period can also be provided with the syntax `date:<from>..<to>`. Examples:
 
 - `date:2025-01-01..2025-01-15` matches all records from 1st January 2025 to 15th January 2025.
 - `date:2025..2025-02` matches all records from 1st January 2025 to 28th February 2025.
 
-It's important to note that partial date expressions can be used in both `date:DATE` and `date:FROM..TO` expressions,
-but they can have different meanings in both cases. In the case of `FROM`, the date takes the starting of the partial date expression, while in the case of `TO`, the date takes the end of that expression. Also note, that both `FROM` and `TO` are optional field, in which case, they will match all records starting with `FROM` or ending at `TO`. Some examples:
+It's important to note that partial date expressions can be used in both `date:<date>` and `date:<from>..<to>` expressions,
+but they can have different meanings in both cases. In the case of `<from>`, the date takes the starting of the partial date expression, while in the case of `<to>`, the date takes the end of that expression. Also note, that both `<from>` and `<to>` are optional field, in which case, they will match all records starting with `<from>` or ending at `<to>`. Some examples:
 
 - `date:2025..2026` matches all records from 2025-01-01 to 2026-12-31
 - `date:2025-04..2026-03` matches all records from 2025-04-01 to 2026-03-31.
 - `date:2025..2025` matches all records from 2025-01-01 to 2025-12-31, though you can just use `date:2025` to get the same result.
 - `date:2025..` matches all records starting 2025-01-01.
-- `date:..2025` matches all records ending 2025-12-31. Note the different parsing rules for `FROM` and `TO` dates.
+- `date:..2025` matches all records ending 2025-12-31. Note the different parsing rules for `<from>` and `<to>` dates.
 
 Date cannot be used when querying `securities` or `accounts`.
 
