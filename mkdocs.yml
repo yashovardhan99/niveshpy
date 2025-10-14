@@ -58,11 +58,20 @@ markdown_extensions:
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - toc:
       permalink: true
+  - mkdocs-click
+
 nav:
   - Home: index.md
 
   - Getting Started:
       - guide/index.md
+
+  - CLI:
+      - cli/index.md
+      - Accounts: cli/accounts.md
+      - Securities: cli/securities.md
+      - Transactions: cli/transactions.md
+      - Queries: cli/queries.md
 
   - Plugins:
       - plugins/index.md
