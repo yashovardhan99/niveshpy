@@ -1,5 +1,11 @@
 """Security service for managing securities."""
 
+from collections.abc import Iterable
+import itertools
+from niveshpy.core.query import ast
+from niveshpy.core.query.parser import QueryParser
+from niveshpy.core.query.prepare import prepare_filters
+from niveshpy.core.query.tokenizer import QueryLexer
 from niveshpy.db.query import QueryOptions, ResultFormat
 from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
@@ -24,20 +30,21 @@ class SecurityService:
 
     def list_securities(
         self,
-        query: str | None = None,
-        stype: list[SecurityType] | None = None,
-        category: list[SecurityCategory] | None = None,
+        queries: tuple[str, ...],
         limit: int = 30,
     ) -> ListResult[pl.DataFrame]:
         """List securities matching the query."""
-        filters = {}
-        if stype:
-            filters["type"] = [SecurityType(s).value for s in stype]
-        if category:
-            filters["category"] = [SecurityCategory(c).value for c in category]
+        stripped_queries = map(str.strip, queries)
+        lexers = map(QueryLexer, stripped_queries)
+        parsers = map(QueryParser, lexers)
+        filters: Iterable[ast.FilterNode] = itertools.chain.from_iterable(
+            map(QueryParser.parse, parsers)
+        )
+        filters = prepare_filters(filters, ast.Field.SECURITY)
+        logger.debug("Prepared filters: %s", filters)
+
         options = QueryOptions(
-            text_query=query.strip() if query else None,
-            filters=filters if filters else None,
+            filters=filters,
             limit=limit,
         )
 
@@ -81,24 +88,24 @@ class SecurityService:
         return self._repos.security.delete_security(key.strip()) is not None
 
     def resolve_security_key(
-        self, input: str | None, limit: int, allow_ambiguous: bool = True
+        self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
     ) -> SearchResolution[Security]:
         """Resolve a security key to a Security object if it exists.
 
         Logic:
-        - If the input is None or empty:
+        - If the queries are empty:
             - If `allow_ambiguous` is False, return NOT_FOUND.
             - Else return AMBIGUOUS with no candidates.
-        - If the input matches exactly one security key, return EXACT with that security.
+        - If the queries match exactly one security key, return EXACT with that security.
         - Else If `allow_ambiguous` is false, return NOT_FOUND.
         - Else perform a text search:
             - 0 matches: return NOT_FOUND
             - 1 match: return EXACT with that security
             - >1 matches: return AMBIGUOUS with the list of candidates
         """
-        if input is None or input.strip() == "":
+        if not queries:
             if not allow_ambiguous:
-                return SearchResolution(ResolutionStatus.NOT_FOUND, original=input)
+                return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
 
             # Return top `limit` securities as candidates
             options = QueryOptions(limit=limit)
@@ -107,39 +114,45 @@ class SecurityService:
             return SearchResolution(
                 status=ResolutionStatus.AMBIGUOUS,
                 candidates=securities,
-                original=input,
+                queries=queries,
             )
 
-        input = input.strip()
-
         # First, try to find an exact match by key
-        exact_security = self._repos.security.get_security(input)
+        exact_security = self._repos.security.get_security(queries[0].strip())
         if exact_security:
             return SearchResolution(
                 status=ResolutionStatus.EXACT,
                 exact=exact_security,
-                original=input,
+                queries=queries,
             )
 
         if not allow_ambiguous:
             # If ambiguous results are not allowed, return NOT_FOUND
-            return SearchResolution(ResolutionStatus.NOT_FOUND, original=input)
+            return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
 
         # Perform a text search for candidates
-        options = QueryOptions(text_query=input, limit=limit)
+        stripped_queries = map(str.strip, queries)
+        lexers = map(QueryLexer, stripped_queries)
+        parsers = map(QueryParser, lexers)
+        filters: Iterable[ast.FilterNode] = itertools.chain.from_iterable(
+            map(QueryParser.parse, parsers)
+        )
+        filters = prepare_filters(filters, ast.Field.SECURITY)
+
+        options = QueryOptions(filters=filters, limit=limit)
         res = self._repos.security.search_securities(options, ResultFormat.LIST)
         if not res:
-            return SearchResolution(ResolutionStatus.NOT_FOUND, original=input)
+            return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
         elif len(res) == 1:
             return SearchResolution(
                 status=ResolutionStatus.EXACT,
                 exact=Security(*res[0]),
-                original=input,
+                queries=queries,
             )
         else:
             return SearchResolution(
                 status=ResolutionStatus.AMBIGUOUS,
                 candidates=[Security(*row) for row in res],
-                original=input,
+                queries=queries,
             )
             # If we reach here, it means we have ambiguous results

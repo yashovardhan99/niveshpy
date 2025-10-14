@@ -1,5 +1,6 @@
 """Database query utilities."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -21,8 +22,7 @@ class ResultFormat(StrEnum):
 class QueryOptions:
     """Options for querying the database."""
 
-    text_query: str | None = None
-    filters: dict[str, list[str]] | None = None
+    filters: Iterable[FilterNode] | None = None
     limit: int | None = None
     offset: int | None = None
 
@@ -48,9 +48,9 @@ def prepare_where_clause(operator: ast.Operator, column: str) -> str:
     """
     match operator:
         case ast.Operator.REGEX_MATCH:
-            return f"regexp_matches('{column}', ?)"
+            return f"regexp_matches({column}, ?, 'i')"
         case ast.Operator.NOT_REGEX_MATCH:
-            return f"NOT regexp_matches({column}, ?)"
+            return f"NOT regexp_matches({column}, ?, 'i')"
         case ast.Operator.EQUALS:
             return f"{column} = ?"
         case ast.Operator.NOT_EQUALS:
@@ -76,7 +76,7 @@ def prepare_where_clause(operator: ast.Operator, column: str) -> str:
 
 
 def prepare_query_filters(
-    filters: list[FilterNode], column_mappings: dict[ast.Field, list[str]]
+    filters: Iterable[FilterNode], column_mappings: dict[ast.Field, list[str]]
 ) -> tuple[str, tuple]:
     """Prepare query filters for database querying.
 

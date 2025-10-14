@@ -27,32 +27,16 @@ def securities(ctx: click.Context) -> None:
 
 
 @command("list")
-@click.argument("query", default="", required=False, metavar="[<query>]")
-@click.option(
-    "--type",
-    "stype",
-    type=click.Choice(SecurityType, case_sensitive=False),
-    help="Filter by security type.",
-    multiple=True,
-)
-@click.option(
-    "--category",
-    "category",
-    type=click.Choice(SecurityCategory, case_sensitive=False),
-    help="Filter by security category.",
-    multiple=True,
-)
+@click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
 @flags.limit("securities", default=30)
 @flags.output("format")
 @flags.common_options
 @click.pass_context
 def show(
     ctx: click.Context,
-    query: str,
+    queries: tuple[str, ...],
     limit: int,
     format: OutputFormat,
-    stype: list[SecurityType] | None,
-    category: list[SecurityCategory] | None,
 ) -> None:
     """List all securities.
 
@@ -64,9 +48,7 @@ def show(
     state = ctx.ensure_object(AppState)
     with error_console.status("Loading securities..."):
         try:
-            result = state.app.security.list_securities(
-                query=query, stype=stype, category=category, limit=limit
-            )
+            result = state.app.security.list_securities(queries=queries, limit=limit)
         except ValueError as e:
             logger.error(e, exc_info=True)
             ctx.exit(1)
@@ -76,7 +58,7 @@ def show(
 
         if result.total == 0:
             msg = "No securities " + (
-                "match your query." if query else "found in the database."
+                "match your query." if queries else "found in the database."
             )
             error_console.print(msg, style="yellow")
             ctx.exit()
@@ -249,7 +231,7 @@ def add(
 
 
 @command()
-@click.argument("query", required=False, metavar="[<query>]", default=None)
+@click.argument("queries", required=False, metavar="[<queries>]", default=(), nargs=-1)
 @flags.limit("limit", default=100)
 @flags.no_input()
 @flags.force()
@@ -257,7 +239,7 @@ def add(
 @flags.common_options
 @click.pass_context
 def delete(
-    ctx: click.Context, query: str | None, limit: int, force: bool, dry_run: bool
+    ctx: click.Context, queries: tuple[str, ...], limit: int, force: bool, dry_run: bool
 ) -> None:
     """Delete a security based on a query.
 
@@ -280,7 +262,7 @@ def delete(
     inquirer_style = get_style({}, style_override=state.no_color)
 
     resolution = state.app.security.resolve_security_key(
-        query, limit, allow_ambiguous=not state.no_input
+        queries, limit, allow_ambiguous=not state.no_input
     )
 
     if resolution.status == ResolutionStatus.NOT_FOUND:

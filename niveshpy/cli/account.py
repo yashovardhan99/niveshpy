@@ -26,12 +26,14 @@ def accounts(ctx: click.Context) -> None:
 
 
 @command("list")
-@click.argument("query", default="", required=False, metavar="[<query>]")
+@click.argument("queries", default=(), required=False, nargs=-1, metavar="[<queries>]")
 @flags.limit("accounts", default=30)
 @flags.output("format")
 @flags.common_options
 @click.pass_context
-def show(ctx: click.Context, query: str, limit: int, format: OutputFormat) -> None:
+def show(
+    ctx: click.Context, queries: tuple[str, ...], limit: int, format: OutputFormat
+) -> None:
     """List all accounts.
 
     An optional QUERY can be provided to filter accounts by name or institution.
@@ -39,7 +41,7 @@ def show(ctx: click.Context, query: str, limit: int, format: OutputFormat) -> No
     state = ctx.ensure_object(AppState)
     with error_console.status("Loading accounts..."):
         try:
-            result = state.app.account.list_accounts(query=query, limit=limit)
+            result = state.app.account.list_accounts(queries=queries, limit=limit)
         except ValueError as e:
             logger.error(e, exc_info=True)
             ctx.exit(1)
@@ -49,7 +51,7 @@ def show(ctx: click.Context, query: str, limit: int, format: OutputFormat) -> No
 
         if result.total == 0:
             msg = "No accounts " + (
-                "match your query." if query else "found in the database."
+                "match your queries." if queries else "found in the database."
             )
             error_console.print(msg, style="yellow")
             ctx.exit()

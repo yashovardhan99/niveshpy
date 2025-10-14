@@ -1,12 +1,13 @@
 """Module for preparing query AST nodes for evaluation."""
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import replace
 from niveshpy.core.query.ast import Field, FilterNode, FilterValue, Operator
 
 
 def prepare_filters(
-    filters: list[FilterNode], default_field: Field
+    filters: Iterable[FilterNode], default_field: Field
 ) -> list[FilterNode]:
     """Prepare and optimize the list of filter nodes for evaluation.
 
@@ -32,7 +33,7 @@ def prepare_filters(
     return combined
 
 
-def combine_filters(field: Field, filters: list[FilterNode]) -> list[FilterNode]:
+def combine_filters(field: Field, filters: Iterable[FilterNode]) -> list[FilterNode]:
     """Combine multiple filters of comparable operator into a single filter.
 
     This function combines filters that can be logically merged, such as multiple
@@ -75,7 +76,7 @@ def combine_filters(field: Field, filters: list[FilterNode]) -> list[FilterNode]
 
 
 def group_filters(
-    filters: list[FilterNode], default_field: Field
+    filters: Iterable[FilterNode], default_field: Field
 ) -> dict[Field, list[FilterNode]]:
     """Group filters by field."""
     grouped_filters: dict[Field, list[FilterNode]] = defaultdict(list)

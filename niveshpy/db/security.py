@@ -4,8 +4,15 @@ from collections.abc import Iterable
 from dataclasses import asdict
 from typing import Literal, overload
 
+from niveshpy.core.logging import logger
+from niveshpy.core.query import ast
 from niveshpy.db.database import Database
-from niveshpy.db.query import DEFAULT_QUERY_OPTIONS, QueryOptions, ResultFormat
+from niveshpy.db.query import (
+    DEFAULT_QUERY_OPTIONS,
+    QueryOptions,
+    ResultFormat,
+    prepare_query_filters,
+)
 import polars as pl
 from niveshpy.models.security import Security
 
@@ -14,6 +21,10 @@ class SecurityRepository:
     """Repository for managing securities in the database."""
 
     _table_name = "securities"
+    _column_mappings = {
+        ast.Field.SECURITY: ["key", "name"],
+        ast.Field.TYPE: ["type", "category"],
+    }
 
     def __init__(self, db: Database):
         """Initialize the SecurityRepository."""
@@ -22,18 +33,16 @@ class SecurityRepository:
     def count_securities(self, options: QueryOptions = DEFAULT_QUERY_OPTIONS) -> int:
         """Count the number of securities matching the query options."""
         query = f"SELECT COUNT(*) FROM {self._table_name}"
-        params: list[tuple[str, ...] | str] = []
-        query += " WHERE 1=1"
-        if options.text_query:
-            query += " AND (key ILIKE $1 OR name ILIKE $1)"
-            like_pattern = f"%{options.text_query}%"
-            params.append(like_pattern)
-
         if options.filters:
-            for k, v in options.filters.items():
-                query += f" AND {k} IN ?"
-                params.append(tuple(v))
+            filter_query, params = prepare_query_filters(
+                options.filters, self._column_mappings
+            )
+            query += " WHERE " + filter_query
+        else:
+            params = ()
         query += ";"
+
+        logger.debug("Executing count query: %s with params: %s", query, params)
 
         with self._db.cursor() as cursor:
             res = cursor.execute(query, params)
@@ -62,26 +71,27 @@ class SecurityRepository:
     ) -> pl.DataFrame | tuple | None | list[tuple]:
         """Search for securities matching the query options."""
         query = f"SELECT * FROM {self._table_name}"
-        params: list[tuple[str, ...] | str] = []
-        query += " WHERE 1=1"
-        if options.text_query:
-            query += " AND (key ILIKE $1 OR name ILIKE $1)"
-            like_pattern = f"%{options.text_query}%"
-            params.append(like_pattern)
-
         if options.filters:
-            for k, v in options.filters.items():
-                query += f" AND {k} IN ?"
-                params.append(tuple(v))
+            filter_query, _params = prepare_query_filters(
+                options.filters, self._column_mappings
+            )
+            query += " WHERE " + filter_query
+            params = list(_params)
+        else:
+            params = []
+
         query += " ORDER BY key"
 
         if options.limit is not None:
             query += " LIMIT ?"
             params.append(str(options.limit))
+
         if options.offset is not None:
             query += " OFFSET ?"
             params.append(str(options.offset))
         query += ";"
+
+        logger.debug("Executing query: %s with params: %s", query, params)
 
         with self._db.cursor() as cursor:
             res = cursor.execute(query, params)

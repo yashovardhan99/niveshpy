@@ -1,6 +1,11 @@
 """Account service for managing investment accounts."""
 
 from collections.abc import Iterable
+import itertools
+from niveshpy.core.query import ast
+from niveshpy.core.query.parser import QueryParser
+from niveshpy.core.query.prepare import prepare_filters
+from niveshpy.core.query.tokenizer import QueryLexer
 from niveshpy.db.query import QueryOptions, ResultFormat
 from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.account import AccountRead, AccountWrite
@@ -17,10 +22,19 @@ class AccountService:
         self._repos = repos
 
     def list_accounts(
-        self, query: str = "", limit: int = 30
+        self, queries: tuple[str, ...], limit: int = 30
     ) -> ListResult[pl.DataFrame]:
         """List accounts, optionally filtered by a query string."""
-        options = QueryOptions(text_query=query.strip() if query else None, limit=limit)
+        stripped_queries = map(str.strip, queries)
+        lexers = map(QueryLexer, stripped_queries)
+        parsers = map(QueryParser, lexers)
+        filters: Iterable[ast.FilterNode] = itertools.chain.from_iterable(
+            map(QueryParser.parse, parsers)
+        )
+        filters = prepare_filters(filters, ast.Field.ACCOUNT)
+        logger.debug("Prepared filters: %s", filters)
+
+        options = QueryOptions(filters=filters, limit=limit)
 
         if limit < 1:
             logger.debug("Received non-positive limit: %d", limit)

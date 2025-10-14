@@ -46,4 +46,4 @@ class SearchResolution(Generic[T]):
     status: ResolutionStatus
     exact: T | None = None
     candidates: list[T] | None = None
-    original: str | None = None
+    queries: tuple[str, ...] = ()

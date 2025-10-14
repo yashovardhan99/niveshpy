@@ -4,8 +4,14 @@ from dataclasses import asdict
 from itertools import starmap
 from collections.abc import Iterable
 from typing import Literal, overload
+from niveshpy.core.query import ast
 from niveshpy.db.database import Database
-from niveshpy.db.query import DEFAULT_QUERY_OPTIONS, QueryOptions, ResultFormat
+from niveshpy.db.query import (
+    DEFAULT_QUERY_OPTIONS,
+    QueryOptions,
+    ResultFormat,
+    prepare_query_filters,
+)
 from niveshpy.models.account import AccountRead, AccountWrite
 import polars as pl
 
@@ -14,6 +20,9 @@ class AccountRepository:
     """Repository for managing investment accounts in the database."""
 
     _table_name = "accounts"
+    _column_mappings = {
+        ast.Field.ACCOUNT: ["name", "institution"],
+    }
 
     def __init__(self, db: Database):
         """Initialize the AccountRepository."""
@@ -22,11 +31,13 @@ class AccountRepository:
     def count_accounts(self, options: QueryOptions = DEFAULT_QUERY_OPTIONS) -> int:
         """Count the number of accounts matching the query options."""
         query = f"SELECT COUNT(*) FROM {self._table_name}"
-        params = []
-        if options.text_query:
-            query += " WHERE name ILIKE $1 OR institution ILIKE $1"
-            like_pattern = f"%{options.text_query}%"
-            params.append(like_pattern)
+        if options.filters:
+            filter_query, params = prepare_query_filters(
+                options.filters, self._column_mappings
+            )
+            query += " WHERE " + filter_query
+        else:
+            params = ()
         query += ";"
 
         with self._db.cursor() as cursor:
@@ -56,11 +67,15 @@ class AccountRepository:
     ) -> pl.DataFrame | tuple | None | list[tuple]:
         """Search for accounts matching the query options."""
         query = f"SELECT * FROM {self._table_name}"
-        params = []
-        if options.text_query:
-            query += " WHERE name ILIKE $1 OR institution ILIKE $1"
-            like_pattern = f"%{options.text_query}%"
-            params.append(like_pattern)
+        if options.filters:
+            filter_query, _params = prepare_query_filters(
+                options.filters, self._column_mappings
+            )
+            query += " WHERE " + filter_query
+            params = list(_params)
+        else:
+            params = []
+
         query += " ORDER BY id"
         if options.limit:
             query += " LIMIT ?"
