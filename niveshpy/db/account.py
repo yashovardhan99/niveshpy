@@ -91,28 +91,28 @@ class AccountRepository:
             else:
                 return res.fetchall()
 
-    def find_account_id(self, account: AccountWrite) -> int | None:
-        """Find an account ID by name and institution."""
-        query = f"""SELECT id FROM {self._table_name}
+    def find_account(self, account: AccountWrite) -> AccountRead | None:
+        """Find an account by name and institution."""
+        query = f"""SELECT * FROM {self._table_name}
                     WHERE name = ? AND institution = ?;"""
         params = (account.name, account.institution)
 
         with self._db.cursor() as cursor:
             res = cursor.execute(query, params).fetchone()
-            return res[0] if res else None
+            return AccountRead(*res) if res else None
 
-    def insert_single_account(self, account: AccountWrite) -> int | None:
+    def insert_single_account(self, account: AccountWrite) -> AccountRead | None:
         """Insert a single account into the database."""
         with self._db.cursor() as cursor:
             res = cursor.execute(
-                f"""INSERT INTO {self._table_name} (name, institution)
-                VALUES (?, ?)
-                RETURNING id;
+                f"""INSERT INTO {self._table_name} (name, institution, metadata)
+                VALUES (?, ?, ?)
+                RETURNING *;
                 """,
-                (account.name, account.institution),
+                (account.name, account.institution, account.metadata),
             ).fetchone()
             cursor.commit()
-            return res[0] if res else None
+            return AccountRead(*res) if res else None
 
     def get_accounts(self) -> pl.DataFrame:
         """Retrieve all accounts from the database."""
@@ -140,7 +140,7 @@ class AccountRepository:
 
     def get_account(self, id: int) -> AccountRead | None:
         """Retrieve an account by its ID."""
-        query = f"SELECT id, name, institution FROM {self._table_name} WHERE id = ?;"
+        query = f"SELECT id, name, institution, created_at, metadata FROM {self._table_name} WHERE id = ?;"
         params = (id,)
 
         with self._db.cursor() as cursor:

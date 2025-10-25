@@ -99,7 +99,9 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
             return
 
         try:
-            result = state.app.account.add_account(name=name, institution=institution)
+            result = state.app.account.add_account(
+                name=name, institution=institution, source="cli"
+            )
         except ValueError as e:
             error_console.print(f"[bold red]Error:[/bold red] {e}")
             ctx.exit(1)
@@ -145,7 +147,7 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
 
             try:
                 result = state.app.account.add_account(
-                    name=name, institution=institution
+                    name=name, institution=institution, source="cli"
                 )
                 if result.action == MergeAction.NOTHING:
                     console.print(

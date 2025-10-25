@@ -121,11 +121,17 @@ class SecurityRepository:
         with self._db.cursor() as cursor:
             res = cursor.execute(
                 f"""INSERT OR REPLACE INTO {self._table_name} 
-                (key, name, type, category)
-                VALUES (?, ?, ?, ?)
+                (key, name, type, category, metadata)
+                VALUES (?, ?, ?, ?, ?)
                 RETURNING merge_action;
                 """,
-                (security.key, security.name, security.type, security.category),
+                (
+                    security.key,
+                    security.name,
+                    security.type,
+                    security.category,
+                    security.metadata,
+                ),
             ).fetchone()
             cursor.commit()
             return res[0] if res is not None else None

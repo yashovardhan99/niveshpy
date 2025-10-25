@@ -56,11 +56,18 @@ class SecurityService:
         if N == 0:
             return ListResult(pl.DataFrame(), 0)
 
-        res = self._repos.security.search_securities(options, ResultFormat.POLARS)
+        res = self._repos.security.search_securities(
+            options, ResultFormat.POLARS
+        ).rename({"created_at": "created"})
         return ListResult(res, N)
 
     def add_security(
-        self, key: str, name: str, stype: SecurityType, category: SecurityCategory
+        self,
+        key: str,
+        name: str,
+        stype: SecurityType,
+        category: SecurityCategory,
+        source: str | None = None,
     ) -> InsertResult[Security]:
         """Add a single security to the database."""
         if not key.strip() or not name.strip():
@@ -70,7 +77,14 @@ class SecurityService:
         if category not in SecurityCategory:
             raise ValueError(f"Invalid security category: {category}")
 
-        security = Security(key.strip(), name.strip(), stype, category)
+        if source:
+            metadata = {"source": source}
+        else:
+            metadata = {}
+
+        security = Security(
+            key.strip(), name.strip(), stype, category, metadata=metadata
+        )
 
         action = self._repos.security.insert_single_security(security)
         try:

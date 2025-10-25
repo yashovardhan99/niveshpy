@@ -1,7 +1,8 @@
 """Models for securities."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum, auto
 
 
@@ -55,8 +56,17 @@ class Security:
     name: str
     type: SecurityType
     category: SecurityCategory
+    created: datetime = datetime.now()
+    metadata: dict[str, str] = field(default_factory=dict)
 
     @staticmethod
     def rich_format_map() -> list[str | Callable[[str], str] | None]:
         """Get a list of formatting styles for rich table display."""
-        return ["green", "bold", SecurityType.rich_format, SecurityCategory.rich_format]
+        return [
+            "green",
+            "bold",
+            SecurityType.rich_format,
+            SecurityCategory.rich_format,
+            "dim",
+            "dim",
+        ]

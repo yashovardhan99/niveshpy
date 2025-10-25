@@ -129,6 +129,7 @@ def add(
                 default_name.strip(),
                 SecurityType(default_type.strip().lower()),
                 SecurityCategory(default_category.strip().lower()),
+                source="cli",
             )
         except ValueError as e:
             logger.error(e, exc_info=True)
@@ -200,6 +201,7 @@ def add(
                     name,
                     security_type,
                     category,
+                    source="cli",
                 )
             except ValueError as e:
                 logger.error(e, exc_info=True)
@@ -301,7 +303,9 @@ def delete(
             style=inquirer_style,
         ).execute()
 
-        security = state.app.security.resolve_security_key(security_key, 1, False).exact
+        security = state.app.security.resolve_security_key(
+            (security_key,), 1, False
+        ).exact
         if security is None:
             logger.error(
                 "Selected security could not be found. It may have been deleted already."

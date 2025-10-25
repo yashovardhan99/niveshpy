@@ -50,26 +50,34 @@ class AccountService:
         if N == 0:
             return ListResult(pl.DataFrame(), 0)
 
-        res = self._repos.account.search_accounts(options, format=ResultFormat.POLARS)
+        res = self._repos.account.search_accounts(
+            options, format=ResultFormat.POLARS
+        ).rename({"created_at": "created"})
         return ListResult(res, N)
 
-    def add_account(self, name: str, institution: str) -> InsertResult[AccountRead]:
+    def add_account(
+        self, name: str, institution: str, source: str | None = None
+    ) -> InsertResult[AccountRead]:
         """Add a new account."""
         if not name.strip() or not institution.strip():
             raise ValueError("Account name and institution cannot be empty.")
 
-        account = AccountWrite(name=name.strip(), institution=institution.strip())
-        existing_id = self._repos.account.find_account_id(account)
-        if existing_id:
-            logger.debug("Account already exists: %s", existing_id)
-            return InsertResult(
-                MergeAction.NOTHING, AccountRead(existing_id, name, institution)
-            )
-        new_id = self._repos.account.insert_single_account(account)
-        if new_id is None:
+        if source:
+            metadata = {"source": source}
+        else:
+            metadata = {}
+        account = AccountWrite(
+            name=name.strip(), institution=institution.strip(), metadata=metadata
+        )
+        existing_account = self._repos.account.find_account(account)
+        if existing_account is not None:
+            logger.debug("Account already exists: %s", existing_account)
+            return InsertResult(MergeAction.NOTHING, existing_account)
+        new_account = self._repos.account.insert_single_account(account)
+        if new_account is None:
             raise RuntimeError("Failed to insert new account.")
-        logger.debug("Inserted new account with ID: %s", new_id)
-        return InsertResult(MergeAction.INSERT, AccountRead(new_id, name, institution))
+        logger.debug("Inserted new account with ID: %s", new_account.id)
+        return InsertResult(MergeAction.INSERT, new_account)
 
     def resolve_account_id(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True

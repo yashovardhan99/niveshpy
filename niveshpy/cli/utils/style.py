@@ -1,5 +1,6 @@
 """Utility functions for styling CLI output."""
 
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum, auto
 from itertools import starmap, zip_longest
@@ -67,6 +68,58 @@ def format_dataframe(
         )
 
 
+def format_datetime(dt: datetime) -> str:
+    """Format a datetime object to a relative time string.
+
+    If the datetime is within 7 days, it shows relative time (e.g., "about 3 hours ago").
+    If older than 7 days, it shows the absolute date (e.g., "on Jan 01, 2023").
+
+    Args:
+        dt (datetime): The datetime object to format.
+
+    Returns:
+        str: A human-readable relative time string.
+
+    """
+    now = datetime.now()
+    delta = now - dt
+    seconds = int(delta.total_seconds())
+    if seconds < 60:
+        return f"about {seconds} seconds ago"
+    elif seconds < 3600:
+        minutes = seconds // 60
+        return f"about {minutes} minutes ago"
+    elif seconds < 86400:
+        hours = seconds // 3600
+        return f"about {hours} hours ago"
+    else:
+        days = seconds // 86400
+        if days < 7:
+            return f"about {days} days ago"
+        else:
+            date = dt.strftime("%b %d, %Y")
+            return f"on {date}"
+
+
+def format_list_or_dict(data: list | dict) -> str:
+    """Format a list or dictionary into a pretty-printed string."""
+    # For empty list or dict, return empty string
+    if not data:
+        return ""
+
+    # If it is a dictionary with "key" and "value" as keys, convert to a simple key-value pair
+    if isinstance(data, dict) and set(data.keys()) == {"key", "value"}:
+        return f"{data['key']}: {data['value']}"
+
+    # If it is a list of such dictionaries, format each item recursively
+    if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+        formatted_items = [format_list_or_dict(item) for item in data]
+        return ", ".join(formatted_items)
+
+    # Fallback to string representation
+    return str(data)
+
+
 def convert_polars_to_rich_table(
     df: pl.DataFrame, fmt_map: Sequence[str | Callable[[str], str] | None] | None
 ) -> Table:
@@ -82,12 +135,19 @@ def convert_polars_to_rich_table(
         table.add_column(col.upper(), justify=justify, style=style)
 
     def mapper(data: object, fmt: str | None | Callable[[str], str]) -> str:
-        if fmt is None:
-            return str(data)
-        elif callable(fmt):
-            return fmt(str(data))
+        if isinstance(data, datetime):
+            data_str = format_datetime(data)
+        elif isinstance(data, list | dict):
+            data_str = format_list_or_dict(data)
         else:
-            return str(data)
+            data_str = str(data)
+
+        if fmt is None:
+            return data_str
+        elif callable(fmt):
+            return fmt(data_str)
+        else:
+            return data_str
 
     for row in df.iter_rows():
         if fmt_map is None:
