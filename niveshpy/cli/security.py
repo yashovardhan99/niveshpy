@@ -192,16 +192,6 @@ def add(
             style=inquirer_style,
         ).execute()
 
-        # Confirm before adding
-        confirm = inquirer.confirm(
-            message="Add this security to the database?",
-            default=True,
-            style=inquirer_style,
-        ).execute()
-        if not confirm:
-            console.print("[bold red]Aborted![/bold red] Security not added.")
-            ctx.exit()
-
         # Add the security
         with error_console.status(f"Adding security '{name}'..."):
             try:

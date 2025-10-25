@@ -1,8 +1,5 @@
 """Account database operations."""
 
-from dataclasses import asdict
-from itertools import starmap
-from collections.abc import Iterable
 from typing import Literal, overload
 from niveshpy.core.query import ast
 from niveshpy.db.database import Database
@@ -94,6 +91,29 @@ class AccountRepository:
             else:
                 return res.fetchall()
 
+    def find_account_id(self, account: AccountWrite) -> int | None:
+        """Find an account ID by name and institution."""
+        query = f"""SELECT id FROM {self._table_name}
+                    WHERE name = ? AND institution = ?;"""
+        params = (account.name, account.institution)
+
+        with self._db.cursor() as cursor:
+            res = cursor.execute(query, params).fetchone()
+            return res[0] if res else None
+
+    def insert_single_account(self, account: AccountWrite) -> int | None:
+        """Insert a single account into the database."""
+        with self._db.cursor() as cursor:
+            res = cursor.execute(
+                f"""INSERT INTO {self._table_name} (name, institution)
+                VALUES (?, ?)
+                RETURNING id;
+                """,
+                (account.name, account.institution),
+            ).fetchone()
+            cursor.commit()
+            return res[0] if res else None
+
     def get_accounts(self) -> pl.DataFrame:
         """Retrieve all accounts from the database."""
         with self._db.cursor() as cursor:
@@ -101,19 +121,42 @@ class AccountRepository:
                 f"SELECT id, name, institution FROM {self._table_name}"
             ).pl()
 
-    def add_accounts(self, accounts: Iterable[AccountWrite]) -> Iterable[AccountRead]:
-        """Add new accounts to the database."""
-        with self._db.cursor() as cursor:
-            cursor.register("new_accounts", pl.from_dicts(map(asdict, accounts)))
-            data = cursor.execute(
-                f"""MERGE INTO {self._table_name} target
-                USING (SELECT * FROM new_accounts) AS new
-                ON target.name = new.name AND target.institution = new.institution
-                WHEN NOT MATCHED THEN INSERT BY NAME;
+    # def add_accounts(self, accounts: Iterable[AccountWrite]) -> Iterable[AccountRead]:
+    #     """Add new accounts to the database."""
+    #     with self._db.cursor() as cursor:
+    #         cursor.register("new_accounts", pl.from_dicts(map(asdict, accounts)))
+    #         data = cursor.execute(
+    #             f"""MERGE INTO {self._table_name} target
+    #             USING (SELECT * FROM new_accounts) AS new
+    #             ON target.name = new.name AND target.institution = new.institution
+    #             WHEN NOT MATCHED THEN INSERT BY NAME;
 
-                FROM {self._table_name}
-                ORDER BY id;
-                """
+    #             FROM {self._table_name}
+    #             ORDER BY id;
+    #             """
+    #         )
+    #         cursor.commit()
+    #         return starmap(AccountRead, data.fetchall())
+
+    def get_account(self, id: int) -> AccountRead | None:
+        """Retrieve an account by its ID."""
+        query = f"SELECT id, name, institution FROM {self._table_name} WHERE id = ?;"
+        params = (id,)
+
+        with self._db.cursor() as cursor:
+            res = cursor.execute(query, params).fetchone()
+            return AccountRead(*res) if res else None
+
+    def delete_account(self, id: int) -> AccountRead | None:
+        """Delete an account by its ID.
+
+        Returns the deleted account if successful, None otherwise.
+        """
+        with self._db.cursor() as cursor:
+            res = cursor.execute(
+                f"DELETE FROM {self._table_name} WHERE id = ? RETURNING *;",
+                (id,),
             )
             cursor.commit()
-            return starmap(AccountRead, data.fetchall())
+            data = res.fetchone()
+            return AccountRead(*data) if data else None

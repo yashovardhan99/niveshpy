@@ -2,7 +2,8 @@ CREATE SEQUENCE IF NOT EXISTS account_id_seq;
 CREATE TABLE IF NOT EXISTS accounts (
     id INTEGER PRIMARY KEY DEFAULT nextval('account_id_seq'),
     name VARCHAR NOT NULL,
-    institution VARCHAR NOT NULL
+    institution VARCHAR NOT NULL,
+    CONSTRAINT unique_account UNIQUE (name, institution)
 );
 CREATE TYPE IF NOT EXISTS SecurityType AS ENUM ('stock', 'bond', 'etf', 'mutual_fund', 'other');
 CREATE TYPE IF NOT EXISTS SecurityCategory AS ENUM (

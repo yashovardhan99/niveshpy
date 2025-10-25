@@ -21,6 +21,7 @@ class MergeAction(StrEnum):
 
     INSERT = "INSERT"
     UPDATE = "UPDATE"
+    NOTHING = "NOTHING"
 
 
 @dataclass
