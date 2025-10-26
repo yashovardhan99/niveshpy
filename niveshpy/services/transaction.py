@@ -1,6 +1,8 @@
 """Transaction service for managing user transactions."""
 
 from collections.abc import Iterable
+import datetime
+import decimal
 import itertools
 from niveshpy.core.query import ast
 from niveshpy.core.query.parser import QueryParser
@@ -10,7 +12,11 @@ from niveshpy.db.query import QueryOptions, ResultFormat
 from niveshpy.db.repositories import RepositoryContainer
 import polars as pl
 from niveshpy.core.logging import logger
-from niveshpy.services.result import ListResult
+from niveshpy.models.transaction import (
+    TransactionType,
+    TransactionWrite,
+)
+from niveshpy.services.result import InsertResult, ListResult, MergeAction
 
 
 class TransactionService:
@@ -48,48 +54,67 @@ class TransactionService:
         if N == 0:
             return ListResult(pl.DataFrame(), 0)
 
-        res = self._repos.transaction.search_transactions(
-            options, ResultFormat.POLARS
-        ).select(
-            pl.col("id"),
-            pl.col("transaction_date").alias("date"),
-            pl.col("type"),
-            pl.col("description"),
-            pl.col("amount"),
-            pl.col("units"),
-            pl.concat_str(
-                [
-                    pl.col("security_name"),
-                    pl.lit(" ("),
-                    pl.col("security_key"),
-                    pl.lit(")"),
-                ]
-            ).alias("security"),
-            pl.concat_str(
-                [
-                    pl.col("account_name"),
-                    pl.lit(" ("),
-                    pl.col("account_institution"),
-                    pl.lit(")"),
-                ]
-            ).alias("account"),
-            pl.col("created_at").alias("created"),
-            pl.col("metadata"),
-        )
+        res = self._repos.transaction.search_transactions(options, ResultFormat.POLARS)
         return ListResult(res, N)
 
-    # def get_transactions(self):
-    #     """Get all transactions."""
-    #     return self._repos.transaction.get_transactions()
+    def add_transaction(
+        self,
+        transaction_date: datetime.date,
+        transaction_type: TransactionType,
+        description: str,
+        amount: decimal.Decimal,
+        units: decimal.Decimal,
+        account_id: int,
+        security_key: str,
+        source: str | None = None,
+    ) -> InsertResult[int]:
+        """Add a single transaction to the database."""
+        if source:
+            metadata = {"source": source}
+        else:
+            metadata = {}
 
-    # def add_transactions(self, transactions):
-    #     """Add new transactions."""
-    #     return self._repos.transaction.add_transactions(transactions)
+        # Validate account and security exists
+        account = self._repos.account.get_account(account_id)
+        if account is None:
+            raise ValueError(f"Account with ID {account_id} does not exist.")
 
-    # def get_accounts(self):
-    #     """Get all accounts."""
-    #     return self._repos.account.get_accounts()
+        security = self._repos.security.get_security(security_key)
+        if security is None:
+            raise ValueError(f"Security with key {security_key} does not exist.")
 
-    # def get_securities(self):
-    #     """Get all securities."""
-    #     return self._repos.security.get_securities()
+        transaction = TransactionWrite(
+            transaction_date=transaction_date,
+            type=transaction_type,
+            description=description,
+            amount=amount,
+            units=units,
+            account_id=account_id,
+            security_key=security_key,
+            metadata=metadata,
+        )
+
+        txn_id = self._repos.transaction.insert_single_transaction(transaction)
+        if txn_id is None:
+            raise RuntimeError("Failed to insert new transaction.")
+        return InsertResult(MergeAction.INSERT, txn_id)
+
+    def get_account_choices(self) -> list[dict[str, str | int]]:
+        """Get a list of accounts for selection."""
+        accounts = self._repos.account.search_accounts(
+            QueryOptions(limit=10_000), ResultFormat.LIST
+        )
+        return [
+            {"value": account[0], "name": f"{account[0]}: {account[1]} ({account[2]})"}
+            for account in accounts
+        ]
+
+    def get_security_choices(self) -> list[dict[str, str]]:
+        """Get a list of securities for selection."""
+        securities = self._repos.security.search_securities(
+            QueryOptions(limit=10_000), ResultFormat.LIST
+        )
+        return [
+            {"value": security[0], "name": f"{security[1]} ({security[0]})"}
+            for security in securities
+        ]

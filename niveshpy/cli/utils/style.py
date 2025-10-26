@@ -1,6 +1,6 @@
 """Utility functions for styling CLI output."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum, auto
 from itertools import starmap, zip_longest
@@ -97,7 +97,7 @@ def format_datetime(dt: datetime) -> str:
         if days < 7:
             return f"about {days} days ago"
         else:
-            date = dt.strftime("%b %d, %Y")
+            date = dt.strftime("%d %b %Y")
             return f"on {date}"
 
 
@@ -137,6 +137,8 @@ def convert_polars_to_rich_table(
     def mapper(data: object, fmt: str | None | Callable[[str], str]) -> str:
         if isinstance(data, datetime):
             data_str = format_datetime(data)
+        elif isinstance(data, date):
+            data_str = data.strftime("%d %b %Y")
         elif isinstance(data, list | dict):
             data_str = format_list_or_dict(data)
         else:
