@@ -1,5 +1,6 @@
 """Account database operations."""
 
+from dataclasses import asdict
 from typing import Literal, overload
 from niveshpy.core.query import ast
 from niveshpy.db.database import Database
@@ -120,6 +121,26 @@ class AccountRepository:
             return cursor.execute(
                 f"SELECT id, name, institution FROM {self._table_name}"
             ).pl()
+
+    def insert_multiple_accounts(
+        self, accounts: list[AccountWrite]
+    ) -> list[AccountRead]:
+        """Insert multiple accounts into the database."""
+        with self._db.cursor() as cursor:
+            cursor.begin()
+            cursor.register("new_accounts", pl.from_dicts(map(asdict, accounts)))
+            cursor.execute(
+                f"""MERGE INTO {self._table_name} target
+                USING (SELECT * FROM new_accounts) AS new
+                ON target.name = new.name AND target.institution = new.institution
+                WHEN MATCHED THEN UPDATE SET metadata = new.metadata
+                WHEN NOT MATCHED THEN INSERT BY NAME
+                RETURNING *;
+                """
+            )
+            res = cursor.fetchall()
+            cursor.commit()
+            return [AccountRead(*data) for data in res]
 
     # def add_accounts(self, accounts: Iterable[AccountWrite]) -> Iterable[AccountRead]:
     #     """Add new accounts to the database."""

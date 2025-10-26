@@ -65,5 +65,4 @@ class TransactionWrite:
     units: Decimal
     security_key: str
     account_id: int
-    created: datetime = datetime.now()
     metadata: dict[str, str] = field(default_factory=dict)

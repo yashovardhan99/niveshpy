@@ -49,7 +49,7 @@ class SecurityCategory(StrEnum):
 
 
 @dataclass
-class Security:
+class SecurityRead:
     """Model for security data."""
 
     key: str
@@ -70,3 +70,14 @@ class Security:
             "dim",
             "dim",
         ]
+
+
+@dataclass
+class SecurityWrite:
+    """Model for creating or updating security data."""
+
+    key: str
+    name: str
+    type: SecurityType
+    category: SecurityCategory
+    metadata: dict[str, str] = field(default_factory=dict)

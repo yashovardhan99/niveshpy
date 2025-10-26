@@ -8,7 +8,12 @@ from niveshpy.core.query.prepare import prepare_filters
 from niveshpy.core.query.tokenizer import QueryLexer
 from niveshpy.db.query import QueryOptions, ResultFormat
 from niveshpy.db.repositories import RepositoryContainer
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
+from niveshpy.models.security import (
+    SecurityRead,
+    SecurityCategory,
+    SecurityType,
+    SecurityWrite,
+)
 import polars as pl
 from niveshpy.core.logging import logger
 
@@ -68,7 +73,7 @@ class SecurityService:
         stype: SecurityType,
         category: SecurityCategory,
         source: str | None = None,
-    ) -> InsertResult[Security]:
+    ) -> InsertResult[SecurityRead]:
         """Add a single security to the database."""
         if not key.strip() or not name.strip():
             raise ValueError("Security key and name cannot be empty.")
@@ -82,15 +87,15 @@ class SecurityService:
         else:
             metadata = {}
 
-        security = Security(
+        security = SecurityWrite(
             key.strip(), name.strip(), stype, category, metadata=metadata
         )
 
-        action = self._repos.security.insert_single_security(security)
+        result = self._repos.security.insert_single_security(security)
         try:
-            if action is None:
+            if result is None:
                 raise ValueError("Action could not be determined.")
-            return InsertResult(MergeAction(action), security)
+            return InsertResult(MergeAction(result[0]), result[1])
         except ValueError as e:
             raise ValueError("Failed to add security.") from e
 
@@ -103,7 +108,7 @@ class SecurityService:
 
     def resolve_security_key(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
-    ) -> SearchResolution[Security]:
+    ) -> SearchResolution[SecurityRead]:
         """Resolve a security key to a Security object if it exists.
 
         Logic:
@@ -124,7 +129,7 @@ class SecurityService:
             # Return top `limit` securities as candidates
             options = QueryOptions(limit=limit)
             res = self._repos.security.search_securities(options, ResultFormat.LIST)
-            securities = [Security(*row) for row in res] if res else []
+            securities = [SecurityRead(*row) for row in res] if res else []
             return SearchResolution(
                 status=ResolutionStatus.AMBIGUOUS,
                 candidates=securities,
@@ -160,13 +165,13 @@ class SecurityService:
         elif len(res) == 1:
             return SearchResolution(
                 status=ResolutionStatus.EXACT,
-                exact=Security(*res[0]),
+                exact=SecurityRead(*res[0]),
                 queries=queries,
             )
         else:
             return SearchResolution(
                 status=ResolutionStatus.AMBIGUOUS,
-                candidates=[Security(*row) for row in res],
+                candidates=[SecurityRead(*row) for row in res],
                 queries=queries,
             )
             # If we reach here, it means we have ambiguous results

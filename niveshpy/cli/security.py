@@ -7,8 +7,8 @@ from niveshpy.cli.utils.overrides import command, group
 from niveshpy.cli.utils import flags
 from niveshpy.cli.utils.style import OutputFormat, format_dataframe, rich_click_pager
 from niveshpy.db.database import DatabaseError
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
-from niveshpy.cli.app import AppState
+from niveshpy.models.security import SecurityRead, SecurityCategory, SecurityType
+from niveshpy.core.app import AppState
 from InquirerPy import inquirer, get_style
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import EmptyInputValidator
@@ -60,7 +60,7 @@ def show(
             error_console.print(msg, style="yellow")
             ctx.exit()
 
-        out = format_dataframe(result.data, format, Security.rich_format_map())
+        out = format_dataframe(result.data, format, SecurityRead.rich_format_map())
 
     with rich_click_pager(console):
         if result.total > limit and console.is_terminal:

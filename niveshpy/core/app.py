@@ -1,9 +1,12 @@
 """Main application class to hold state for the CLI."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from niveshpy.db.database import Database
 from niveshpy.db.repositories import RepositoryContainer
+from niveshpy.models.parser import Parser
 from niveshpy.services.account import AccountService
+from niveshpy.services.parsing import ParsingService
 from niveshpy.services.security import SecurityService
 from niveshpy.services.transaction import TransactionService
 
@@ -38,6 +41,14 @@ class Application:
         if self._transaction is None:
             self._transaction = TransactionService(self._repos)
         return self._transaction
+
+    def get_parsing_service(
+        self,
+        parser: Parser,
+        progress_callback: Callable[[str, int, int], None] | None = None,
+    ) -> ParsingService:
+        """Get the parsing service for the given parser key."""
+        return ParsingService(parser, self._repos, progress_callback=progress_callback)
 
 
 @dataclass

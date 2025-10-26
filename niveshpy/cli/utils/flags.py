@@ -5,7 +5,7 @@ from typing import Any, TypeVar
 from collections.abc import Callable
 import click
 
-from niveshpy.cli.app import AppState
+from niveshpy.core.app import AppState
 from niveshpy.cli.utils.style import OutputFormat
 from niveshpy.core.logging import logger
 

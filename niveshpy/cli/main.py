@@ -3,7 +3,8 @@
 import sys
 import click
 
-from niveshpy.cli.app import AppState, Application
+from niveshpy.cli import parse
+from niveshpy.core.app import AppState, Application
 from niveshpy.cli.account import accounts
 from niveshpy.cli.security import securities
 from niveshpy.cli.utils import flags
@@ -46,6 +47,7 @@ def cli(ctx: click.Context) -> None:
 cli.add_command(transactions)
 cli.add_command(securities)
 cli.add_command(accounts)
+cli.add_command(parse.parse)
 
 if __name__ == "__main__":
     sys.exit(cli())

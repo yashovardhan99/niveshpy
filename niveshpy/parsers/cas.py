@@ -1,20 +1,25 @@
 """Service for parsing CAS statements."""
 
-from collections.abc import Generator
+from collections.abc import Iterable
+import datetime
 from pathlib import Path
 import casparser  # type: ignore
 
-from niveshpy.models.account import AccountWrite
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
-import polars as pl
+from niveshpy.models.account import AccountRead, AccountWrite
+from niveshpy.models.parser import ParserInfo
+from niveshpy.models.security import (
+    SecurityCategory,
+    SecurityType,
+    SecurityWrite,
+)
 
-from niveshpy.models.transaction import TransactionType
+from niveshpy.models.transaction import TransactionType, TransactionWrite
 
 
 class CASParser:
     """Service for managing CAS statements."""
 
-    def __init__(self, file_path: Path | str, password: str | None = None):
+    def __init__(self, file_path: str, password: str | None = None):
         """Initialize the CAS Parser with a file path."""
         self.data = casparser.read_cas_pdf(file_path, password)
         if not isinstance(self.data, casparser.CASData):
@@ -23,75 +28,102 @@ class CASParser:
         if self.data.cas_type != "DETAILED":
             raise ValueError("Only DETAILED CAS statements are supported.")
 
+    def get_date_range(self) -> tuple[datetime.date, datetime.date]:
+        """Get the date range of the CAS data."""
+        start_date = datetime.datetime.strptime(
+            self.data.statement_period.from_, "%d-%b-%Y"
+        ).date()
+        end_date = datetime.datetime.strptime(
+            self.data.statement_period.to, "%d-%b-%Y"
+        ).date()
+        return start_date, end_date
+
     def get_accounts(self) -> list[AccountWrite]:
         """Get the list of folios as accounts from the CAS data."""
         return [
-            AccountWrite(folio_data.folio, folio_data.amc)
+            AccountWrite(folio_data.folio, folio_data.amc, {"source": "cas"})
             for folio_data in self.data.folios
         ]
 
-    def get_securities(self) -> Generator[Security, None, None]:
+    def get_securities(self) -> Iterable[SecurityWrite]:
         """Get the list of securities from the CAS data."""
         securities = set()
         for folio in self.data.folios:
             for scheme in folio.schemes:
                 if scheme.amfi not in securities:
                     securities.add(scheme.amfi)
-                    yield Security(
+                    yield SecurityWrite(
                         scheme.amfi,
                         scheme.scheme,
                         SecurityType.MUTUAL_FUND,
                         SecurityCategory(scheme.type.lower())
                         if scheme.type in ("EQUITY", "DEBT")
                         else SecurityCategory.OTHER,
+                        metadata={"source": "cas"},
                     )
 
-    def get_transactions(self) -> pl.DataFrame:
+    def get_transactions(
+        self, accounts: Iterable[AccountRead]
+    ) -> Iterable[TransactionWrite]:
         """Get the list of transactions from the CAS data."""
-        transactions = []
+        accounts_map = {(acc.name, acc.institution): acc.id for acc in accounts}
         for folio in self.data.folios:
-            for scheme in folio.schemes:
-                transactions.append(
-                    pl.from_dicts(scheme.transactions).with_columns(
-                        pl.lit(scheme.amfi).alias("security_key"),
-                        pl.lit(folio.folio).alias("account_name"),
-                        pl.lit(folio.amc).alias("account_institution"),
-                    )
+            account_id = accounts_map.get((folio.folio, folio.amc))
+            if account_id is None:
+                raise ValueError(
+                    f"Account for folio {folio.folio} and AMC {folio.amc} not found."
                 )
-
-        df = pl.concat(transactions) if transactions else pl.DataFrame()
-        df = df.select(
-            pl.col("date").cast(pl.Date).alias("transaction_date"),
-            pl.when(
-                pl.col("type").is_in(
-                    [
+            for scheme in folio.schemes:
+                for transaction in scheme.transactions:
+                    if transaction.type in (
                         "DIVIDEND_REINVEST",
                         "PURCHASE",
                         "PURCHASE_SIP",
                         "REVERSAL",
                         "SWITCH_IN",
                         "SWITCH_IN_MERGER",
-                    ],
-                )
-            )
-            .then(pl.lit(TransactionType.PURCHASE))
-            .when(
-                pl.col("type").is_in(
-                    [
+                    ):
+                        txn_type = TransactionType.PURCHASE
+                    elif transaction.type in (
                         "REDEMPTION",
                         "SWITCH_OUT",
                         "SWITCH_OUT_MERGER",
-                    ],
-                )
-            )
-            .then(pl.lit(TransactionType.SALE))
-            .otherwise(pl.lit(None))
-            .alias("type"),
-            pl.col("description"),
-            pl.col("amount").cast(pl.Decimal(24, 2)),
-            pl.col("units").cast(pl.Decimal(24, 3)),
-            pl.col("security_key"),
-            pl.col("account_name"),
-            pl.col("account_institution"),
-        ).filter(pl.col("type").is_not_null())
-        return df
+                    ):
+                        txn_type = TransactionType.SALE
+                    else:
+                        continue  # Skip unknown transaction types
+
+                    txn = TransactionWrite(
+                        transaction_date=transaction.date,
+                        type=txn_type,
+                        description=transaction.description,
+                        amount=transaction.amount,
+                        units=transaction.units,
+                        security_key=scheme.amfi,
+                        account_id=account_id,
+                        metadata={"source": "cas"},
+                    )
+                    yield txn
+
+
+class CASParserFactory:
+    """Factory for creating CASParser instances."""
+
+    @classmethod
+    def get_parser_info(cls) -> ParserInfo:
+        """Get information about the CAS parser."""
+        return ParserInfo(
+            name="CAMS/Kfintech CAS Parser",
+            description="Parser for CAMS and Kfintech Consolidated Account Statements (CAS).",
+            file_extensions=[".pdf"],
+            password_required=True,
+        )
+
+    @classmethod
+    def create_parser(
+        cls, file_path: Path | str, password: str | None = None
+    ) -> CASParser:
+        """Create a CASParser instance."""
+        if isinstance(file_path, Path):
+            file_path = file_path.as_posix()
+        return CASParser(file_path, password)

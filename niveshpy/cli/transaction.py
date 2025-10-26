@@ -6,7 +6,7 @@ import textwrap
 import click
 from niveshpy.cli.utils import flags, inputs
 from niveshpy.cli.utils.overrides import command, group
-from niveshpy.cli.app import AppState
+from niveshpy.core.app import AppState
 from niveshpy.db.database import DatabaseError
 from niveshpy.models.transaction import (
     TransactionRead,

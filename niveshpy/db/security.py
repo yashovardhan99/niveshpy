@@ -1,6 +1,5 @@
 """Security Repository."""
 
-from collections.abc import Iterable
 from dataclasses import asdict
 from typing import Literal, overload
 
@@ -14,7 +13,7 @@ from niveshpy.db.query import (
     prepare_query_filters,
 )
 import polars as pl
-from niveshpy.models.security import Security
+from niveshpy.models.security import SecurityRead, SecurityWrite
 
 
 class SecurityRepository:
@@ -102,16 +101,18 @@ class SecurityRepository:
             else:
                 return res.fetchall()
 
-    def get_security(self, key: str) -> Security | None:
+    def get_security(self, key: str) -> SecurityRead | None:
         """Get a security by its key."""
         with self._db.cursor() as cursor:
             res = cursor.execute(
                 f"SELECT * FROM {self._table_name} WHERE key = ?;",
                 (key,),
             ).fetchone()
-            return Security(*res) if res else None
+            return SecurityRead(*res) if res else None
 
-    def insert_single_security(self, security: Security) -> str | None:
+    def insert_single_security(
+        self, security: SecurityWrite
+    ) -> tuple[str, SecurityRead] | None:
         """Add a single security to the database.
 
         If a security with the same key exists, it will be updated.
@@ -123,7 +124,7 @@ class SecurityRepository:
                 f"""INSERT OR REPLACE INTO {self._table_name} 
                 (key, name, type, category, metadata)
                 VALUES (?, ?, ?, ?, ?)
-                RETURNING merge_action;
+                RETURNING merge_action, *;
                 """,
                 (
                     security.key,
@@ -134,33 +135,36 @@ class SecurityRepository:
                 ),
             ).fetchone()
             cursor.commit()
-            return res[0] if res is not None else None
+            return (res[0], SecurityRead(*res[1:])) if res else None
 
-    def merge_securities(
-        self, securities: Iterable[Security] | pl.DataFrame
-    ) -> pl.DataFrame:
+    def insert_multiple_securities(
+        self, securities: list[SecurityWrite]
+    ) -> list[SecurityRead]:
         """Add new securities to the database."""
-        if isinstance(securities, pl.DataFrame):
-            df = securities
-        else:
-            df = pl.from_dicts(map(asdict, securities))
-
         with self._db.cursor() as cursor:
-            cursor.register("new_securities", df)
+            cursor.begin()
+            cursor.register(
+                "new_securities",
+                pl.from_dicts(
+                    map(asdict, securities),
+                ),
+            )
             cursor.execute(
                 f"""MERGE INTO {self._table_name} target
                 USING (SELECT * FROM new_securities) AS new
                 ON target.key = new.key
-                WHEN MATCHED THEN UPDATE
+                WHEN MATCHED THEN UPDATE BY NAME
                 WHEN NOT MATCHED THEN INSERT BY NAME
                 
-                RETURNING merge_action, *;
+                RETURNING *;
                 """
             )
+            res = cursor.fetchall()
             cursor.commit()
-            return cursor.pl()
 
-    def delete_security(self, key: str) -> Security | None:
+        return [SecurityRead(*data) for data in res]
+
+    def delete_security(self, key: str) -> SecurityRead | None:
         """Delete a security by its key.
 
         Returns the deleted security if successful, None otherwise.
@@ -172,4 +176,4 @@ class SecurityRepository:
             )
             cursor.commit()
             data = res.fetchone()
-            return Security(*data) if data else None
+            return SecurityRead(*data) if data else None

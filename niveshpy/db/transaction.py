@@ -1,6 +1,8 @@
 """Transaction service for managing user transactions."""
 
 from collections.abc import Iterable
+from dataclasses import asdict
+import datetime
 import itertools
 from typing import Literal, overload
 from niveshpy.core.query import ast
@@ -14,6 +16,8 @@ from niveshpy.db.query import (
 from niveshpy.core.logging import logger
 import polars as pl
 
+from niveshpy.models.account import AccountRead
+from niveshpy.models.security import SecurityRead
 from niveshpy.models.transaction import TransactionRead, TransactionWrite
 
 
@@ -164,6 +168,77 @@ class TransactionRepository:
             res = cursor.fetchone()
             cursor.commit()
             return res[0] if res is not None else None
+
+    def insert_multiple_transactions(
+        self,
+        transactions: list[TransactionWrite],
+        accounts: list[AccountRead],
+        securities: list[SecurityRead],
+        date_range: tuple[datetime.date, datetime.date],
+    ) -> list[TransactionRead]:
+        """Insert multiple transactions into the database."""
+        with self._db.cursor() as cursor:
+            cursor.begin()
+            cursor.register(
+                "new_transactions",
+                pl.from_dicts(
+                    map(asdict, transactions),
+                ),
+            )
+            cursor.register(
+                "current_accounts",
+                pl.from_dicts(
+                    [asdict(acc) for acc in accounts],
+                ),
+            )
+            cursor.register(
+                "current_securities",
+                pl.from_dicts(
+                    [asdict(sec) for sec in securities],
+                ),
+            )
+            # Delete existing transactions in the date range for the given accounts and securities
+            delete_query = f"""
+            DELETE FROM {self._table_name}
+            WHERE transaction_date BETWEEN ? AND ?
+            AND account_id IN (
+                SELECT id FROM current_accounts
+            )
+            AND security_key IN (
+                SELECT key FROM current_securities
+            );
+            """
+            cursor.execute(delete_query, date_range)
+
+            # Validate transactions before inserting
+            cursor.execute(
+                """SELECT COUNT(*) FROM new_transactions nt
+                LEFT JOIN current_accounts ca ON nt.account_id = ca.id
+                LEFT JOIN current_securities cs ON nt.security_key = cs.key
+                WHERE ca.id IS NULL OR cs.key IS NULL;
+                """
+            )
+            check_res = cursor.fetchone()
+            invalid_count: int = check_res[0] if check_res else 0
+            if invalid_count > 0:
+                cursor.rollback()
+                raise ValueError(
+                    f"Found {invalid_count} transactions with invalid account IDs or security keys."
+                )
+
+            # Insert new transactions
+            insert_query = f"""
+            INSERT INTO {self._table_name} 
+            (transaction_date, type, description, amount, units, account_id, security_key, metadata)
+            SELECT nt.transaction_date, nt.type, nt.description, nt.amount, nt.units,
+            nt.account_id, nt.security_key, nt.metadata
+            FROM new_transactions nt
+            RETURNING *;
+            """
+            cursor.execute(insert_query)
+            res = cursor.fetchall()
+            cursor.commit()
+            return [TransactionRead(*data) for data in res]
 
     def delete_transaction(self, transaction_id: int) -> bool:
         """Delete a transaction by its ID.

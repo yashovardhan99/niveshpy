@@ -1,0 +1,144 @@
+"""CLI API for parsing files."""
+
+from pathlib import Path
+import textwrap
+import click
+import click.shell_completion
+from niveshpy.cli.utils import flags, overrides
+from niveshpy.core import parsers as parser_registry
+from niveshpy.core.app import AppState
+from niveshpy.cli.utils import style
+from niveshpy.core.logging import logger
+from rich import progress
+from InquirerPy import inquirer, get_style
+
+
+class ParserType(click.ParamType):
+    """Custom Click parameter type for selecting a parser."""
+
+    name = "parser"
+
+    def shell_complete(
+        self, ctx: click.Context, param: click.Parameter, incomplete: str
+    ):
+        """Provide shell completion for parser names."""
+        if parser_registry.is_empty():
+            parser_registry.discover_installed_parsers()
+        return [
+            click.shell_completion.CompletionItem(
+                key, help=factory.get_parser_info().name
+            )
+            for key, factory in parser_registry.list_parsers_starting_with(incomplete)
+        ]
+
+
+@overrides.command("parse")
+@flags.common_options
+@flags.no_input()
+@click.pass_context
+@click.argument("parser_key", type=ParserType(), metavar="<parser>")
+@click.argument(
+    "file_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path, readable=True),
+    metavar="<file-path>",
+)
+@click.option(
+    "--password-file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path, readable=True),
+    default=None,
+    help="Path to a file containing the password for encrypted files.",
+    metavar="<password-file>",
+)
+def parse(
+    ctx: click.Context, parser_key: str, file_path: Path, password_file: Path
+) -> None:
+    """Parse custom statements and documents.
+
+    Parse financial documents using the specified parser and file.
+
+    \b
+    Required Args:
+        parser_key (str): The parser to use. Example: 'cas'.
+        file_path (str): Path to the file to parse.
+    """  # noqa: D301
+    state = ctx.ensure_object(AppState)
+    inquirer_style = get_style({}, style_override=state.no_color)
+
+    try:
+        with style.error_console.status(f"Looking for parser {parser_key}..."):
+            if parser_registry.is_empty():
+                parser_registry.discover_installed_parsers(parser_key)
+            parser_factory = parser_registry.get_parser(parser_key)
+    except Exception as e:
+        logger.error(f"Error discovering and fetching parsers: {e}", exc_info=True)
+        ctx.exit(1)
+
+    if parser_factory is None:
+        logger.error(f"Parser with key '{parser_key}' not found.")
+        ctx.exit(1)
+        return
+
+    parser_info = parser_factory.get_parser_info()
+
+    password = None if password_file is None else password_file.read_text().strip()
+
+    if parser_info.password_required and password is None:
+        if state.no_input:
+            logger.error("Password is required for this parser but not provided.")
+            ctx.exit(1)
+        else:
+            logger.info(
+                "Password is required for this parser but not provided. Asking interactively."
+            )
+            password = style.console.input("Enter password: ", password=True).strip()
+
+    try:
+        with style.error_console.status(f"Loading parser {parser_key}..."):
+            parser = parser_factory.create_parser(
+                file_path,
+                password=password,
+            )
+    except Exception as e:
+        logger.error(f"Error instantiating parser: {e}", exc_info=True)
+        ctx.exit(1)
+
+    if not state.no_input:
+        style.console.print(
+            textwrap.dedent(f"""
+                    The parser ({parser_info.name}) will now parse and store data from the file.
+                    This may take some time depending on the file size and content.
+                    Existing data may be updated or overwritten.
+            """)
+        )
+        if not inquirer.confirm(
+            "Do you want to continue?", style=inquirer_style, default=True
+        ).execute():
+            style.error_console.print("Operation cancelled by user.")
+            ctx.abort()
+
+    prog = progress.Progress(
+        progress.TextColumn("[progress.description]{task.description}"),
+        progress.SpinnerColumn(),
+        progress.MofNCompleteColumn(),
+        progress.TimeElapsedColumn(),
+        console=style.error_console,
+    )
+    task_map: dict[str, progress.TaskID] = {}
+
+    def update_progress(stage: str, current: int, total: int) -> None:
+        """Update progress bar."""
+        if stage not in task_map:
+            task_map[stage] = prog.add_task(
+                f"Processing {stage}...", total=total if total != -1 else None
+            )
+        if total != -1:
+            prog.start_task(task_map[stage])
+            prog.update(task_map[stage], total=total, completed=current)
+
+    try:
+        with prog:
+            service = state.app.get_parsing_service(parser, update_progress)
+            service.parse_and_store_all()
+    except Exception as e:
+        logger.error(f"Error parsing file: {e}", exc_info=True)
+        ctx.exit(1)
