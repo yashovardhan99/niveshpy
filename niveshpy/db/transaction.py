@@ -116,6 +116,28 @@ class TransactionRepository:
             else:
                 return itertools.starmap(TransactionRead, cursor.fetchall())
 
+    def get_transaction(self, transaction_id: int) -> TransactionRead | None:
+        """Get a single transaction by its ID."""
+        query = f"""
+        SELECT t.id, t.transaction_date, t.type, t.description, t.amount, t.units, 
+        concat(securities.name, ' (', securities.key, ')') AS security,
+        concat(accounts.name, ' (', accounts.institution, ')') AS account,
+        t.created_at AS created, t.metadata
+        FROM {self._table_name} t
+        INNER JOIN securities ON t.security_key = securities.key 
+        INNER JOIN accounts ON t.account_id = accounts.id
+        WHERE t.id = ?;
+        """
+        params = (transaction_id,)
+        logger.debug("Executing get query: %s with params: %s", query, params)
+
+        with self._db.cursor() as cursor:
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return TransactionRead(*row)
+
     def insert_single_transaction(self, transaction: TransactionWrite) -> int | None:
         """Insert a single transaction into the database."""
         query = f"""
@@ -142,3 +164,19 @@ class TransactionRepository:
             res = cursor.fetchone()
             cursor.commit()
             return res[0] if res is not None else None
+
+    def delete_transaction(self, transaction_id: int) -> bool:
+        """Delete a transaction by its ID.
+
+        Returns True if a transaction was deleted, False otherwise.
+        """
+        query = f"DELETE FROM {self._table_name} WHERE id = ? RETURNING *;"
+        params = (transaction_id,)
+        logger.debug("Executing delete query: %s with params: %s", query, params)
+
+        with self._db.cursor() as cursor:
+            cursor.begin()
+            cursor.execute(query, params)
+            res = cursor.fetchone()
+            cursor.commit()
+            return res is not None

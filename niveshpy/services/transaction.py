@@ -13,10 +13,17 @@ from niveshpy.db.repositories import RepositoryContainer
 import polars as pl
 from niveshpy.core.logging import logger
 from niveshpy.models.transaction import (
+    TransactionRead,
     TransactionType,
     TransactionWrite,
 )
-from niveshpy.services.result import InsertResult, ListResult, MergeAction
+from niveshpy.services.result import (
+    InsertResult,
+    ListResult,
+    MergeAction,
+    ResolutionStatus,
+    SearchResolution,
+)
 
 
 class TransactionService:
@@ -118,3 +125,84 @@ class TransactionService:
             {"value": security[0], "name": f"{security[1]} ({security[0]})"}
             for security in securities
         ]
+
+    def resolve_transaction(
+        self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
+    ) -> SearchResolution[TransactionRead]:
+        """Resolve a query to a Transaction object if it exists.
+
+        Logic:
+        - If the queries are empty:
+            - If `allow_ambiguous` is False, return NOT_FOUND.
+            - Else return AMBIGUOUS with no candidates.
+        - If the queries match exactly one account id, return EXACT with that account.
+        - Else If `allow_ambiguous` is false, return NOT_FOUND.
+        - Else perform a text search:
+            - 0 matches: return NOT_FOUND
+            - 1 match: return EXACT with that account
+            - >1 matches: return AMBIGUOUS with the list of candidates
+        """
+        if not queries:
+            if not allow_ambiguous:
+                return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
+
+            # Return top `limit` transactions as candidates
+            options = QueryOptions(limit=limit)
+            transactions = self._repos.transaction.search_transactions(
+                options, ResultFormat.LIST
+            )
+            return SearchResolution(
+                status=ResolutionStatus.AMBIGUOUS,
+                candidates=list(transactions),
+                queries=queries,
+            )
+
+        # First, try to find an exact match by id
+        transaction_id = (
+            int(queries[0].strip()) if queries[0].strip().isdigit() else None
+        )
+        if transaction_id is not None:
+            exact_transaction = self._repos.transaction.get_transaction(transaction_id)
+            if exact_transaction:
+                return SearchResolution(
+                    status=ResolutionStatus.EXACT,
+                    exact=exact_transaction,
+                    queries=queries,
+                )
+
+        if not allow_ambiguous:
+            # If ambiguous results are not allowed, return NOT_FOUND
+            return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
+
+        # Perform a text search for candidates
+        stripped_queries = map(str.strip, queries)
+        lexers = map(QueryLexer, stripped_queries)
+        parsers = map(QueryParser, lexers)
+        filters: Iterable[ast.FilterNode] = itertools.chain.from_iterable(
+            map(QueryParser.parse, parsers)
+        )
+        filters = prepare_filters(filters, ast.Field.SECURITY)
+
+        options = QueryOptions(filters=filters, limit=limit)
+        res = list(
+            self._repos.transaction.search_transactions(options, ResultFormat.LIST)
+        )
+        if not res:
+            return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
+        elif len(res) == 1:
+            return SearchResolution(
+                status=ResolutionStatus.EXACT,
+                exact=res[0],
+                queries=queries,
+            )
+        else:
+            return SearchResolution(
+                status=ResolutionStatus.AMBIGUOUS,
+                candidates=res,
+                queries=queries,
+            )
+            # If we reach here, it means we have ambiguous results
+
+    def delete_transaction(self, transaction_id: int) -> bool:
+        """Delete a transaction by its ID."""
+        return self._repos.transaction.delete_transaction(transaction_id)

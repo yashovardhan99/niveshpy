@@ -20,7 +20,10 @@ from niveshpy.cli.utils.style import (
     rich_click_pager,
 )
 from niveshpy.core.logging import logger
-from InquirerPy import inquirer, validator
+from InquirerPy import inquirer, validator, get_style
+from InquirerPy.base import control
+
+from niveshpy.services.result import ResolutionStatus
 
 
 @group(invoke_without_command=True)
@@ -100,11 +103,11 @@ def show(
     metavar="<transaction_type>",
     required=False,
 )
-@click.argument("description", type=str, metavar="<description>", required=False)
-@click.argument("amount", type=decimal.Decimal, metavar="<amount>", required=False)
-@click.argument("units", type=decimal.Decimal, metavar="<units>", required=False)
-@click.argument("account_id", type=int, metavar="<account_id>", required=False)
-@click.argument("security_key", type=str, metavar="<security_key>", required=False)
+@click.argument("description", type=str, metavar="[<description>]", required=False)
+@click.argument("amount", type=decimal.Decimal, metavar="[<amount>]", required=False)
+@click.argument("units", type=decimal.Decimal, metavar="[<units>]", required=False)
+@click.argument("account_id", type=int, metavar="[<account_id>]", required=False)
+@click.argument("security_key", type=str, metavar="[<security_key>]", required=False)
 @flags.common_options
 @flags.no_input()
 @click.pass_context
@@ -293,5 +296,134 @@ def add(
             console.print("(Press Ctrl+C or Ctrl+D to exit.)")
 
 
+@command("delete")
+@click.argument("queries", required=False, metavar="[<queries>]", default=(), nargs=-1)
+@flags.limit("limit", default=100)
+@flags.no_input()
+@flags.force()
+@flags.dry_run()
+@flags.common_options
+@click.pass_context
+def delete(
+    ctx: click.Context, queries: tuple[str, ...], limit: int, force: bool, dry_run: bool
+) -> None:
+    """Delete a transaction based on a query.
+
+    If no key is provided, you will be prompted to select from existing transactions.
+    The query will be used to search for transactions by ID first.
+    If no exact match is found, a text search will be performed based on various attributes.
+    If multiple transactions match the provided query, you will be prompted to select one.
+
+    Associated accounts and securities will not be deleted.
+
+    When running in a non-interactive mode, --force must be provided to confirm deletion. Additionally, the <query> must match exactly one transaction ID.
+    """
+    state = ctx.ensure_object(AppState)
+
+    if state.no_input and not force:
+        error_console.print(
+            "[bold red]Error:[/bold red] When running in non-interactive mode, --force must be provided to confirm deletion."
+        )
+        ctx.exit(1)
+
+    inquirer_style = get_style({}, style_override=state.no_color)
+
+    resolution = state.app.transaction.resolve_transaction(
+        queries, limit, allow_ambiguous=not state.no_input
+    )
+
+    if resolution.status == ResolutionStatus.NOT_FOUND:
+        error_console.print(
+            "[bold red]Error:[/bold red] No transactions found matching the provided query. If running in non-interactive mode, ensure the query matches a transaction ID exactly."
+        )
+        ctx.exit(1)
+    elif resolution.status == ResolutionStatus.EXACT:
+        transaction = resolution.exact
+        if transaction is None:
+            logger.error(
+                "Transaction resolution failed unexpectedly. Please report this bug."
+            )
+            logger.debug("Resolution object: %s", resolution)
+            ctx.exit(1)
+
+        if dry_run or not force:
+            console.print("The following transaction will be deleted:")
+            console.print(transaction)
+            if (
+                not dry_run
+                and not inquirer.confirm(
+                    "Are you sure you want to delete this transaction?",
+                    default=False,
+                    style=inquirer_style,
+                ).execute()
+            ):
+                logger.info("Transaction deletion aborted by user.")
+                ctx.abort()
+
+    elif resolution.status == ResolutionStatus.AMBIGUOUS:
+        if state.no_input or not resolution.candidates:
+            error_console.print(
+                "[bold red]Error:[/bold red] The provided query is ambiguous and may match multiple securities. Please refine your query."
+            )
+            ctx.exit(1)
+
+        choices = [
+            control.Choice(
+                txn.id,
+                name=f"{txn.id}: [{txn.transaction_date}] {txn.type} of {txn.security} (Account: {txn.account}) - {txn.description} for {txn.amount} ({txn.units} units)",
+            )
+            for txn in resolution.candidates
+        ]
+        transaction_id = inquirer.fuzzy(
+            message="Multiple transactions found. Select one to delete:",
+            choices=choices,
+            validate=validator.NumberValidator(),
+            style=inquirer_style,
+        ).execute()
+
+        transaction = state.app.transaction.resolve_transaction(
+            (str(transaction_id),), 1, False
+        ).exact
+        if transaction is None:
+            logger.error(
+                "Selected transaction could not be found. It may have been deleted already."
+            )
+            logger.debug("Resolution object: %s", resolution)
+            ctx.exit(1)
+
+        if not force:
+            console.print("You have selected the following transaction:")
+            console.print(transaction)
+            if (
+                not dry_run
+                and not inquirer.confirm(
+                    "Are you sure you want to delete this transaction?",
+                    default=False,
+                    style=inquirer_style,
+                ).execute()
+            ):
+                logger.info("Transaction deletion aborted by user.")
+                ctx.abort()
+
+    if dry_run:
+        console.print("[bold yellow]Dry Run:[/bold yellow] No changes were made.")
+        ctx.exit()
+
+    with error_console.status(f"Deleting transaction '{transaction.id}'..."):
+        deleted = state.app.transaction.delete_transaction(transaction.id)
+        if deleted:
+            console.print(
+                f"Transaction with ID {transaction.id} was deleted successfully.",
+                style="bold green",
+            )
+        else:
+            logger.error(
+                "Failed to delete transaction %s. It may have already been deleted.",
+                transaction.id,
+            )
+            logger.debug("Resolution object: %s", resolution)
+
+
 transactions.add_command(show)
 transactions.add_command(add)
+transactions.add_command(delete)
