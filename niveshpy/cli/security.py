@@ -41,9 +41,6 @@ def show(
     """List all securities.
 
     Optionally provide a text QUERY to filter securities by key or name.
-
-    You can also filter by security TYPE and CATEGORY using the respective flags.
-    These flags can be repeated to include multiple types or categories.
     """
     state = ctx.ensure_object(AppState)
     with error_console.status("Loading securities..."):

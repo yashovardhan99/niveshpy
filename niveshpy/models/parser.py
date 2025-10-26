@@ -7,7 +7,7 @@ import polars as pl
 
 from niveshpy.models.account import AccountWrite
 from niveshpy.models.security import Security
-from niveshpy.models.transaction import Transaction
+from niveshpy.models.transaction import TransactionWrite
 
 
 class Parser(Protocol):
@@ -21,6 +21,6 @@ class Parser(Protocol):
         """Get the list of securities from the parser."""
         ...
 
-    def get_transactions(self) -> Iterable[Transaction] | pl.DataFrame:
+    def get_transactions(self) -> Iterable[TransactionWrite] | pl.DataFrame:
         """Get the list of transactions from the parser."""
         ...

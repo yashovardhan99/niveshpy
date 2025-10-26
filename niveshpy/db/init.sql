@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     amount DECIMAL(24, 2),
     units DECIMAL(24, 3),
     security_key TEXT,
-    account_key TEXT,
+    account_id INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     metadata MAP(VARCHAR, VARCHAR) DEFAULT map()
 );
