@@ -5,7 +5,11 @@ import click
 
 from niveshpy.cli.utils.overrides import command, group
 from niveshpy.cli.utils import flags
-from niveshpy.cli.utils.style import OutputFormat, format_dataframe, rich_click_pager
+from niveshpy.cli.utils.style import (
+    OutputFormat,
+    format_dataframe,
+    output_formatted_data,
+)
 from niveshpy.db.database import DatabaseError
 from niveshpy.models.security import SecurityRead, SecurityCategory, SecurityType
 from niveshpy.core.app import AppState
@@ -62,14 +66,13 @@ def show(
 
         out = format_dataframe(result.data, format, SecurityRead.rich_format_map())
 
-    with rich_click_pager(console):
-        if result.total > limit and console.is_terminal:
-            console.print(
-                f"Showing {limit:,} of {result.total:,} securities.", style="yellow"
-            )
-        console.print_json(out) if format == OutputFormat.JSON and isinstance(
-            out, str
-        ) else console.print(out)
+    output_formatted_data(
+        out,
+        format,
+        f"Showing {limit:,} of {result.total:,} securities."
+        if result.total > limit
+        else None,
+    )
 
 
 @command()

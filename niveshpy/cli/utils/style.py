@@ -4,42 +4,18 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum, auto
 from itertools import starmap, zip_longest
-from typing import Literal
+from typing import Any, Literal
 from collections.abc import Callable
 import click
 from rich.console import Console
 from rich import box
 
-from collections.abc import Generator, Sequence
-from contextlib import contextmanager
+from collections.abc import Sequence
 import polars as pl
 from rich.table import Table
 
 console = Console()  # Global console instance for utility functions
 error_console = Console(stderr=True)  # Console for error messages
-
-
-@contextmanager
-def rich_click_pager(console: "Console") -> Generator[None, None, None]:
-    """Context manager to capture and display rich output in a pager via click."""
-    with console.capture() as capture:
-        yield
-    if console.is_terminal:
-        click.echo_via_pager(capture.get())
-    else:
-        console.print(capture.get())
-
-
-def get_polars_print_config() -> pl.Config:
-    """Get Polars print configuration for consistent DataFrame display."""
-    return pl.Config(
-        tbl_rows=-1,
-        tbl_cols=-1,
-        tbl_hide_column_data_types=True,
-        tbl_hide_dataframe_shape=True,
-        tbl_formatting="UTF8_BORDERS_ONLY",
-        tbl_width_chars=-1,
-    )
 
 
 class OutputFormat(StrEnum):
@@ -50,6 +26,62 @@ class OutputFormat(StrEnum):
     JSON = auto()
 
 
+def output_formatted_data(
+    content: Any, format: OutputFormat, message: str | None = None
+) -> None:
+    """Output formatted data to the console, using a pager if in a terminal."""
+    if console.is_terminal:
+        with console.capture() as capture:
+            if message:
+                console.print(message, style="yellow")
+            console.print_json(
+                content
+            ) if format == OutputFormat.JSON else console.print(content)
+        click.echo_via_pager(capture.get())
+    else:
+        console.print_json(content) if format == OutputFormat.JSON else console.print(
+            content, soft_wrap=True
+        )
+
+
+def format_as_csv(df: pl.DataFrame, separator: str = ",") -> str:
+    """Convert a Polars DataFrame to CSV format, handling nested types appropriately."""
+    for col, dtype in df.collect_schema().items():
+        if dtype.is_nested():
+            if dtype == pl.Struct:
+                df = df.with_columns(pl.col(col).struct.json_encode().alias(col))
+            elif dtype == pl.List(pl.Struct({"key": pl.Utf8, "value": pl.Utf8})):
+                df = df.with_columns(
+                    pl.col(col)
+                    .list.eval(
+                        pl.concat_str(
+                            pl.element().struct.field("key"),
+                            pl.lit(":"),
+                            pl.element().struct.field("value"),
+                        )
+                    )
+                    .list.join(";")
+                    .alias(col)
+                )
+            elif dtype == pl.List(pl.Struct):
+                df = df.with_columns(
+                    pl.col(col)
+                    .list.eval(pl.element().struct.json_encode())
+                    .list.join(";")
+                    .alias(col)
+                )
+            elif dtype == pl.List:
+                df = df.with_columns(
+                    pl.col(col)
+                    .list.eval(pl.element().cast(pl.Utf8))
+                    .list.join(";")
+                    .alias(col)
+                )
+            else:
+                df = df.with_columns(pl.col(col).cast(pl.Utf8).alias(col))
+    return df.write_csv(separator=separator)
+
+
 def format_dataframe(
     df: pl.DataFrame,
     fmt: OutputFormat,
@@ -57,14 +89,14 @@ def format_dataframe(
 ) -> str | Table:
     """Format a Polars DataFrame according to the specified output format."""
     if fmt == OutputFormat.CSV:
-        return df.write_csv()
+        return format_as_csv(df)
     elif fmt == OutputFormat.JSON:
         return df.write_json()
     else:
         return (
             convert_polars_to_rich_table(df, fmt_map)
             if console.is_terminal
-            else df.write_csv(separator="\t")
+            else format_as_csv(df, separator="\t")
         )
 
 

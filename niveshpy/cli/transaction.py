@@ -17,7 +17,7 @@ from niveshpy.cli.utils.style import (
     console,
     error_console,
     format_dataframe,
-    rich_click_pager,
+    output_formatted_data,
 )
 from niveshpy.core.logging import logger
 from InquirerPy import inquirer, validator, get_style
@@ -80,14 +80,13 @@ def show(
 
         out = format_dataframe(result.data, format, TransactionRead.rich_format_map())
 
-    with rich_click_pager(console):
-        if result.total > limit and console.is_terminal:
-            console.print(
-                f"Showing {limit:,} of {result.total:,} transactions.", style="yellow"
-            )
-        console.print_json(out) if format == OutputFormat.JSON and isinstance(
-            out, str
-        ) else console.print(out)
+    output_formatted_data(
+        out,
+        format,
+        f"Showing {limit:,} of {result.total:,} transactions."
+        if result.total > limit
+        else None,
+    )
 
 
 @command("add")
