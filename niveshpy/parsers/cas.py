@@ -59,7 +59,7 @@ class CASParser:
                         SecurityCategory(scheme.type.lower())
                         if scheme.type in ("EQUITY", "DEBT")
                         else SecurityCategory.OTHER,
-                        metadata={"source": "cas"},
+                        metadata={"source": "cas", "isin": scheme.isin},
                     )
 
     def get_transactions(
@@ -101,7 +101,7 @@ class CASParser:
                         units=transaction.units,
                         security_key=scheme.amfi,
                         account_id=account_id,
-                        metadata={"source": "cas"},
+                        metadata={"source": "cas", "original_type": transaction.type},
                     )
                     yield txn
 
@@ -113,7 +113,7 @@ class CASParserFactory:
     def get_parser_info(cls) -> ParserInfo:
         """Get information about the CAS parser."""
         return ParserInfo(
-            name="CAMS/Kfintech CAS Parser",
+            name="CAS Parser",
             description="Parser for CAMS and Kfintech Consolidated Account Statements (CAS).",
             file_extensions=[".pdf"],
             password_required=True,

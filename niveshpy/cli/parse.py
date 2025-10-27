@@ -107,7 +107,7 @@ def parse(
             textwrap.dedent(f"""
                     The parser ({parser_info.name}) will now parse and store data from the file.
                     This may take some time depending on the file size and content.
-                    Existing data may be updated or overwritten.
+                    [yellow]Existing data may be updated or overwritten.[/yellow]
             """)
         )
         if not inquirer.confirm(
