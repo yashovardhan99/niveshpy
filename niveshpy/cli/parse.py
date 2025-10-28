@@ -7,7 +7,7 @@ import click.shell_completion
 from niveshpy.cli.utils import flags, overrides
 from niveshpy.core import parsers as parser_registry
 from niveshpy.core.app import AppState
-from niveshpy.cli.utils import style
+from niveshpy.cli.utils import output as output
 from niveshpy.core.logging import logger
 from rich import progress
 from InquirerPy import inquirer, get_style
@@ -65,18 +65,17 @@ def parse(
     inquirer_style = get_style({}, style_override=state.no_color)
 
     try:
-        with style.error_console.status(f"Looking for parser {parser_key}..."):
+        with output.loading_spinner(f"Looking for parser {parser_key}..."):
             if parser_registry.is_empty():
                 parser_registry.discover_installed_parsers(parser_key)
             parser_factory = parser_registry.get_parser(parser_key)
     except Exception as e:
         logger.error(f"Error discovering and fetching parsers: {e}", exc_info=True)
-        ctx.exit(1)
+        return ctx.exit(1)
 
     if parser_factory is None:
         logger.error(f"Parser with key '{parser_key}' not found.")
-        ctx.exit(1)
-        return
+        return ctx.exit(1)
 
     parser_info = parser_factory.get_parser_info()
 
@@ -90,10 +89,10 @@ def parse(
             logger.info(
                 "Password is required for this parser but not provided. Asking interactively."
             )
-            password = style.console.input("Enter password: ", password=True).strip()
+            password = output.ask_password()
 
     try:
-        with style.error_console.status(f"Loading parser {parser_key}..."):
+        with output.loading_spinner(f"Loading parser {parser_key}..."):
             parser = parser_factory.create_parser(
                 file_path,
                 password=password,
@@ -103,7 +102,7 @@ def parse(
         ctx.exit(1)
 
     if not state.no_input:
-        style.console.print(
+        output.display_message(
             textwrap.dedent(f"""
                     The parser ({parser_info.name}) will now parse and store data from the file.
                     This may take some time depending on the file size and content.
@@ -113,16 +112,10 @@ def parse(
         if not inquirer.confirm(
             "Do you want to continue?", style=inquirer_style, default=True
         ).execute():
-            style.error_console.print("Operation cancelled by user.")
-            ctx.abort()
+            output.display_error("Operation cancelled by user.")
+            return ctx.abort()
 
-    prog = progress.Progress(
-        progress.TextColumn("[progress.description]{task.description}"),
-        progress.SpinnerColumn(),
-        progress.MofNCompleteColumn(),
-        progress.TimeElapsedColumn(),
-        console=style.error_console,
-    )
+    prog = output.get_progress_bar()
     task_map: dict[str, progress.TaskID] = {}
 
     def update_progress(stage: str, current: int, total: int) -> None:

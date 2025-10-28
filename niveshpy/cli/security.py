@@ -5,18 +5,13 @@ import click
 
 from niveshpy.cli.utils.overrides import command, group
 from niveshpy.cli.utils import flags
-from niveshpy.cli.utils.style import (
-    OutputFormat,
-    format_dataframe,
-    output_formatted_data,
-)
+from niveshpy.cli.utils import output
 from niveshpy.db.database import DatabaseError
 from niveshpy.models.security import SecurityRead, SecurityCategory, SecurityType
 from niveshpy.core.app import AppState
 from InquirerPy import inquirer, get_style
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import EmptyInputValidator
-from niveshpy.cli.utils.style import console, error_console
 from niveshpy.core.logging import logger
 from niveshpy.services.result import MergeAction, ResolutionStatus
 
@@ -40,36 +35,35 @@ def show(
     ctx: click.Context,
     queries: tuple[str, ...],
     limit: int,
-    format: OutputFormat,
+    format: output.OutputFormat,
 ) -> None:
     """List all securities.
 
     Optionally provide a text QUERY to filter securities by key or name.
     """
     state = ctx.ensure_object(AppState)
-    with error_console.status("Loading securities..."):
+    with output.loading_spinner("Loading securities..."):
         try:
             result = state.app.security.list_securities(queries=queries, limit=limit)
         except ValueError as e:
             logger.error(e, exc_info=True)
-            ctx.exit(1)
+            return ctx.exit(1)
         except DatabaseError as e:
             logger.critical(e, exc_info=True)
-            ctx.exit(1)
+            return ctx.exit(1)
 
-        if result.total == 0:
-            msg = "No securities " + (
-                "match your query." if queries else "found in the database."
-            )
-            error_console.print(msg, style="yellow")
-            ctx.exit()
+    if result.total == 0:
+        msg = "No securities " + (
+            "match your query." if queries else "found in the database."
+        )
+        output.display_warning(msg)
+        return ctx.exit()
 
-        out = format_dataframe(result.data, format, SecurityRead.rich_format_map())
-
-    output_formatted_data(
-        out,
+    output.display_dataframe(
+        result.data,
         format,
-        f"Showing {limit:,} of {result.total:,} securities."
+        SecurityRead.rich_format_map(),
+        extra_message=f"Showing {limit:,} of {result.total:,} securities."
         if result.total > limit
         else None,
     )
@@ -118,11 +112,10 @@ def add(
     if state.no_input:
         # Non-interactive mode: all arguments must be provided
         if not (default_key and default_name and default_category and default_type):
-            error_console.print(
-                "[bold red]Error:[/bold red] When running in non-interactive mode, all arguments for adding a security must be provided."
+            output.display_error(
+                "When running in non-interactive mode, all arguments for adding a security must be provided."
             )
-            ctx.exit(1)
-            return
+            return ctx.exit(1)
         try:
             result = state.app.security.add_security(
                 default_key.strip(),
@@ -133,20 +126,19 @@ def add(
             )
         except ValueError as e:
             logger.error(e, exc_info=True)
-            ctx.exit(1)
+            return ctx.exit(1)
         except DatabaseError as e:
             logger.critical(e, exc_info=True)
-            ctx.exit(1)
+            return ctx.exit(1)
 
         action = "added" if result.action == MergeAction.INSERT else "updated"
-        console.print(
-            f"Security '{result.data.name}' was {action} successfully.",
-            style="bold green",
+        output.display_success(
+            f"Security '{result.data.name}' was {action} successfully."
         )
-        ctx.exit()
+        return ctx.exit()
 
-    console.print("Adding a new security.")
-    console.print(
+    output.display_message("Adding a new security.")
+    output.display_message(
         dedent("""
             Any command-line arguments will be used as defaults.
             Use arrow keys to navigate, and [i]Enter[/i] to accept defaults.
@@ -194,7 +186,7 @@ def add(
         ).execute()
 
         # Add the security
-        with error_console.status(f"Adding security '{name}'..."):
+        with output.loading_spinner(f"Adding security '{name}'..."):
             try:
                 result = state.app.security.add_security(
                     security_key,
@@ -208,18 +200,18 @@ def add(
                 continue
             except DatabaseError as e:
                 logger.critical(e, exc_info=True)
-                ctx.exit(1)
+                return ctx.exit(1)
         action = "added" if result.action == MergeAction.INSERT else "updated"
-        console.print(
-            f"[bold green]Security '{result.data.name}' was {action} successfully."
+        output.display_success(
+            f"Security '{result.data.name}' was {action} successfully."
         )
 
         if default_key:
             # If defaults were provided via command-line arguments, exit after one iteration
             break
 
-        console.print("Add Next Security")
-        console.print("Press [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.")
+        output.display_message("Add Next Security")
+        output.display_message("Press [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.")
 
 
 @command()
@@ -246,10 +238,10 @@ def delete(
     state = ctx.ensure_object(AppState)
 
     if state.no_input and not force:
-        error_console.print(
-            "[bold red]Error:[/bold red] When running in non-interactive mode, --force must be provided to confirm deletion."
+        output.display_error(
+            "When running in non-interactive mode, --force must be provided to confirm deletion."
         )
-        ctx.exit(1)
+        return ctx.exit(1)
 
     inquirer_style = get_style({}, style_override=state.no_color)
 
@@ -258,10 +250,10 @@ def delete(
     )
 
     if resolution.status == ResolutionStatus.NOT_FOUND:
-        error_console.print(
-            "[bold red]Error:[/bold red] No securities found matching the provided query. If running in non-interactive mode, ensure the query matches a security key exactly."
+        output.display_error(
+            "No securities found matching the provided query. If running in non-interactive mode, ensure the query matches a security key exactly."
         )
-        ctx.exit(1)
+        return ctx.exit(1)
     elif resolution.status == ResolutionStatus.EXACT:
         security = resolution.exact
         if security is None:
@@ -269,11 +261,10 @@ def delete(
                 "Security resolution failed unexpectedly. Please report this bug."
             )
             logger.debug("Resolution object: %s", resolution)
-            ctx.exit(1)
+            return ctx.exit(1)
 
         if dry_run or not force:
-            console.print("The following security will be deleted:")
-            console.print(security)
+            output.display_message("The following security will be deleted: ", security)
             if (
                 not dry_run
                 and not inquirer.confirm(
@@ -283,14 +274,14 @@ def delete(
                 ).execute()
             ):
                 logger.info("Security deletion aborted by user.")
-                ctx.abort()
+                return ctx.abort()
 
     elif resolution.status == ResolutionStatus.AMBIGUOUS:
         if state.no_input or not resolution.candidates:
-            error_console.print(
-                "[bold red]Error:[/bold red] The provided query is ambiguous and may match multiple securities. Please refine your query."
+            output.display_error(
+                "The provided query is ambiguous and may match multiple securities. Please refine your query."
             )
-            ctx.exit(1)
+            return ctx.exit(1)
 
         choices = [
             Choice(sec.key, name=f"{sec.key} - {sec.name}")
@@ -311,11 +302,12 @@ def delete(
                 "Selected security could not be found. It may have been deleted already."
             )
             logger.debug("Resolution object: %s", resolution)
-            ctx.exit(1)
+            return ctx.exit(1)
 
         if not force:
-            console.print("You have selected the following security:")
-            console.print(security)
+            output.display_message(
+                "You have selected the following security:", security
+            )
             if (
                 not dry_run
                 and not inquirer.confirm(
@@ -325,18 +317,17 @@ def delete(
                 ).execute()
             ):
                 logger.info("Security deletion aborted by user.")
-                ctx.abort()
+                return ctx.abort()
 
     if dry_run:
-        console.print("[bold yellow]Dry Run:[/bold yellow] No changes were made.")
-        ctx.exit()
+        output.display_message("Dry Run: No changes were made.")
+        return ctx.exit()
 
-    with error_console.status(f"Deleting security '{security.key}'..."):
+    with output.loading_spinner(f"Deleting security '{security.key}'..."):
         deleted = state.app.security.delete_security(security.key)
         if deleted:
-            console.print(
+            output.display_success(
                 f"Security '{security.key}' was deleted successfully.",
-                style="bold green",
             )
         else:
             logger.error(

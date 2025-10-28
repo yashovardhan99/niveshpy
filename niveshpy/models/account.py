@@ -1,8 +1,11 @@
 """Account model for user financial data."""
 
 from dataclasses import dataclass, field
-from collections.abc import Callable
 from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from niveshpy.cli.utils import output
 
 
 @dataclass
@@ -16,7 +19,7 @@ class AccountRead:
     metadata: dict[str, str]
 
     @staticmethod
-    def rich_format_map() -> list[str | Callable[[str], str] | None]:
+    def rich_format_map() -> "output.FormatMap":
         """Get a list of formatting styles for rich table display."""
         return ["dim", "bold", None, "dim", "dim"]
 

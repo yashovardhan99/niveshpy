@@ -12,13 +12,7 @@ from niveshpy.models.transaction import (
     TransactionRead,
     TransactionType,
 )
-from niveshpy.cli.utils.style import (
-    OutputFormat,
-    console,
-    error_console,
-    format_dataframe,
-    output_formatted_data,
-)
+from niveshpy.cli.utils import output
 from niveshpy.core.logging import logger
 from InquirerPy import inquirer, validator, get_style
 from InquirerPy.base import control
@@ -45,7 +39,7 @@ def show(
     ctx: click.Context,
     queries: tuple[str, ...],
     limit: int,
-    format: OutputFormat,
+    format: output.OutputFormat,
 ) -> None:
     """List all transactions.
 
@@ -60,30 +54,30 @@ def show(
     View the documentation at https://yashovardhan99.github.io/niveshpy/cli/queries/ for more details on query syntax.
     """
     state = ctx.ensure_object(AppState)
-    with error_console.status("Loading transactions..."):
+    with output.loading_spinner("Loading transactions..."):
         try:
             result = state.app.transaction.list_transactions(
                 queries=queries, limit=limit
             )
         except DatabaseError as e:
             logger.critical(e, exc_info=True)
-            ctx.exit(1)
+            return ctx.exit(1)
         except ValueError as e:
             logger.error(e, exc_info=True)
-            ctx.exit(1)
-        if result.total == 0:
-            msg = "No transactions " + (
-                "match your query." if queries else "found in the database."
-            )
-            error_console.print(msg, style="yellow")
-            ctx.exit()
+            return ctx.exit(1)
 
-        out = format_dataframe(result.data, format, TransactionRead.rich_format_map())
+    if result.total == 0:
+        msg = "No transactions " + (
+            "match your query." if queries else "found in the database."
+        )
+        output.display_warning(msg)
+        return ctx.exit()
 
-    output_formatted_data(
-        out,
+    output.display_dataframe(
+        result.data,
         format,
-        f"Showing {limit:,} of {result.total:,} transactions."
+        TransactionRead.rich_format_map(),
+        extra_message=f"Showing {limit:,} of {result.total:,} transactions."
         if result.total > limit
         else None,
     )
@@ -153,11 +147,10 @@ def add(
             if arg_value is None
         ]
         if missing_args:
-            error_console.print(
-                f"Missing required arguments for non-interactive mode: {', '.join(missing_args)}",
-                style="red",
+            output.display_error(
+                f"Missing required arguments for non-interactive mode: {missing_args}"
             )
-            ctx.exit(1)
+            return ctx.exit(1)
 
         # If all required arguments are provided, add the transaction
         try:
@@ -171,20 +164,19 @@ def add(
                 security_key=security_key,
                 source="cli",
             )
-            console.print(
-                f"Transaction added successfully with ID: {result.data}",
-                style="green",
+            output.display_success(
+                f"Transaction added successfully with ID: {result.data}"
             )
         except DatabaseError as e:
             logger.critical(e, exc_info=True)
-            ctx.exit(1)
+            return ctx.exit(1)
         except ValueError as e:
             logger.error(e, exc_info=True)
-            ctx.exit(1)
+            return ctx.exit(1)
 
     else:
-        console.print("Adding a new transaction.")
-        console.print(
+        output.display_message("Adding a new transaction.")
+        output.display_message(
             textwrap.dedent("""
                 Any command-line arguments will be used as defaults.
                 Use arrow keys to navigate, and [i]Enter[/i] to accept defaults.
@@ -238,11 +230,10 @@ def add(
             # Fetch accounts for selection
             accounts = state.app.transaction.get_account_choices()
             if not accounts:
-                error_console.print(
-                    "No accounts found in the database. Please add an account first.",
-                    style="red",
+                output.display_error(
+                    "No accounts found in the database. Please add an account first."
                 )
-                ctx.exit(1)
+                return ctx.exit(1)
 
             account_id = inquirer.fuzzy(
                 message="Select Account:",
@@ -256,11 +247,10 @@ def add(
             # Fetch securities for selection
             securities = state.app.transaction.get_security_choices()
             if not securities:
-                error_console.print(
-                    "No securities found in the database. Please add a security first.",
-                    style="red",
+                output.display_error(
+                    "No securities found in the database. Please add a security first."
                 )
-                ctx.exit(1)
+                return ctx.exit(1)
 
             security_key = inquirer.fuzzy(
                 message="Select Security:",
@@ -280,19 +270,18 @@ def add(
                     security_key=security_key,
                     source="cli",
                 )
-                console.print(
-                    f"Transaction added successfully with ID: {result.data}",
-                    style="green",
+                output.display_success(
+                    f"Transaction added successfully with ID: {result.data}"
                 )
             except DatabaseError as e:
                 logger.critical(e, exc_info=True)
-                ctx.exit(1)
+                return ctx.exit(1)
             except ValueError as e:
                 logger.error(e, exc_info=True)
-                ctx.exit(1)
+                return ctx.exit(1)
 
-            console.print("Adding another transaction...")
-            console.print("(Press Ctrl+C or Ctrl+D to exit.)")
+            output.display_message("Adding another transaction...")
+            output.display_message("(Press Ctrl+C or Ctrl+D to exit.)")
 
 
 @command("delete")
@@ -320,10 +309,10 @@ def delete(
     state = ctx.ensure_object(AppState)
 
     if state.no_input and not force:
-        error_console.print(
-            "[bold red]Error:[/bold red] When running in non-interactive mode, --force must be provided to confirm deletion."
+        output.display_error(
+            "When running in non-interactive mode, --force must be provided to confirm deletion."
         )
-        ctx.exit(1)
+        return ctx.exit(1)
 
     inquirer_style = get_style({}, style_override=state.no_color)
 
@@ -332,10 +321,10 @@ def delete(
     )
 
     if resolution.status == ResolutionStatus.NOT_FOUND:
-        error_console.print(
-            "[bold red]Error:[/bold red] No transactions found matching the provided query. If running in non-interactive mode, ensure the query matches a transaction ID exactly."
+        output.display_error(
+            "No transactions found matching the provided query. If running in non-interactive mode, ensure the query matches a transaction ID exactly."
         )
-        ctx.exit(1)
+        return ctx.exit(1)
     elif resolution.status == ResolutionStatus.EXACT:
         transaction = resolution.exact
         if transaction is None:
@@ -343,11 +332,12 @@ def delete(
                 "Transaction resolution failed unexpectedly. Please report this bug."
             )
             logger.debug("Resolution object: %s", resolution)
-            ctx.exit(1)
+            return ctx.exit(1)
 
         if dry_run or not force:
-            console.print("The following transaction will be deleted:")
-            console.print(transaction)
+            output.display_message(
+                "The following transaction will be deleted:", transaction
+            )
             if (
                 not dry_run
                 and not inquirer.confirm(
@@ -357,14 +347,14 @@ def delete(
                 ).execute()
             ):
                 logger.info("Transaction deletion aborted by user.")
-                ctx.abort()
+                return ctx.abort()
 
     elif resolution.status == ResolutionStatus.AMBIGUOUS:
         if state.no_input or not resolution.candidates:
-            error_console.print(
-                "[bold red]Error:[/bold red] The provided query is ambiguous and may match multiple securities. Please refine your query."
+            output.display_error(
+                "The provided query is ambiguous and may match multiple securities. Please refine your query."
             )
-            ctx.exit(1)
+            return ctx.exit(1)
 
         choices = [
             control.Choice(
@@ -388,11 +378,12 @@ def delete(
                 "Selected transaction could not be found. It may have been deleted already."
             )
             logger.debug("Resolution object: %s", resolution)
-            ctx.exit(1)
+            return ctx.exit(1)
 
         if not force:
-            console.print("You have selected the following transaction:")
-            console.print(transaction)
+            output.display_message(
+                "You have selected the following transaction:", transaction
+            )
             if (
                 not dry_run
                 and not inquirer.confirm(
@@ -402,18 +393,17 @@ def delete(
                 ).execute()
             ):
                 logger.info("Transaction deletion aborted by user.")
-                ctx.abort()
+                return ctx.abort()
 
     if dry_run:
-        console.print("[bold yellow]Dry Run:[/bold yellow] No changes were made.")
-        ctx.exit()
+        output.display_message("Dry Run: No changes were made.")
+        return ctx.exit()
 
-    with error_console.status(f"Deleting transaction '{transaction.id}'..."):
+    with output.loading_spinner(f"Deleting transaction '{transaction.id}'..."):
         deleted = state.app.transaction.delete_transaction(transaction.id)
         if deleted:
-            console.print(
+            output.display_success(
                 f"Transaction with ID {transaction.id} was deleted successfully.",
-                style="bold green",
             )
         else:
             logger.error(

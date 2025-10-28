@@ -1,21 +1,28 @@
 """Utility functions for styling CLI output."""
 
+from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum, auto
 from itertools import starmap, zip_longest
-from typing import Any, Literal
-from collections.abc import Callable
+from niveshpy.cli.utils import logging
+from typing import Literal
+from collections.abc import Callable, Generator
 import click
 from rich.console import Console
-from rich import box
+from rich import box, progress
 
 from collections.abc import Sequence
 import polars as pl
 from rich.table import Table
 
-console = Console()  # Global console instance for utility functions
-error_console = Console(stderr=True)  # Console for error messages
+from niveshpy.core.app import AppState
+
+_console = Console()  # Global console instance for utility functions
+_error_console = Console(stderr=True)  # Console for error messages
+
+
+FormatMap = Sequence[str | Callable[[str], str] | None]
 
 
 class OutputFormat(StrEnum):
@@ -26,25 +33,7 @@ class OutputFormat(StrEnum):
     JSON = auto()
 
 
-def output_formatted_data(
-    content: Any, format: OutputFormat, message: str | None = None
-) -> None:
-    """Output formatted data to the console, using a pager if in a terminal."""
-    if console.is_terminal:
-        with console.capture() as capture:
-            if message:
-                console.print(message, style="yellow")
-            console.print_json(
-                content
-            ) if format == OutputFormat.JSON else console.print(content)
-        click.echo_via_pager(capture.get())
-    else:
-        console.print_json(content) if format == OutputFormat.JSON else console.print(
-            content, soft_wrap=True
-        )
-
-
-def format_as_csv(df: pl.DataFrame, separator: str = ",") -> str:
+def _format_as_csv(df: pl.DataFrame, separator: str = ",") -> str:
     """Convert a Polars DataFrame to CSV format, handling nested types appropriately."""
     for col, dtype in df.collect_schema().items():
         if dtype.is_nested():
@@ -82,25 +71,25 @@ def format_as_csv(df: pl.DataFrame, separator: str = ",") -> str:
     return df.write_csv(separator=separator)
 
 
-def format_dataframe(
+def _format_dataframe(
     df: pl.DataFrame,
     fmt: OutputFormat,
-    fmt_map: Sequence[str | Callable[[str], str] | None] | None = None,
+    fmt_map: FormatMap | None = None,
 ) -> str | Table:
     """Format a Polars DataFrame according to the specified output format."""
     if fmt == OutputFormat.CSV:
-        return format_as_csv(df)
+        return _format_as_csv(df)
     elif fmt == OutputFormat.JSON:
         return df.write_json()
     else:
         return (
-            convert_polars_to_rich_table(df, fmt_map)
-            if console.is_terminal
-            else format_as_csv(df, separator="\t")
+            _convert_polars_to_rich_table(df, fmt_map)
+            if _console.is_terminal
+            else _format_as_csv(df, separator="\t")
         )
 
 
-def format_datetime(dt: datetime) -> str:
+def _format_datetime(dt: datetime) -> str:
     """Format a datetime object to a relative time string.
 
     If the datetime is within 7 days, it shows relative time (e.g., "about 3 hours ago").
@@ -133,7 +122,7 @@ def format_datetime(dt: datetime) -> str:
             return f"on {date}"
 
 
-def format_list_or_dict(data: list | dict) -> str:
+def _format_list_or_dict(data: list | dict) -> str:
     """Format a list or dictionary into a pretty-printed string."""
     # For empty list or dict, return empty string
     if not data:
@@ -145,16 +134,14 @@ def format_list_or_dict(data: list | dict) -> str:
 
     # If it is a list of such dictionaries, format each item recursively
     if isinstance(data, list) and all(isinstance(item, dict) for item in data):
-        formatted_items = [format_list_or_dict(item) for item in data]
+        formatted_items = [_format_list_or_dict(item) for item in data]
         return ", ".join(formatted_items)
 
     # Fallback to string representation
     return str(data)
 
 
-def convert_polars_to_rich_table(
-    df: pl.DataFrame, fmt_map: Sequence[str | Callable[[str], str] | None] | None
-) -> Table:
+def _convert_polars_to_rich_table(df: pl.DataFrame, fmt_map: FormatMap | None) -> Table:
     """Convert a Polars DataFrame to a Rich Table for pretty printing."""
     table = Table(header_style="dim", box=box.SIMPLE)
     for i, (col, dtype) in enumerate(df.schema.to_python().items()):
@@ -168,11 +155,11 @@ def convert_polars_to_rich_table(
 
     def mapper(data: object, fmt: str | None | Callable[[str], str]) -> str:
         if isinstance(data, datetime):
-            data_str = format_datetime(data)
+            data_str = _format_datetime(data)
         elif isinstance(data, date):
             data_str = data.strftime("%d %b %Y")
         elif isinstance(data, list | dict):
-            data_str = format_list_or_dict(data)
+            data_str = _format_list_or_dict(data)
         else:
             data_str = str(data)
 
@@ -190,3 +177,108 @@ def convert_polars_to_rich_table(
             table.add_row(*starmap(mapper, zip_longest(row, fmt_map, fillvalue=None)))
 
     return table
+
+
+def display_message(*objects: object) -> None:
+    """Display a general message to the console."""
+    _console.print(*objects)
+
+
+def display_success(message: str) -> None:
+    """Display a success message to the console."""
+    _console.print(message, style="green")
+
+
+def display_warning(message: str) -> None:
+    """Display a warning message to the error console."""
+    _error_console.print(f"[bold yellow]Warning:[/bold yellow] {message}")
+
+
+def display_error(message: str) -> None:
+    """Display an error message to the error console."""
+    _error_console.print(f"[bold red]Error:[/bold red] {message}")
+
+
+@contextmanager
+def loading_spinner(message: str) -> Generator[None, None, None]:
+    """Context manager to show a loading spinner with a message."""
+    if _error_console.is_terminal:
+        with _error_console.status(message):
+            yield
+    else:
+        yield
+
+
+def display_dataframe(
+    df: pl.DataFrame,
+    fmt: OutputFormat,
+    fmt_map: FormatMap | None = None,
+    extra_message: str | None = None,
+) -> None:
+    """Display a Polars DataFrame to the console in the specified format using a pager (if in a terminal).
+
+    If the console is a terminal, the output is displayed using a pager for better readability.
+
+    If an extra message is provided, it is displayed before the DataFrame, provided the console is a terminal.
+
+    Args:
+        df (pl.DataFrame): The DataFrame to display.
+        fmt (OutputFormat): The desired output format (TABLE, CSV, JSON).
+        fmt_map (FormatMap | None): Optional formatting map for columns.
+        extra_message (str | None): An optional message to display before the DataFrame.
+    """
+    formatted_data = _format_dataframe(df, fmt, fmt_map)
+    if _console.is_terminal:
+        with _console.capture() as capture:
+            if extra_message:
+                _console.print(extra_message)
+            _console.print(formatted_data)
+        click.echo_via_pager(capture.get())
+    else:
+        if extra_message:
+            _console.print(extra_message)
+        _console.print(formatted_data, soft_wrap=True)
+
+
+def ask_password(prompt: str = "Enter password: ") -> str:
+    """Prompt the user for a password securely.
+
+    Args:
+        prompt (str): The prompt message to display.
+
+    Returns:
+        str: The password entered by the user.
+    """
+    return _console.input(prompt, password=True).strip()
+
+
+def get_progress_bar() -> progress.Progress:
+    """Create and return a Rich Progress bar instance for displaying progress."""
+    return progress.Progress(
+        progress.TextColumn("[progress.description]{task.description}"),
+        progress.SpinnerColumn(),
+        progress.MofNCompleteColumn(),
+        progress.TimeElapsedColumn(),
+        console=_error_console,
+        disable=not _error_console.is_terminal,
+    )
+
+
+def initialize_app_state(state: AppState) -> None:
+    """Initialize the application state for CLI operations.
+
+    This function sets up the application state by determining interactivity,
+    color settings, and initializing logging.
+
+    Args:
+        state (AppState): The application state object to initialize.
+    """
+    if not state.no_input:
+        # If no_input is not set, determine interactivity from console
+        state.no_input = not _console.is_interactive
+
+    if state.no_color:
+        _console.no_color = True
+        _error_console.no_color = True
+
+    logging.setup(state.debug, _error_console)  # Initialize logging with debug flag

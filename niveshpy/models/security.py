@@ -1,9 +1,12 @@
 """Models for securities."""
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum, auto
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from niveshpy.cli.utils import output
 
 
 class SecurityType(StrEnum):
@@ -60,7 +63,7 @@ class SecurityRead:
     metadata: dict[str, str] = field(default_factory=dict)
 
     @staticmethod
-    def rich_format_map() -> list[str | Callable[[str], str] | None]:
+    def rich_format_map() -> "output.FormatMap":
         """Get a list of formatting styles for rich table display."""
         return [
             "green",

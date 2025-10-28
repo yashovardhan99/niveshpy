@@ -7,13 +7,7 @@ import click
 from niveshpy.cli.utils import flags
 from niveshpy.cli.utils.overrides import command, group
 from niveshpy.core.app import AppState
-from niveshpy.cli.utils.style import (
-    OutputFormat,
-    console,
-    error_console,
-    format_dataframe,
-    output_formatted_data,
-)
+from niveshpy.cli.utils import output
 from niveshpy.core.logging import logger
 from niveshpy.db.database import DatabaseError
 from niveshpy.models.account import AccountRead
@@ -27,7 +21,7 @@ from niveshpy.services.result import MergeAction, ResolutionStatus
 def accounts(ctx: click.Context) -> None:
     """Manage accounts."""
     if ctx.invoked_subcommand is None:
-        ctx.invoke(show)
+        ctx.forward(show)
 
 
 @command("list")
@@ -37,36 +31,38 @@ def accounts(ctx: click.Context) -> None:
 @flags.common_options
 @click.pass_context
 def show(
-    ctx: click.Context, queries: tuple[str, ...], limit: int, format: OutputFormat
+    ctx: click.Context,
+    queries: tuple[str, ...],
+    limit: int,
+    format: output.OutputFormat,
 ) -> None:
     """List all accounts.
 
     An optional QUERY can be provided to filter accounts by name or institution.
     """
     state = ctx.ensure_object(AppState)
-    with error_console.status("Loading accounts..."):
+    with output.loading_spinner("Loading accounts..."):
         try:
             result = state.app.account.list_accounts(queries=queries, limit=limit)
         except ValueError as e:
             logger.error(e, exc_info=True)
-            ctx.exit(1)
+            return ctx.exit(1)
         except DatabaseError as e:
             logger.critical(e, exc_info=True)
-            ctx.exit(1)
+            return ctx.exit(1)
 
         if result.total == 0:
             msg = "No accounts " + (
                 "match your queries." if queries else "found in the database."
             )
-            error_console.print(msg, style="yellow")
-            ctx.exit()
+            output.display_warning(msg)
+            return ctx.exit()
 
-        out = format_dataframe(result.data, format, AccountRead.rich_format_map())
-
-    output_formatted_data(
-        out,
+    output.display_dataframe(
+        result.data,
         format,
-        f"Showing {limit:,} of {result.total:,} accounts."
+        AccountRead.rich_format_map(),
+        extra_message=f"Showing {limit:,} of {result.total:,} accounts."
         if result.total > limit
         else None,
     )
@@ -91,30 +87,26 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
     if state.no_input:
         # Non-interactive mode
         if not name or not institution:
-            error_console.print(
-                "[bold red]Error:[/bold red] Account name and institution must be provided in non-interactive mode.",
+            output.display_error(
+                "Account name and institution must be provided in non-interactive mode."
             )
-            ctx.exit(1)
-            return
+            return ctx.exit(1)
 
         try:
             result = state.app.account.add_account(
                 name=name, institution=institution, source="cli"
             )
         except ValueError as e:
-            error_console.print(f"[bold red]Error:[/bold red] {e}")
-            ctx.exit(1)
+            output.display_error(str(e))
+            return ctx.exit(1)
         except RuntimeError as e:
-            error_console.print(f"[bold red]Error:[/bold red] {e}")
-            ctx.exit(1)
+            output.display_error(str(e))
+            return ctx.exit(1)
         if result.action == MergeAction.NOTHING:
-            console.print(
-                f"[bold yellow]Warning:[/bold yellow] Account already exists with ID {result.data.id}."
-            )
-            ctx.exit(0)
-        console.print(
-            f"Account [b]{name}[/b] added successfully with ID {result.data.id}.",
-            style="green",
+            output.display_warning(f"Account already exists with ID {result.data.id}.")
+            return ctx.exit(0)
+        output.display_success(
+            f"Account [b]{name}[/b] added successfully with ID {result.data.id}."
         )
     else:
         # Interactive mode
@@ -122,7 +114,7 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
         inquirer_style = InquirerPy.get_style({}, style_override=state.no_color)
 
         while True:
-            console.print("Use [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.")
+            output.display_message("Use [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.")
             name = (
                 InquirerPy.inquirer.text(
                     message="Account Name:",
@@ -149,13 +141,12 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
                     name=name, institution=institution, source="cli"
                 )
                 if result.action == MergeAction.NOTHING:
-                    console.print(
-                        f"[bold yellow]Warning:[/bold yellow] Account already exists with ID {result.data.id}."
+                    output.display_warning(
+                        f"Account already exists with ID {result.data.id}."
                     )
                 else:
-                    console.print(
-                        f"Account [b]{name}[/b] added successfully with ID {result.data.id}.",
-                        style="green",
+                    output.display_success(
+                        f"Account [b]{name}[/b] added successfully with ID {result.data.id}."
                     )
 
                 # Reset for next iteration
@@ -169,7 +160,7 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
                 continue
             except DatabaseError as e:
                 logger.critical(e, exc_info=True)
-                ctx.exit(1)
+                return ctx.exit(1)
 
 
 @command()
@@ -196,10 +187,10 @@ def delete(
     state = ctx.ensure_object(AppState)
 
     if state.no_input and not force:
-        error_console.print(
-            "[bold red]Error:[/bold red] When running in non-interactive mode, --force must be provided to confirm deletion."
+        output.display_error(
+            "When running in non-interactive mode, --force must be provided to confirm deletion."
         )
-        ctx.exit(1)
+        return ctx.exit(1)
 
     inquirer_style = InquirerPy.get_style({}, style_override=state.no_color)
 
@@ -208,10 +199,10 @@ def delete(
     )
 
     if resolution.status == ResolutionStatus.NOT_FOUND:
-        error_console.print(
-            "[bold red]Error:[/bold red] No accounts found matching the provided query. If running in non-interactive mode, ensure the query matches an account ID exactly."
+        output.display_error(
+            "No accounts found matching the provided query. If running in non-interactive mode, ensure the query matches an account ID exactly."
         )
-        ctx.exit(1)
+        return ctx.exit(1)
     elif resolution.status == ResolutionStatus.EXACT:
         account = resolution.exact
         if account is None:
@@ -219,11 +210,10 @@ def delete(
                 "Account resolution failed unexpectedly. Please report this bug."
             )
             logger.debug("Resolution object: %s", resolution)
-            ctx.exit(1)
+            return ctx.exit(1)
 
         if dry_run or not force:
-            console.print("The following account will be deleted:")
-            console.print(account)
+            output.display_message("The following account will be deleted: ", account)
             if (
                 not dry_run
                 and not InquirerPy.inquirer.confirm(
@@ -233,14 +223,14 @@ def delete(
                 ).execute()
             ):
                 logger.info("Account deletion aborted by user.")
-                ctx.abort()
+                return ctx.abort()
 
     elif resolution.status == ResolutionStatus.AMBIGUOUS:
         if state.no_input or not resolution.candidates:
-            error_console.print(
-                "[bold red]Error:[/bold red] The provided query is ambiguous and may match multiple accounts. Please refine your query."
+            output.display_error(
+                "The provided query is ambiguous and may match multiple accounts. Please refine your query."
             )
-            ctx.exit(1)
+            return ctx.exit(1)
 
         choices = [
             InquirerPy.base.control.Choice(
@@ -263,11 +253,10 @@ def delete(
                 "Selected account could not be found. It may have been deleted already."
             )
             logger.debug("Resolution object: %s", resolution)
-            ctx.exit(1)
+            return ctx.exit(1)
 
         if not force:
-            console.print("You have selected the following account:")
-            console.print(account)
+            output.display_message("You have selected the following account:", account)
             if (
                 not dry_run
                 and not InquirerPy.inquirer.confirm(
@@ -277,19 +266,16 @@ def delete(
                 ).execute()
             ):
                 logger.info("Account deletion aborted by user.")
-                ctx.abort()
+                return ctx.abort()
 
     if dry_run:
-        console.print("[bold yellow]Dry Run:[/bold yellow] No changes were made.")
-        ctx.exit()
+        output.display_message("Dry Run: No changes were made.")
+        return ctx.exit()
 
-    with error_console.status(f"Deleting account with ID {account.id}..."):
+    with output.loading_spinner(f"Deleting account with ID {account.id}..."):
         deleted = state.app.account.delete_account(account.id)
         if deleted:
-            console.print(
-                f"Account ID {account.id} was deleted successfully.",
-                style="bold green",
-            )
+            output.display_success(f"Account ID {account.id} was deleted successfully.")
         else:
             logger.error(
                 "Failed to delete account %s. It may have already been deleted.",
