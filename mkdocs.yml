@@ -38,11 +38,11 @@ plugins:
         python:
           paths:
             - .
-            - niveshpy/plugins
           options:
             show_symbol_type_heading: true
             show_symbol_type_toc: true
             merge_init_into_class: true
+            signature_crossrefs: true
       default_handler: python
   - macros
 
@@ -51,6 +51,8 @@ copyright: Copyright &copy; 2025 Yashovardhan Dhanania
 markdown_extensions:
   - pymdownx.snippets
   - pymdownx.highlight:
+  - admonition
+  - pymdownx.details
   - pymdownx.superfences
   - attr_list
   - pymdownx.emoji:
@@ -59,29 +61,21 @@ markdown_extensions:
   - toc:
       permalink: true
   - mkdocs-click
+  - pymdownx.keys
 
 nav:
   - Home: index.md
 
-  - Getting Started:
-      - guide/index.md
+  - Getting Started: getting-started.md
 
   - CLI:
       - cli/index.md
       - Accounts: cli/accounts.md
       - Securities: cli/securities.md
       - Transactions: cli/transactions.md
+      - Parse: cli/parse.md
       - Queries: cli/queries.md
 
-  - Plugins:
-      - plugins/index.md
-      - AMFI: plugins/amfi.md
-
-  - API Reference:
-      - NiveshPy: reference/niveshpy.md
-      - Models: reference/models.md
-      - Plugins:
-          - reference/plugins/index.md
-          - AMFI: reference/plugins/amfi.md
+  - Parsers: parsers.md
 
   - Changelog: changelog.md

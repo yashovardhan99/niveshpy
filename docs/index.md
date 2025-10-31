@@ -6,11 +6,11 @@ hide:
 
 # NiveshPy
 
-NiveshPy is a financial library designed for managing mutual funds and investment portfolios. It provides functionalities to fetch fund prices, manage portfolios, and calculate performance.
+NiveshPy is a financial CLI designed for managing mutual funds and investment portfolios. It provides functionalities to fetch fund prices, manage portfolios, and calculate performance.
 
-For more information, check out our [Getting Started page](guide/index.md).
+For more information, check out our [Getting Started page](getting-started.md).
 
-NiveshPy is targeted towards Indian :flag_in: markets, but the API is built in a way that any financial data can be added as a source. See [our guide on Plugins](plugins/index.md) for more information.
+NiveshPy is targeted towards Indian :flag_in: markets, but the API is built to support any financial security.
 
 ## Quick Start
 
@@ -34,4 +34,4 @@ This project is a work in progress. The public API is still in development and u
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE.md) file for more details.

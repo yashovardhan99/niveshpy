@@ -8,3 +8,9 @@ A security is an investment instrument that you have purchased or sold. This can
     :prog_name: niveshpy securities
     :depth: 1
     :list_subcommands: true
+
+## Model Reference
+
+::: niveshpy.models.security
+    options:
+        filters: ["!rich_format_map", "!rich_format"]

@@ -8,3 +8,9 @@ Accounts can refer to both physical and virtual accounts, such as your mutual fu
     :prog_name: niveshpy accounts
     :depth: 1
     :list_subcommands: true
+
+## Model Reference
+
+::: niveshpy.models.account
+    options:
+        filters: ["!rich_format_map", "!rich_format"]
