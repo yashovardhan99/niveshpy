@@ -47,26 +47,25 @@ def show(
             result = state.app.security.list_securities(queries=queries, limit=limit)
         except ValueError as e:
             logger.error(e, exc_info=True)
-            return ctx.exit(1)
+            ctx.exit(1)
         except DatabaseError as e:
             logger.critical(e, exc_info=True)
-            return ctx.exit(1)
+            ctx.exit(1)
 
     if result.total == 0:
-        msg = "No securities " + (
-            "match your query." if queries else "found in the database."
+        output.display_warning(
+            "No securities "
+            + ("match your query." if queries else "found in the database.")
         )
-        output.display_warning(msg)
-        return ctx.exit()
-
-    output.display_dataframe(
-        result.data,
-        format,
-        SecurityRead.rich_format_map(),
-        extra_message=f"Showing {limit:,} of {result.total:,} securities."
-        if result.total > limit
-        else None,
-    )
+    else:
+        output.display_dataframe(
+            result.data,
+            format,
+            SecurityRead.rich_format_map(),
+            extra_message=f"Showing {limit:,} of {result.total:,} securities."
+            if result.total > limit
+            else None,
+        )
 
 
 @command()
@@ -115,7 +114,7 @@ def add(
             output.display_error(
                 "When running in non-interactive mode, all arguments for adding a security must be provided."
             )
-            return ctx.exit(1)
+            ctx.exit(1)
         try:
             result = state.app.security.add_security(
                 default_key.strip(),
@@ -126,16 +125,16 @@ def add(
             )
         except ValueError as e:
             logger.error(e, exc_info=True)
-            return ctx.exit(1)
+            ctx.exit(1)
         except DatabaseError as e:
             logger.critical(e, exc_info=True)
-            return ctx.exit(1)
+            ctx.exit(1)
 
         action = "added" if result.action == MergeAction.INSERT else "updated"
         output.display_success(
             f"Security '{result.data.name}' was {action} successfully."
         )
-        return ctx.exit()
+        return
 
     output.display_message("Adding a new security.")
     output.display_message(
@@ -200,7 +199,7 @@ def add(
                 continue
             except DatabaseError as e:
                 logger.critical(e, exc_info=True)
-                return ctx.exit(1)
+                ctx.exit(1)
         action = "added" if result.action == MergeAction.INSERT else "updated"
         output.display_success(
             f"Security '{result.data.name}' was {action} successfully."
@@ -241,7 +240,7 @@ def delete(
         output.display_error(
             "When running in non-interactive mode, --force must be provided to confirm deletion."
         )
-        return ctx.exit(1)
+        ctx.exit(1)
 
     inquirer_style = get_style({}, style_override=state.no_color)
 
@@ -253,7 +252,7 @@ def delete(
         output.display_error(
             "No securities found matching the provided query. If running in non-interactive mode, ensure the query matches a security key exactly."
         )
-        return ctx.exit(1)
+        ctx.exit(1)
     elif resolution.status == ResolutionStatus.EXACT:
         security = resolution.exact
         if security is None:
@@ -261,7 +260,7 @@ def delete(
                 "Security resolution failed unexpectedly. Please report this bug."
             )
             logger.debug("Resolution object: %s", resolution)
-            return ctx.exit(1)
+            ctx.exit(1)
 
         if dry_run or not force:
             output.display_message("The following security will be deleted: ", security)
@@ -274,14 +273,14 @@ def delete(
                 ).execute()
             ):
                 logger.info("Security deletion aborted by user.")
-                return ctx.abort()
+                ctx.abort()
 
     elif resolution.status == ResolutionStatus.AMBIGUOUS:
         if state.no_input or not resolution.candidates:
             output.display_error(
                 "The provided query is ambiguous and may match multiple securities. Please refine your query."
             )
-            return ctx.exit(1)
+            ctx.exit(1)
 
         choices = [
             Choice(sec.key, name=f"{sec.key} - {sec.name}")
@@ -302,7 +301,7 @@ def delete(
                 "Selected security could not be found. It may have been deleted already."
             )
             logger.debug("Resolution object: %s", resolution)
-            return ctx.exit(1)
+            ctx.exit(1)
 
         if not force:
             output.display_message(
@@ -317,11 +316,11 @@ def delete(
                 ).execute()
             ):
                 logger.info("Security deletion aborted by user.")
-                return ctx.abort()
+                ctx.abort()
 
     if dry_run:
         output.display_message("Dry Run: No changes were made.")
-        return ctx.exit()
+        ctx.exit()
 
     with output.loading_spinner(f"Deleting security '{security.key}'..."):
         deleted = state.app.security.delete_security(security.key)

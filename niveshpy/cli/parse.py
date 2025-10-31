@@ -71,11 +71,11 @@ def parse(
             parser_factory = parser_registry.get_parser(parser_key)
     except Exception as e:
         logger.error(f"Error discovering and fetching parsers: {e}", exc_info=True)
-        return ctx.exit(1)
+        ctx.exit(1)
 
     if parser_factory is None:
         logger.error(f"Parser with key '{parser_key}' not found.")
-        return ctx.exit(1)
+        ctx.exit(1)
 
     parser_info = parser_factory.get_parser_info()
 
@@ -113,7 +113,7 @@ def parse(
             "Do you want to continue?", style=inquirer_style, default=True
         ).execute():
             output.display_error("Operation cancelled by user.")
-            return ctx.abort()
+            ctx.abort()
 
     prog = output.get_progress_bar()
     task_map: dict[str, progress.TaskID] = {}

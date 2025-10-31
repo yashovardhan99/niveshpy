@@ -9,7 +9,8 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.15.0
+    rev: v1.18.2
     hooks:
       - id: mypy
         args: [--ignore-missing-imports, --python-version=3.11]
+        additional_dependencies: ["click>=8.3.0"]
