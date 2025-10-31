@@ -2,8 +2,8 @@
 
 from collections.abc import Callable
 from typing import Any, TypeVar
-import click
 
+import click
 
 _AnyCallable = Callable[..., Any]
 FC = TypeVar("FC", bound="_AnyCallable | click.Command")

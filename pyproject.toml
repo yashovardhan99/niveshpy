@@ -94,6 +94,7 @@ select = [
     "B",  # Bugbear
     "Q",  # Quotes
     "UP", # PyUpgrade
+    "I",  # isort
 ]
 
 [tool.ruff.lint.pydocstyle]

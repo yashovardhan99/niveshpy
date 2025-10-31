@@ -1,8 +1,8 @@
 """Models for financial transactions."""
 
 from dataclasses import dataclass, field
-from decimal import Decimal
 from datetime import date, datetime
+from decimal import Decimal
 from enum import StrEnum, auto
 from typing import TYPE_CHECKING
 

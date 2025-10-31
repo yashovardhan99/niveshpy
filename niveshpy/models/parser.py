@@ -1,11 +1,10 @@
 """Model definitions for parsers."""
 
-from dataclasses import dataclass
 import datetime
+from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
-from collections.abc import Iterable
-
 
 from niveshpy.models.account import AccountRead, AccountWrite
 from niveshpy.models.security import SecurityWrite

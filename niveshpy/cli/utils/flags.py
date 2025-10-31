@@ -1,12 +1,13 @@
 """Common flags for CLI commands."""
 
 import functools
-from typing import Any, TypeVar
 from collections.abc import Callable
+from typing import Any, TypeVar
+
 import click
 
-from niveshpy.core.app import AppState
 from niveshpy.cli.utils.output import OutputFormat
+from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 
 _AnyCallable = Callable[..., Any]

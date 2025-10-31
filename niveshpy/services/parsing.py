@@ -2,12 +2,12 @@
 
 # import polars as pl
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import TypeVar
+
 from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.account import AccountRead, AccountWrite
 from niveshpy.models.parser import Parser
-from concurrent.futures import ThreadPoolExecutor
-
 from niveshpy.models.security import SecurityRead, SecurityWrite
 from niveshpy.models.transaction import TransactionWrite
 

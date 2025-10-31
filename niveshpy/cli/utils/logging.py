@@ -1,11 +1,12 @@
 """Set up logging for Niveshpy CLI."""
 
-from logging import Filter, Formatter
+from logging import DEBUG, INFO, WARNING, Filter, Formatter
 from logging.handlers import RotatingFileHandler
+
 import platformdirs
-from rich.logging import RichHandler
 from rich.console import Console
-from logging import DEBUG, INFO, WARNING
+from rich.logging import RichHandler
+
 from niveshpy.core import logging
 
 

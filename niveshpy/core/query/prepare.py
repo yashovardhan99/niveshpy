@@ -3,6 +3,7 @@
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import replace
+
 from niveshpy.core.query.ast import Field, FilterNode, FilterValue, Operator
 
 

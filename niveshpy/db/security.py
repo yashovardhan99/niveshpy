@@ -3,6 +3,8 @@
 from dataclasses import asdict
 from typing import Literal, overload
 
+import polars as pl
+
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.db.database import Database
@@ -12,7 +14,6 @@ from niveshpy.db.query import (
     ResultFormat,
     prepare_query_filters,
 )
-import polars as pl
 from niveshpy.models.security import SecurityRead, SecurityWrite
 
 

@@ -1,9 +1,9 @@
 """Module for parser registration and management."""
 
 import functools
-from niveshpy.models.parser import ParserFactory
-from niveshpy.core.logging import logger
 
+from niveshpy.core.logging import logger
+from niveshpy.models.parser import ParserFactory
 
 _REGISTERED_PARSERS: dict[str, type[ParserFactory]] = {}
 

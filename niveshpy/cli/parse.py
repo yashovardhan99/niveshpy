@@ -1,16 +1,18 @@
 """CLI API for parsing files."""
 
-from pathlib import Path
 import textwrap
+from pathlib import Path
+
 import click
 import click.shell_completion
+from InquirerPy import get_style, inquirer
+from rich import progress
+
 from niveshpy.cli.utils import flags, overrides
+from niveshpy.cli.utils import output as output
 from niveshpy.core import parsers as parser_registry
 from niveshpy.core.app import AppState
-from niveshpy.cli.utils import output as output
 from niveshpy.core.logging import logger
-from rich import progress
-from InquirerPy import inquirer, get_style
 
 
 class ParserType(click.ParamType):

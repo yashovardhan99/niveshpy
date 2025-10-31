@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+
 from niveshpy.db.database import Database
 from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.parser import Parser

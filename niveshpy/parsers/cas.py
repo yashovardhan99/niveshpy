@@ -1,8 +1,9 @@
 """Service for parsing CAS statements."""
 
-from collections.abc import Iterable
 import datetime
+from collections.abc import Iterable
 from pathlib import Path
+
 import casparser  # type: ignore
 
 from niveshpy.models.account import AccountRead, AccountWrite
@@ -12,7 +13,6 @@ from niveshpy.models.security import (
     SecurityType,
     SecurityWrite,
 )
-
 from niveshpy.models.transaction import TransactionType, TransactionWrite
 
 

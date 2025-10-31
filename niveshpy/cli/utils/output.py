@@ -1,21 +1,20 @@
 """Utility functions for styling CLI output."""
 
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum, auto
 from itertools import starmap, zip_longest
-from niveshpy.cli.utils import logging
 from typing import Literal
-from collections.abc import Callable, Generator
-import click
-from rich.console import Console
-from rich import box, progress
 
-from collections.abc import Sequence
+import click
 import polars as pl
+from rich import box, progress
+from rich.console import Console
 from rich.table import Table
 
+from niveshpy.cli.utils import logging
 from niveshpy.core.app import AppState
 
 _console = Console()  # Global console instance for utility functions

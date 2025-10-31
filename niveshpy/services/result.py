@@ -1,9 +1,8 @@
 """Holders for service results."""
 
-from typing import Generic, TypeVar
 from dataclasses import dataclass
 from enum import StrEnum, auto
-
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 

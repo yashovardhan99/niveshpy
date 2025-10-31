@@ -1,11 +1,13 @@
 """Module for parsing user queries into structured filters."""
 
+import itertools
 from collections.abc import Iterable, Sequence
 from datetime import date, timedelta
 from decimal import Decimal
-from niveshpy.core.query import tokens as Tokens, ast
+
+from niveshpy.core.query import ast
+from niveshpy.core.query import tokens as Tokens
 from niveshpy.core.query.tokenizer import QueryLexer
-import itertools
 
 
 class QueryParser:
