@@ -70,24 +70,6 @@ def _format_as_csv(df: pl.DataFrame, separator: str = ",") -> str:
     return df.write_csv(separator=separator)
 
 
-def _format_dataframe(
-    df: pl.DataFrame,
-    fmt: OutputFormat,
-    fmt_map: FormatMap | None = None,
-) -> str | Table:
-    """Format a Polars DataFrame according to the specified output format."""
-    if fmt == OutputFormat.CSV:
-        return _format_as_csv(df)
-    elif fmt == OutputFormat.JSON:
-        return df.write_json()
-    else:
-        return (
-            _convert_polars_to_rich_table(df, fmt_map)
-            if _console.is_terminal
-            else _format_as_csv(df, separator="\t")
-        )
-
-
 def _format_datetime(dt: datetime) -> str:
     """Format a datetime object to a relative time string.
 
@@ -226,17 +208,35 @@ def display_dataframe(
         fmt_map (FormatMap | None): Optional formatting map for columns.
         extra_message (str | None): An optional message to display before the DataFrame.
     """
-    formatted_data = _format_dataframe(df, fmt, fmt_map)
+    formatted_data: str | Table
+
+    if fmt == OutputFormat.CSV:
+        formatted_data = _format_as_csv(df)
+    elif fmt == OutputFormat.JSON:
+        formatted_data = df.write_json()
+    else:
+        formatted_data = (
+            _convert_polars_to_rich_table(df, fmt_map)
+            if _console.is_terminal
+            else _format_as_csv(df, separator="\t")
+        )
+
     if _console.is_terminal:
         with _console.capture() as capture:
             if extra_message:
                 _console.print(extra_message)
-            _console.print(formatted_data)
+            if fmt == OutputFormat.JSON:
+                _console.print_json(str(formatted_data))
+            else:
+                _console.print(formatted_data)
         click.echo_via_pager(capture.get())
     else:
         if extra_message:
             _console.print(extra_message)
-        _console.print(formatted_data, soft_wrap=True)
+        if fmt == OutputFormat.JSON:
+            _console.print_json(str(formatted_data))
+        else:
+            _console.print(formatted_data, soft_wrap=True)
 
 
 def ask_password(prompt: str = "Enter password: ") -> str:
