@@ -21,7 +21,7 @@ def prices(ctx: click.Context):
         ctx.forward(list_prices)
 
 
-@overrides.command()
+@overrides.command("list")
 @click.pass_context
 @flags.common_options
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
@@ -53,7 +53,7 @@ def list_prices(
     raise NotImplementedError
 
 
-@overrides.command()
+@overrides.command("update")
 @click.pass_context
 @flags.common_options
 @click.argument("key", required=False, metavar="[<security_key>]")
@@ -90,7 +90,7 @@ def update_prices(
     raise NotImplementedError
 
 
-@overrides.command()
+@overrides.command("sync")
 @click.pass_context
 @flags.common_options
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)

@@ -1,11 +1,6 @@
----
-hide:
-    - navigation
----
-
 # Parsers
 
-A parser is used to [parse](cli/parse.md) financial documents such as account statements and transaction histories.
+A parser is used to [parse](../cli/parse.md) financial documents such as account statements and transaction histories.
 
 ## Bundled Parsers
 
@@ -30,7 +25,7 @@ my_parser = "niveshpy.parsers.my_plugin:MyPluginFactory" # (2)
 2. Replace `my_parser` with a unique key, and replace the string with a reference to your `PluginFactory` class.
 
 Create a class `my_plugin.MyPluginFactory` that follows the protocol [`ParserFactory`][niveshpy.models.parser.ParserFactory].
-This factory will be repsonsible for actually creating the parser object with the input file and password.
+This factory will be responsible for actually creating the parser object with the input file and password.
 
 The [`create_parser`][niveshpy.models.parser.ParserFactory.create_parser] method must return an instance of a class that follows the protocol [`Parser`][niveshpy.models.parser.Parser].
 
@@ -49,11 +44,11 @@ NiveshPy will use the name defined in your `pyproject.toml` as a unique key (in 
 ???+ warning
     If another installed parser has the same key, your parser may be overwritten.
     If this happens, a warning will be logged.
-    If you find yourself in this situation, you can change your parser key or advice the user to uninstall the other parser.
+    If you find yourself in this situation, you can change your parser key or advise the user to uninstall the other parser.
 
 ### Shell Completion
 
-[NiveshPy CLI](cli/index.md) supports shell completion. If the user types the partial command `niveshpy parse ...` and presses ++tab++, the CLI will look for parsers with keys starting with the partial key entered by the user (or all parsers if no key is provided).
+[NiveshPy CLI](../cli/index.md) supports shell completion. If the user types the partial command `niveshpy parse ...` and presses ++tab++, the CLI will look for parsers with keys starting with the partial key entered by the user (or all parsers if no key is provided).
 Depending on the terminal, the CLI will show a list of all such keys along with the name defined in your [`ParserInfo.name`][niveshpy.models.parser.ParserInfo.name]
 
 ???+ tip
@@ -70,7 +65,7 @@ Depending on the terminal, the CLI will show a list of all such keys along with 
             with open(file_path) as f:
                 self.data = json.loads(f.read())
         def get_date_range(self) -> tuple[datetime.date, datetime.date]:
-            return data.start_date, data.end_date  # (1)
+            return self.data.start_date, self.data.end_date  # (1)
         def get_accounts(self) -> list[AccountWrite]:
             return [
                 AccountWrite(acc.name, acc.org, {"source": "sample"})  # (2)
@@ -91,7 +86,7 @@ Depending on the terminal, the CLI will show a list of all such keys along with 
         ) -> Iterable[TransactionWrite]:
             accounts_map = {(acc.name, acc.institution): acc.id for acc in accounts}
             for acc in self.data.accounts:
-                account_id = accounts_map.get((folio.folio, folio.amc))
+                account_id = accounts_map.get((acc.name, acc.org))
                 for sec in acc.securities:
                     for transaction in sec.transactions:
                         txn_type = TransactionType(transaction.type.lower())
@@ -131,6 +126,7 @@ Depending on the terminal, the CLI will show a list of all such keys along with 
     3. You can also include other key-value pairs in the metadata dictionary that may be relevant.
     4. If password_required is True, the user will be prompted for a password.
 
+    The above example is for illustrative purposes only. The code above may need to be modified to work.
 <!-- markdownlint-enable MD046 MD009 -->
 
 ## API Reference

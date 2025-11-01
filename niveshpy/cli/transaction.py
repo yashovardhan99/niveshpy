@@ -45,6 +45,7 @@ def show(
 
     Optionally provide a text QUERY to filter transactions by various attributes.
 
+    \b
     Examples:
         niveshpy transactions
         niveshpy transactions list gold # Filter by a security with 'gold' in its name or key
@@ -52,7 +53,7 @@ def show(
         niveshpy transactions list type:purchase # Filter by transaction type 'purchase'
 
     View the documentation at https://yashovardhan99.github.io/niveshpy/cli/queries/ for more details on query syntax.
-    """
+    """  # noqa: D301
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading transactions..."):
         try:

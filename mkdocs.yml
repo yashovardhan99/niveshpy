@@ -74,8 +74,12 @@ nav:
       - Securities: cli/securities.md
       - Transactions: cli/transactions.md
       - Parse: cli/parse.md
+      - Prices: cli/prices.md
       - Queries: cli/queries.md
 
-  - Parsers: parsers.md
+  - Advanced:
+      - advanced/index.md
+      - Parsers: advanced/parsers.md
+      - Providers: advanced/providers.md
 
   - Changelog: changelog.md
