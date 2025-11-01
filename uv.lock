@@ -870,7 +870,7 @@ dev = [
     { name = "mkdocs-macros-plugin", specifier = "==1.*" },
     { name = "mkdocs-material", specifier = "==9.*" },
     { name = "mkdocstrings", extras = ["python"] },
-    { name = "mypy", specifier = ">=1.15.0,<2.0.0" },
+    { name = "mypy", specifier = ">=1.18.2,<2.0.0" },
     { name = "pandas", specifier = ">=2.2.2,<3.0.0" },
     { name = "pandas-stubs", specifier = ">=2.2.2,<3.0.0" },
     { name = "pytest", specifier = ">=8.3.5,<9.0.0" },
@@ -882,7 +882,7 @@ docs = [
     { name = "mkdocstrings", extras = ["python"] },
 ]
 linting = [
-    { name = "mypy", specifier = ">=1.15.0,<2.0.0" },
+    { name = "mypy", specifier = ">=1.18.2,<2.0.0" },
     { name = "ruff", specifier = ">=0.11.9,<0.12.0" },
 ]
 stubs = [{ name = "pandas-stubs", specifier = ">=2.2.2,<3.0.0" }]

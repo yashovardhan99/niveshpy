@@ -4,7 +4,7 @@ import sys
 
 import click
 
-from niveshpy.cli import parse
+from niveshpy.cli import parse, price
 from niveshpy.cli.account import accounts
 from niveshpy.cli.security import securities
 from niveshpy.cli.transaction import transactions
@@ -40,6 +40,7 @@ cli.add_command(transactions)
 cli.add_command(securities)
 cli.add_command(accounts)
 cli.add_command(parse.parse)
+cli.add_command(price.prices)
 
 if __name__ == "__main__":
     sys.exit(cli())
