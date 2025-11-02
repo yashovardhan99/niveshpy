@@ -101,10 +101,11 @@ def add(
     <key> is a unique identifier for the security, e.g., ticker symbol or ISIN. If another
     security with the same key exists, it will be updated.
 
+    category and type should be one of the enum values:
+
     \b
-    <category> and <type> should be one of the enum values:
-    Category: EQUITY, DEBT, COMMODITY, OTHER
-    Type: STOCK, BOND, MUTUAL_FUND, ETF, OTHER
+    * Category: EQUITY, DEBT, COMMODITY, OTHER
+    * Type: STOCK, BOND, MUTUAL_FUND, ETF, OTHER
     """  # noqa: D301
     state = ctx.ensure_object(AppState)
 

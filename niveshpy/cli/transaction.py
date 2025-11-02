@@ -45,15 +45,8 @@ def show(
 
     Optionally provide a text QUERY to filter transactions by various attributes.
 
-    \b
-    Examples:
-        niveshpy transactions
-        niveshpy transactions list gold # Filter by a security with 'gold' in its name or key
-        niveshpy transactions list acct:Z123 # Filter by account 'Z123'
-        niveshpy transactions list type:purchase # Filter by transaction type 'purchase'
-
-    View the documentation at https://yashovardhan99.github.io/niveshpy/cli/queries/ for more details on query syntax.
-    """  # noqa: D301
+    View the documentation at https://yashovardhan99.github.io/niveshpy/cli/transactions/ for examples.
+    """
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading transactions..."):
         try:
@@ -87,13 +80,13 @@ def show(
 @click.argument(
     "transaction_date",
     type=click.DateTime(formats=["%Y-%m-%d"]),
-    metavar="<transaction_date>",
+    metavar="[<transaction_date>]",
     required=False,
 )
 @click.argument(
     "transaction_type",
     type=TransactionType,
-    metavar="<transaction_type>",
+    metavar="[<transaction_type>]",
     required=False,
 )
 @click.argument("description", type=str, metavar="[<description>]", required=False)
@@ -122,13 +115,13 @@ def add(
 
     \b
     Arguments:
-        <transaction_date> : Date of the transaction in YYYY-MM-DD format.
-        <transaction_type> : Type of the transaction (either "purchase" or "sale").
-        <description> : Description of the transaction.
-        <amount> : Amount of money involved in the transaction.
-        <units> : Number of units involved in the transaction.
-        <account_id> : ID of the account associated with the transaction.
-        <security_key> : Key of the security involved in the transaction.
+        transaction_date : Date of the transaction in YYYY-MM-DD format.
+        transaction_type : Type of the transaction (either "purchase" or "sale").
+        description : Description of the transaction.
+        amount : Amount of money involved in the transaction.
+        units : Number of units involved in the transaction.
+        account_id : ID of the account associated with the transaction.
+        security_key : Key of the security involved in the transaction.
     """  # noqa: D301
     state = ctx.ensure_object(AppState)
     if state.no_input:

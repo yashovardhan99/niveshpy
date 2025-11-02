@@ -40,15 +40,10 @@ def list_prices(
     Optionally provide text <queries> to filter securities by key or name.
     The <queries> can also be used to provide specific dates for which prices are needed.
 
-    \b
-    Examples:
-        niveshpy prices list
-        niveshpy prices list AAPL MSFT
-        niveshpy prices list 'date:2023-01-01..2023-01-31'
-        niveshpy prices list AAPL 'date:2023-01-01'
-
     Run `niveshpy prices sync` to fetch latest prices from installed providers.
-    """  # noqa: D301
+
+    See https://yashovardhan99.github.io/niveshpy/cli/prices for example usage.
+    """
     print(f"Listing prices for queries: {queries}, limit: {limit}, format: {format}")
     raise NotImplementedError
 
@@ -74,18 +69,8 @@ def update_prices(
 
     Alternatively, provide the security <key>, <date>, and <ohlc> as arguments.
 
-    \b
-    Note:
-        If 1 value is provided for <ohlc>, it is treated as the closing price. Other prices are set to the same value.
-        If 2 values are provided, they are treated as opening and closing prices. High and Low are automatically set.
-        If 4 values are provided, they are treated as opening, high, low, and closing prices respectively.
-        Any other number of values will raise an error.
-
-    \b
-    Examples:
-        niveshpy prices update
-        niveshpy prices update AAPL 2023-01-15 150.25
-    """  # noqa: D301
+    See https://yashovardhan99.github.io/niveshpy/cli/prices for example usage and notes.
+    """
     print(f"Updating price for key: {key}, date: {date}, OHLC: {ohlc}")
     raise NotImplementedError
 
@@ -114,13 +99,8 @@ def sync_prices(
 
     Optionally provide text <queries> to filter securities or specific dates to sync prices for.
 
-    \b
-    Examples:
-        niveshpy prices sync
-        niveshpy prices sync UTI DSP
-        niveshpy prices sync 'date:2023-01'
-        niveshpy prices sync 'UTI Nifty' 'date:2025' --force --provider amfi
-    """  # noqa: D301
+    See https://yashovardhan99.github.io/niveshpy/cli/prices for example usage.
+    """
     print(
         f"Syncing prices for queries: {queries}, force: {force}, provider: {provider}"
     )

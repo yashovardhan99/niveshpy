@@ -49,7 +49,6 @@ class ParserType(click.ParamType):
     type=click.Path(exists=True, dir_okay=False, path_type=Path, readable=True),
     default=None,
     help="Path to a file containing the password for encrypted files.",
-    metavar="<password-file>",
 )
 def parse(
     ctx: click.Context, parser_key: str, file_path: Path, password_file: Path
@@ -58,10 +57,11 @@ def parse(
 
     Parse financial documents using the specified parser and file.
 
-    \b
     Required Args:
-        parser_key (str): The parser to use. Example: 'cas'.
-        file_path (str): Path to the file to parse.
+
+    \b
+    * parser_key (str): The parser to use. Example: 'cas'.
+    * file_path (str): Path to the file to parse.
     """  # noqa: D301
     state = ctx.ensure_object(AppState)
     inquirer_style = get_style({}, style_override=state.no_color)
