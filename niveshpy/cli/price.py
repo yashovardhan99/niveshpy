@@ -5,6 +5,28 @@ import decimal
 import click
 
 from niveshpy.cli.utils import flags, output, overrides
+from niveshpy.core import providers as provider_registry
+
+
+class ProviderType(click.ParamType):
+    """Custom Click parameter type for selecting a provider."""
+
+    name = "provider"
+
+    def shell_complete(
+        self, ctx: click.Context, param: click.Parameter, incomplete: str
+    ):
+        """Provide shell completion for provider names."""
+        if provider_registry.is_empty():
+            provider_registry.discover_installed_providers()
+        return [
+            click.shell_completion.CompletionItem(
+                key, help=factory.get_provider_info().name
+            )
+            for key, factory in provider_registry.list_providers_starting_with(
+                incomplete
+            )
+        ]
 
 
 @overrides.group(invoke_without_command=True)
@@ -87,7 +109,7 @@ def update_prices(
 )
 @click.option(
     "--provider",
-    type=str,
+    type=ProviderType(),
     help="Specify a particular price provider to use.",
 )
 def sync_prices(
