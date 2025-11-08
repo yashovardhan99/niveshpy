@@ -18,7 +18,7 @@ In your `pyproject.toml` file, include an [entry point](https://packaging.python
 
 ```toml
 [project.entry-points."niveshpy.parsers"] # (1)
-my_parser = "niveshpy.parsers.my_plugin:MyPluginFactory" # (2)
+my_parser = "my_plugin:MyPluginFactory" # (2)
 ```
 
 1. This needs to be added as-is to ensure NiveshPy can find your parser.

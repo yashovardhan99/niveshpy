@@ -2,7 +2,7 @@
 
 import datetime
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from niveshpy.models.price import PriceData
@@ -19,13 +19,13 @@ class ProviderInfo:
     description: str
     """Brief description of what the provider does."""
 
-    supports_historical: bool = True
+    supports_historical: bool = field(default=True)
     """Indicates if the provider can fetch historical price data."""
 
-    supports_latest: bool = True
+    supports_latest: bool = field(default=True)
     """Indicates if the provider can fetch the latest/current price."""
 
-    max_concurrent_requests: int = 0
+    max_concurrent_requests: int = field(default=0)
     """Maximum number of concurrent requests allowed (0 = no limit)."""
 
 
