@@ -41,3 +41,13 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     metadata MAP(VARCHAR, VARCHAR) DEFAULT map()
 );
+CREATE TABLE IF NOT EXISTS prices (
+    security_key VARCHAR,
+    price_date DATE,
+    open DECIMAL(24, 2),
+    high DECIMAL(24, 2),
+    low DECIMAL(24, 2),
+    close DECIMAL(24, 2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata MAP(VARCHAR, VARCHAR) DEFAULT map()
+);
