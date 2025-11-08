@@ -15,14 +15,40 @@ class PriceData:
     date: datetime.date
     """The date of this price."""
 
+    open: Decimal
+    """Opening price."""
+
+    high: Decimal
+    """Highest price."""
+
+    low: Decimal
+    """Lowest price."""
+
     close: Decimal
-    """Closing price (or single price point, if not OHLC)."""
+    """Closing price."""
 
-    open: Decimal | None = None
-    """Opening price (optional, for OHLC data)."""
+    @classmethod
+    def from_single_price(
+        cls,
+        security_key: str,
+        date: datetime.date,
+        price: Decimal,
+    ) -> "PriceData":
+        """Create PriceData instance for a single price point.
 
-    high: Decimal | None = None
-    """Highest price (optional, for OHLC data)."""
+        Args:
+            security_key: The security key this price belongs to.
+            date: The date of this price.
+            price: The price value.
 
-    low: Decimal | None = None
-    """Lowest price (optional, for OHLC data)."""
+        Returns:
+            An instance of PriceData with open, high, low, close set to the same price.
+        """
+        return cls(
+            security_key=security_key,
+            date=date,
+            open=price,
+            high=price,
+            low=price,
+            close=price,
+        )
