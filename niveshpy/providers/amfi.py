@@ -7,7 +7,7 @@ from collections.abc import Iterable
 import requests
 
 from niveshpy.exceptions import InvalidSecurityError, PriceNotFoundError
-from niveshpy.models.price import PriceData
+from niveshpy.models.price import PriceDataWrite
 from niveshpy.models.provider import ProviderInfo
 from niveshpy.models.security import SecurityRead, SecurityType
 
@@ -65,7 +65,7 @@ class AMFIProvider:
 
     def _extract_price_data(
         self, response: requests.Response, security: SecurityRead
-    ) -> Iterable[PriceData]:
+    ) -> Iterable[PriceDataWrite]:
         """Handle the API response and convert it to PriceData instances.
 
         Args:
@@ -89,7 +89,7 @@ class AMFIProvider:
                 )
 
             for item in price_data_list:
-                yield PriceData.from_single_price(
+                yield PriceDataWrite.from_single_price(
                     security_key=security.key,
                     date=datetime.datetime.strptime(item["date"], "%d-%m-%Y").date(),
                     price=decimal.Decimal(item["nav"]),
@@ -100,7 +100,7 @@ class AMFIProvider:
                 should_retry=response.status_code != 404,
             ) from e
 
-    def fetch_latest_price(self, security: SecurityRead) -> PriceData:
+    def fetch_latest_price(self, security: SecurityRead) -> PriceDataWrite:
         """Fetch the latest price for a security.
 
         Args:
@@ -130,7 +130,7 @@ class AMFIProvider:
         security: SecurityRead,
         start_date: datetime.date,
         end_date: datetime.date,
-    ) -> Iterable[PriceData]:
+    ) -> Iterable[PriceDataWrite]:
         """Fetch historical prices for a security.
 
         Args:

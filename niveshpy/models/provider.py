@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from niveshpy.models.price import PriceData
+from niveshpy.models.price import PriceDataWrite
 from niveshpy.models.security import SecurityRead
 
 
@@ -44,7 +44,7 @@ class Provider(Protocol):
         """
         ...
 
-    def fetch_latest_price(self, security: SecurityRead) -> PriceData:
+    def fetch_latest_price(self, security: SecurityRead) -> PriceDataWrite:
         """Fetch the latest price for a security.
 
         Args:
@@ -60,7 +60,7 @@ class Provider(Protocol):
         security: SecurityRead,
         start_date: datetime.date,
         end_date: datetime.date,
-    ) -> Iterable[PriceData]:
+    ) -> Iterable[PriceDataWrite]:
         """Fetch historical prices for a security.
 
         Args:

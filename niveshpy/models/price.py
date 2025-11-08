@@ -4,9 +4,54 @@ import datetime
 from dataclasses import dataclass
 from decimal import Decimal
 
+from niveshpy.cli.utils import output
+
 
 @dataclass
-class PriceData:
+class PriceDataRead:
+    """Model for a single price data point."""
+
+    security: str  # Formatted as "name (key)"
+    """The security this price belongs to."""
+
+    date: datetime.date
+    """The date of this price."""
+
+    open: Decimal
+    """Opening price."""
+
+    high: Decimal
+    """Highest price."""
+
+    low: Decimal
+    """Lowest price."""
+
+    close: Decimal
+    """Closing price."""
+
+    created: datetime.datetime
+    """Timestamp when this price data was created."""
+
+    metadata: dict[str, str]
+    """Additional metadata associated with this price data."""
+
+    @staticmethod
+    def rich_format_map() -> output.FormatMap:
+        """Get a list of formatting styles for rich table display."""
+        return [
+            None,  # security
+            "cyan",  # date
+            None,  # open
+            "green",  # high
+            "red",  # low
+            "bold",  # close
+            "dim",  # created
+            "dim",  # metadata
+        ]
+
+
+@dataclass
+class PriceDataWrite:
     """Model for a single price data point."""
 
     security_key: str
@@ -33,7 +78,7 @@ class PriceData:
         security_key: str,
         date: datetime.date,
         price: Decimal,
-    ) -> "PriceData":
+    ) -> "PriceDataWrite":
         """Create PriceData instance for a single price point.
 
         Args:
