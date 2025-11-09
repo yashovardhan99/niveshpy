@@ -798,7 +798,6 @@ dependencies = [
     { name = "click" },
     { name = "duckdb" },
     { name = "inquirerpy" },
-    { name = "mkdocs-click" },
     { name = "numpy" },
     { name = "platformdirs" },
     { name = "polars", extra = ["pyarrow"] },
@@ -820,6 +819,7 @@ pandas = [
 [package.dev-dependencies]
 dev = [
     { name = "coverage", extra = ["toml"] },
+    { name = "mkdocs-click" },
     { name = "mkdocs-macros-plugin" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
@@ -831,6 +831,7 @@ dev = [
     { name = "types-requests" },
 ]
 docs = [
+    { name = "mkdocs-click" },
     { name = "mkdocs-macros-plugin" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
@@ -854,7 +855,6 @@ requires-dist = [
     { name = "click", specifier = ">=8.3.0" },
     { name = "duckdb", specifier = "!=1.4.0,>=1.4.0" },
     { name = "inquirerpy", specifier = ">=0.3.4" },
-    { name = "mkdocs-click", specifier = ">=0.9.0" },
     { name = "numpy", specifier = ">=2.0.2,<3.0.0" },
     { name = "pandas", marker = "extra == 'all'", specifier = ">=2.2.2,<3.0.0" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.2.2,<3.0.0" },
@@ -871,6 +871,7 @@ provides-extras = ["all", "pandas"]
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.8.0,<8.0.0" },
+    { name = "mkdocs-click", specifier = ">=0.9.0" },
     { name = "mkdocs-macros-plugin", specifier = "==1.*" },
     { name = "mkdocs-material", specifier = "==9.*" },
     { name = "mkdocstrings", extras = ["python"] },
@@ -882,6 +883,7 @@ dev = [
     { name = "types-requests", specifier = ">=2.32.4.20250913" },
 ]
 docs = [
+    { name = "mkdocs-click", specifier = ">=0.9.0" },
     { name = "mkdocs-macros-plugin", specifier = "==1.*" },
     { name = "mkdocs-material", specifier = "==9.*" },
     { name = "mkdocstrings", extras = ["python"] },
