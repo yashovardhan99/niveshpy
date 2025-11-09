@@ -1,6 +1,6 @@
 """Utility functions for styling CLI output."""
 
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, MutableMapping, Sequence
 from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
@@ -16,6 +16,9 @@ from rich.table import Table
 
 from niveshpy.cli.utils import logging
 from niveshpy.core.app import AppState
+from niveshpy.core.logging import logger
+from niveshpy.exceptions import NiveshPyError, NiveshPySystemError, NiveshPyUserError
+from niveshpy.models.output import BaseMessage, Message, ProgressUpdate, Warning
 
 _console = Console()  # Global console instance for utility functions
 _error_console = Console(stderr=True)  # Console for error messages
@@ -160,31 +163,35 @@ def _convert_polars_to_rich_table(df: pl.DataFrame, fmt_map: FormatMap | None) -
     return table
 
 
-def display_message(*objects: object) -> None:
+def display_message(*objects: object, console: Console | None = None) -> None:
     """Display a general message to the console."""
-    _console.print(*objects)
+    (console or _console).print(*objects)
 
 
-def display_success(message: str) -> None:
+def display_success(message: str, console: Console | None = None) -> None:
     """Display a success message to the console."""
-    _console.print(message, style="green")
+    (console or _console).print(message, style="green")
 
 
-def display_warning(message: str) -> None:
+def display_warning(message: object, console: Console | None = None) -> None:
     """Display a warning message to the error console."""
-    _error_console.print(f"[bold yellow]Warning:[/bold yellow] {message}")
+    (console or _error_console).print("[bold yellow]Warning:[/bold yellow]", message)
 
 
-def display_error(message: str) -> None:
+def display_error(
+    message: str, tag: str = "Error:", console: Console | None = None
+) -> None:
     """Display an error message to the error console."""
-    _error_console.print(f"[bold red]Error:[/bold red] {message}")
+    (console or _error_console).print(f"[bold red]{tag}[/bold red] {message}")
 
 
 @contextmanager
-def loading_spinner(message: str) -> Generator[None, None, None]:
+def loading_spinner(
+    message: str, console: Console | None = None
+) -> Generator[None, None, None]:
     """Context manager to show a loading spinner with a message."""
-    if _error_console.is_terminal:
-        with _error_console.status(message):
+    if (console or _error_console).is_terminal:
+        with (console or _error_console).status(message):
             yield
     else:
         yield
@@ -263,6 +270,34 @@ def get_progress_bar() -> progress.Progress:
     )
 
 
+def update_progress_bar(
+    progress_bar: progress.Progress,
+    task_map: MutableMapping[str, progress.TaskID],
+    update: ProgressUpdate,
+) -> None:
+    """Update the progress bar for a given stage.
+
+    Args:
+        progress_bar (progress.Progress): The Rich Progress bar instance.
+        task_map (MutableMapping[str, progress.TaskID]): A mapping of stage names to task IDs.
+        update (ProgressUpdate): The progress update information.
+    """
+    if update.stage not in task_map:
+        task_map[update.stage] = progress_bar.add_task(
+            update.description,
+            start=True,
+            total=update.total,
+            completed=update.current if update.current is not None else 0,
+        )
+    else:
+        progress_bar.update(
+            task_map[update.stage],
+            total=update.total,
+            completed=update.current,
+            description=update.description,
+        )
+
+
 def initialize_app_state(state: AppState) -> None:
     """Initialize the application state for CLI operations.
 
@@ -281,3 +316,34 @@ def initialize_app_state(state: AppState) -> None:
         _error_console.no_color = True
 
     logging.setup(state.debug, _error_console)  # Initialize logging with debug flag
+
+
+def handle_error(error: NiveshPyError) -> None:
+    """Handle and display errors in the CLI.
+
+    Args:
+        error (NiveshPyError): The error to handle.
+    """
+    if isinstance(error, NiveshPyUserError):
+        display_error(error.message)
+    elif isinstance(error, NiveshPySystemError):
+        logger.info("A system error occurred: %s", error)
+        display_error(error.message, tag="System Error:")
+    else:
+        logger.info("An unexpected error occurred: %s", error)
+        display_error("An unexpected error occurred. Check logs for details.")
+
+
+def handle_niveshpy_message(
+    message: BaseMessage, console: Console | None = None
+) -> None:
+    """Handle and display NiveshPy messages in the CLI.
+
+    Args:
+        message (BaseMessage): The message to handle.
+        console (Console | None): Optional Rich Console to use for output.
+    """
+    if isinstance(message, Warning):
+        display_warning(message, console=console)
+    elif isinstance(message, Message):
+        display_message(message, console=console)

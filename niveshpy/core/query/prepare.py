@@ -1,10 +1,13 @@
 """Module for preparing query AST nodes for evaluation."""
 
+import itertools
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import replace
 
 from niveshpy.core.query.ast import Field, FilterNode, FilterValue, Operator
+from niveshpy.core.query.parser import QueryParser
+from niveshpy.core.query.tokenizer import QueryLexer
 
 
 def prepare_filters(
@@ -96,3 +99,25 @@ COMBINED = {
     Operator.EQUALS: Operator.IN,
     Operator.NOT_EQUALS: Operator.NOT_IN,
 }
+
+
+def get_filters_from_queries(
+    queries: tuple[str, ...], default_field: Field
+) -> list[FilterNode]:
+    """Convert query strings into a list of prepared FilterNode objects.
+
+    Args:
+        queries (tuple): Tuple of query strings.
+        default_field (Field): The default field to use for filters.
+
+    Returns:
+        list: The prepared list of FilterNode objects.
+    """
+    stripped_queries = map(str.strip, queries)
+    lexers = map(QueryLexer, stripped_queries)
+    parsers = map(QueryParser, lexers)
+    filters: Iterable[FilterNode] = itertools.chain.from_iterable(
+        map(QueryParser.parse, parsers)
+    )
+    filters = prepare_filters(filters, default_field)
+    return filters

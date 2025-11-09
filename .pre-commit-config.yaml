@@ -13,4 +13,5 @@ repos:
     hooks:
       - id: mypy
         args: [--ignore-missing-imports, --python-version=3.11]
-        additional_dependencies: ["click>=8.3.0"]
+        additional_dependencies:
+          ["click>=8.3.0", "types-requests>=2.32.4.20250913"]
