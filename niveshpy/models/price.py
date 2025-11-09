@@ -3,8 +3,10 @@
 import datetime
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
-from niveshpy.cli.utils import output
+if TYPE_CHECKING:
+    from niveshpy.cli.utils import output
 
 
 @dataclass
@@ -36,7 +38,7 @@ class PriceDataRead:
     """Additional metadata associated with this price data."""
 
     @staticmethod
-    def rich_format_map() -> output.FormatMap:
+    def rich_format_map() -> "output.FormatMap":
         """Get a list of formatting styles for rich table display."""
         return [
             None,  # security
