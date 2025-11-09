@@ -1,0 +1,115 @@
+"""Price repository."""
+
+import itertools
+from collections.abc import Iterable
+from typing import Literal, overload
+
+import polars as pl
+
+from niveshpy.core.logging import logger
+from niveshpy.db import query
+from niveshpy.db.database import Database
+from niveshpy.db.query import (
+    DEFAULT_QUERY_OPTIONS,
+    QueryOptions,
+    ast,
+    prepare_query_filters,
+)
+from niveshpy.models.price import PriceDataRead
+
+
+class PriceRepository:
+    """Repository for managing price data."""
+
+    _table_name = "prices"
+
+    _column_mappings = {
+        ast.Field.DATE: ["p.price_date"],
+        ast.Field.SECURITY: [
+            "securities.key",
+            "securities.name",
+            "securities.type",
+            "securities.category",
+        ],
+    }
+
+    def __init__(self, db: Database):
+        """Initialize the PriceRepository with a database connection."""
+        self._db = db
+
+    def count_prices(self, options: QueryOptions = DEFAULT_QUERY_OPTIONS) -> int:
+        """Count the number of price records matching the query options."""
+        query = f"""
+        SELECT COUNT(p.*) FROM {self._table_name} p
+        INNER JOIN securities ON p.security_key = securities.key
+        """
+
+        if options.filters:
+            filter_query, params = prepare_query_filters(
+                options.filters, self._column_mappings
+            )
+            query += " WHERE " + filter_query
+        else:
+            params = ()
+        query += ";"
+
+        logger.debug("Executing count query: %s with params: %s", query, params)
+
+        with self._db.cursor() as cursor:
+            res = cursor.execute(query, params).fetchone()
+        return res[0] if res is not None else 0
+
+    @overload
+    def search_prices(
+        self,
+        options: QueryOptions = ...,
+        format: Literal[query.ResultFormat.POLARS] = ...,
+    ) -> pl.DataFrame: ...
+
+    @overload
+    def search_prices(
+        self,
+        options: QueryOptions = ...,
+        format: Literal[query.ResultFormat.LIST] = ...,
+    ) -> Iterable[PriceDataRead]: ...
+
+    def search_prices(
+        self,
+        options: QueryOptions = DEFAULT_QUERY_OPTIONS,
+        format: Literal[
+            query.ResultFormat.POLARS, query.ResultFormat.LIST
+        ] = query.ResultFormat.POLARS,
+    ) -> pl.DataFrame | Iterable[PriceDataRead]:
+        """Search for price records matching the query options."""
+        base_query = f"""
+        SELECT 
+            concat(securities.name, ' (', securities.key, ')') AS security,
+            p.price_date AS date, p.open, p.high, p.low, p.close, 
+            p.created_at AS created, p.metadata
+        FROM {self._table_name} p
+        INNER JOIN securities ON p.security_key = securities.key
+        """
+
+        params: tuple = ()
+        if options.filters:
+            filter_query, params = prepare_query_filters(
+                options.filters, self._column_mappings
+            )
+            base_query += " WHERE " + filter_query
+
+        base_query += " ORDER BY security, p.price_date DESC"
+
+        if options.limit is not None:
+            base_query += " LIMIT %s"
+            params += (options.limit,)
+
+        base_query += ";"
+
+        logger.debug("Executing search query: %s with params: %s", base_query, params)
+
+        with self._db.cursor() as cursor:
+            cursor.execute(base_query, params)
+            if format == query.ResultFormat.POLARS:
+                return cursor.pl()
+            else:
+                return itertools.starmap(PriceDataRead, cursor.fetchall())

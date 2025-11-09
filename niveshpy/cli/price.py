@@ -6,6 +6,10 @@ import click
 
 from niveshpy.cli.utils import flags, output, overrides
 from niveshpy.core import providers as provider_registry
+from niveshpy.core.app import AppState
+from niveshpy.core.logging import logger
+from niveshpy.db.database import DatabaseError
+from niveshpy.models.price import PriceDataRead
 
 
 class ProviderType(click.ParamType):
@@ -66,8 +70,33 @@ def list_prices(
 
     See https://yashovardhan99.github.io/niveshpy/cli/prices for example usage.
     """
-    print(f"Listing prices for queries: {queries}, limit: {limit}, format: {format}")
-    raise NotImplementedError
+    state = ctx.ensure_object(AppState)
+    with output.loading_spinner("Loading prices..."):
+        try:
+            result = state.app.price.list_prices(queries=queries, limit=limit)
+        except DatabaseError as e:
+            logger.critical(e, exc_info=True)
+            ctx.exit(1)
+        except ValueError as e:
+            logger.error(e, exc_info=True)
+            ctx.exit(1)
+
+    if result.total == 0:
+        msg = (
+            "No prices "
+            + ("match your query." if queries else "found in the database.")
+            + " Try syncing prices using 'niveshpy prices sync'."
+        )
+        output.display_warning(msg)
+    else:
+        output.display_dataframe(
+            result.data,
+            format,
+            PriceDataRead.rich_format_map(),
+            extra_message=f"Showing {limit:,} of {result.total:,} prices."
+            if result.total > limit
+            else None,
+        )
 
 
 @overrides.command("update")

@@ -8,6 +8,7 @@ from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.parser import Parser
 from niveshpy.services.account import AccountService
 from niveshpy.services.parsing import ParsingService
+from niveshpy.services.price import PriceService
 from niveshpy.services.security import SecurityService
 from niveshpy.services.transaction import TransactionService
 
@@ -21,6 +22,7 @@ class Application:
         self._security: SecurityService | None = None
         self._account: AccountService | None = None
         self._transaction: TransactionService | None = None
+        self._price: PriceService | None = None
 
     @property
     def security(self) -> SecurityService:
@@ -50,6 +52,13 @@ class Application:
     ) -> ParsingService:
         """Get the parsing service for the given parser key."""
         return ParsingService(parser, self._repos, progress_callback=progress_callback)
+
+    @property
+    def price(self) -> PriceService:
+        """Return the price service."""
+        if self._price is None:
+            self._price = PriceService(self._repos)
+        return self._price
 
 
 @dataclass
