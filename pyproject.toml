@@ -7,12 +7,19 @@ name = "NiveshPy"
 description = "A simple python library for all your investment needs."
 dynamic = ["version"]
 dependencies = [
-    "polars >= 1.29.0, < 2.0.0",
+    "polars[pyarrow]>=1.29.0,<2.0.0",
     "scipy >= 1.13.1, < 2.0.0",
     "numpy >= 2.0.2, < 3.0.0",
     "platformdirs >= 4.3.8, < 5.0.0",
+    "duckdb>=1.4.0, !=1.4.0",
+    "casparser>=0.8.1",
+    "click>=8.3.0",
+    "inquirerpy>=0.3.4",
+    "rich>=13.9.4",
+    "mkdocs-click>=0.9.0",
+    "requests>=2.32.5",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 authors = [
     { name = "Yashovardhan Dhanania", email = "yashovardhandhanania@gmail.com" },
 ]
@@ -26,7 +33,6 @@ keywords = ["finance", "mutual funds", "investment"]
 classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -56,10 +62,19 @@ Changelog = "http://github.com/yashovardhan99/niveshpy/blob/master/CHANGELOG.md"
 funding = "https://github.com/yashovardhan99/niveshpy"
 releasenotes = "https://github.com/yashovardhan99/niveshpy/releases"
 
+[project.scripts]
+niveshpy = "niveshpy.cli.main:cli"
+
+[project.entry-points."niveshpy.parsers"]
+cas = "niveshpy.parsers.cas:CASParserFactory"
+
+[project.entry-points."niveshpy.providers.price"]
+amfi = "niveshpy.providers.amfi:AMFIProviderFactory"
+
 [dependency-groups]
 testing = ["pytest >= 8.3.5, < 9.0.0", "coverage[toml] >= 7.8.0, < 8.0.0"]
-linting = ["ruff >= 0.11.9, < 0.12.0", "mypy >= 1.15.0, < 2.0.0"]
-stubs = ["pandas-stubs >= 2.2.2, < 3.0.0"]
+linting = ["ruff >= 0.11.9, < 0.12.0", "mypy >= 1.18.2, < 2.0.0"]
+stubs = ["pandas-stubs >= 2.2.2, < 3.0.0", "types-requests>=2.32.4.20250913"]
 docs = [
     "mkdocs-material == 9.*",
     "mkdocstrings[python]",
@@ -70,6 +85,7 @@ dev = [
     { include-group = "linting" },
     { include-group = "stubs" },
     { include-group = "docs" },
+    "pandas >= 2.2.2, < 3.0.0",
 ]
 
 [tool.ruff.lint]
@@ -82,6 +98,7 @@ select = [
     "B",  # Bugbear
     "Q",  # Quotes
     "UP", # PyUpgrade
+    "I",  # isort
 ]
 
 [tool.ruff.lint.pydocstyle]

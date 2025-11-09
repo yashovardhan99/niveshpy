@@ -1,0 +1,342 @@
+"""CLI commands for managing securities."""
+
+from textwrap import dedent
+
+import click
+from InquirerPy import get_style, inquirer
+from InquirerPy.base.control import Choice
+from InquirerPy.validator import EmptyInputValidator
+
+from niveshpy.cli.utils import flags, output
+from niveshpy.cli.utils.overrides import command, group
+from niveshpy.core.app import AppState
+from niveshpy.core.logging import logger
+from niveshpy.db.database import DatabaseError
+from niveshpy.models.security import SecurityCategory, SecurityRead, SecurityType
+from niveshpy.services.result import MergeAction, ResolutionStatus
+
+
+@group(invoke_without_command=True)
+@flags.common_options
+@click.pass_context
+def securities(ctx: click.Context) -> None:
+    """Work with securities."""
+    if ctx.invoked_subcommand is None:
+        ctx.forward(show)
+
+
+@command("list")
+@click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
+@flags.limit("securities", default=30)
+@flags.output("format")
+@flags.common_options
+@click.pass_context
+def show(
+    ctx: click.Context,
+    queries: tuple[str, ...],
+    limit: int,
+    format: output.OutputFormat,
+) -> None:
+    """List all securities.
+
+    Optionally provide a text QUERY to filter securities by key or name.
+    """
+    state = ctx.ensure_object(AppState)
+    with output.loading_spinner("Loading securities..."):
+        try:
+            result = state.app.security.list_securities(queries=queries, limit=limit)
+        except ValueError as e:
+            logger.error(e, exc_info=True)
+            ctx.exit(1)
+        except DatabaseError as e:
+            logger.critical(e, exc_info=True)
+            ctx.exit(1)
+
+    if result.total == 0:
+        output.display_warning(
+            "No securities "
+            + ("match your query." if queries else "found in the database.")
+        )
+    else:
+        output.display_dataframe(
+            result.data,
+            format,
+            SecurityRead.rich_format_map(),
+            extra_message=f"Showing {limit:,} of {result.total:,} securities."
+            if result.total > limit
+            else None,
+        )
+
+
+@command()
+@click.argument("default_key", metavar="[<key>]", default="")
+@click.argument("default_name", metavar="[<name>]", default="")
+@click.argument(
+    "default_category",
+    required=False,
+    type=click.Choice(SecurityCategory, case_sensitive=False),
+    metavar="[<category>]",
+)
+@click.argument(
+    "default_type",
+    required=False,
+    type=click.Choice(SecurityType, case_sensitive=False),
+    metavar="[<type>]",
+)
+@flags.no_input()
+@flags.common_options
+@click.pass_context
+def add(
+    ctx: click.Context,
+    default_key: str = "",
+    default_name: str = "",
+    default_category: str | None = None,
+    default_type: str | None = None,
+) -> None:
+    """Add a new security.
+
+    To create securities interactively, run the command with no arguments.
+    To add a single security non-interactively, provide all arguments along with --no-input.
+
+    <key> is a unique identifier for the security, e.g., ticker symbol or ISIN. If another
+    security with the same key exists, it will be updated.
+
+    category and type should be one of the enum values:
+
+    \b
+    * Category: EQUITY, DEBT, COMMODITY, OTHER
+    * Type: STOCK, BOND, MUTUAL_FUND, ETF, OTHER
+    """  # noqa: D301
+    state = ctx.ensure_object(AppState)
+
+    if state.no_input:
+        # Non-interactive mode: all arguments must be provided
+        if not (default_key and default_name and default_category and default_type):
+            output.display_error(
+                "When running in non-interactive mode, all arguments for adding a security must be provided."
+            )
+            ctx.exit(1)
+        try:
+            result = state.app.security.add_security(
+                default_key.strip(),
+                default_name.strip(),
+                SecurityType(default_type.strip().lower()),
+                SecurityCategory(default_category.strip().lower()),
+                source="cli",
+            )
+        except ValueError as e:
+            logger.error(e, exc_info=True)
+            ctx.exit(1)
+        except DatabaseError as e:
+            logger.critical(e, exc_info=True)
+            ctx.exit(1)
+
+        action = "added" if result.action == MergeAction.INSERT else "updated"
+        output.display_success(
+            f"Security '{result.data.name}' was {action} successfully."
+        )
+        return
+
+    output.display_message("Adding a new security.")
+    output.display_message(
+        dedent("""
+            Any command-line arguments will be used as defaults.
+            Use arrow keys to navigate, and [i]Enter[/i] to accept defaults.
+            Use [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.
+        """)
+    )
+    inquirer_style = get_style({}, style_override=state.no_color)
+
+    while True:
+        # Interactive mode: prompt for each field
+        security_key: str = (
+            inquirer.text(
+                message="Security Key",
+                instruction="(A unique identifier for the security, e.g., ticker symbol or ISIN)",
+                long_instruction="If another security with the same key exists, it will be updated.",
+                validate=EmptyInputValidator(),
+                default=default_key,
+                style=inquirer_style,
+            )
+            .execute()
+            .strip()
+        )
+        name: str = (
+            inquirer.text(
+                message="Security Name",
+                instruction="(The full name of the security)",
+                validate=EmptyInputValidator(),
+                default=default_name,
+                style=inquirer_style,
+            )
+            .execute()
+            .strip()
+        )
+        category: SecurityCategory = inquirer.select(
+            message="Security Category",
+            choices=[Choice(cat, name=cat.name) for cat in SecurityCategory],
+            default=default_category,
+            style=inquirer_style,
+        ).execute()
+        security_type: SecurityType = inquirer.select(
+            message="Security Type",
+            choices=[Choice(t, name=t.name) for t in SecurityType],
+            default=default_type,
+            style=inquirer_style,
+        ).execute()
+
+        # Add the security
+        with output.loading_spinner(f"Adding security '{name}'..."):
+            try:
+                result = state.app.security.add_security(
+                    security_key,
+                    name,
+                    security_type,
+                    category,
+                    source="cli",
+                )
+            except ValueError as e:
+                logger.error(e, exc_info=True)
+                continue
+            except DatabaseError as e:
+                logger.critical(e, exc_info=True)
+                ctx.exit(1)
+        action = "added" if result.action == MergeAction.INSERT else "updated"
+        output.display_success(
+            f"Security '{result.data.name}' was {action} successfully."
+        )
+
+        if default_key:
+            # If defaults were provided via command-line arguments, exit after one iteration
+            break
+
+        output.display_message("Add Next Security")
+        output.display_message("Press [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.")
+
+
+@command()
+@click.argument("queries", required=False, metavar="[<queries>]", default=(), nargs=-1)
+@flags.limit("limit", default=100)
+@flags.no_input()
+@flags.force()
+@flags.dry_run()
+@flags.common_options
+@click.pass_context
+def delete(
+    ctx: click.Context, queries: tuple[str, ...], limit: int, force: bool, dry_run: bool
+) -> None:
+    """Delete a security based on a query.
+
+    If no key is provided, you will be prompted to select from existing securities.
+    The query will be used to search for securities by key or name.
+    If multiple securities match the provided query, you will be prompted to select one.
+
+    Associated transactions and holdings are not deleted but will no longer be visible in reports.
+
+    When running in a non-interactive mode, --force must be provided to confirm deletion. Additionally, the <query> must match exactly one security key.
+    """
+    state = ctx.ensure_object(AppState)
+
+    if state.no_input and not force:
+        output.display_error(
+            "When running in non-interactive mode, --force must be provided to confirm deletion."
+        )
+        ctx.exit(1)
+
+    inquirer_style = get_style({}, style_override=state.no_color)
+
+    resolution = state.app.security.resolve_security_key(
+        queries, limit, allow_ambiguous=not state.no_input
+    )
+
+    if resolution.status == ResolutionStatus.NOT_FOUND:
+        output.display_error(
+            "No securities found matching the provided query. If running in non-interactive mode, ensure the query matches a security key exactly."
+        )
+        ctx.exit(1)
+    elif resolution.status == ResolutionStatus.EXACT:
+        security = resolution.exact
+        if security is None:
+            logger.error(
+                "Security resolution failed unexpectedly. Please report this bug."
+            )
+            logger.debug("Resolution object: %s", resolution)
+            ctx.exit(1)
+
+        if dry_run or not force:
+            output.display_message("The following security will be deleted: ", security)
+            if (
+                not dry_run
+                and not inquirer.confirm(
+                    "Are you sure you want to delete this security?",
+                    default=False,
+                    style=inquirer_style,
+                ).execute()
+            ):
+                logger.info("Security deletion aborted by user.")
+                ctx.abort()
+
+    elif resolution.status == ResolutionStatus.AMBIGUOUS:
+        if state.no_input or not resolution.candidates:
+            output.display_error(
+                "The provided query is ambiguous and may match multiple securities. Please refine your query."
+            )
+            ctx.exit(1)
+
+        choices = [
+            Choice(sec.key, name=f"{sec.key} - {sec.name}")
+            for sec in resolution.candidates
+        ]
+        security_key = inquirer.fuzzy(
+            message="Multiple securities found. Select one to delete:",
+            choices=choices,
+            validate=EmptyInputValidator(),
+            style=inquirer_style,
+        ).execute()
+
+        security = state.app.security.resolve_security_key(
+            (security_key,), 1, False
+        ).exact
+        if security is None:
+            logger.error(
+                "Selected security could not be found. It may have been deleted already."
+            )
+            logger.debug("Resolution object: %s", resolution)
+            ctx.exit(1)
+
+        if not force:
+            output.display_message(
+                "You have selected the following security:", security
+            )
+            if (
+                not dry_run
+                and not inquirer.confirm(
+                    "Are you sure you want to delete this security?",
+                    default=False,
+                    style=inquirer_style,
+                ).execute()
+            ):
+                logger.info("Security deletion aborted by user.")
+                ctx.abort()
+
+    if dry_run:
+        output.display_message("Dry Run: No changes were made.")
+        ctx.exit()
+
+    with output.loading_spinner(f"Deleting security '{security.key}'..."):
+        deleted = state.app.security.delete_security(security.key)
+        if deleted:
+            output.display_success(
+                f"Security '{security.key}' was deleted successfully.",
+            )
+        else:
+            logger.error(
+                "Failed to delete security %s. It may have already been deleted.",
+                security.key,
+            )
+            logger.debug("Resolution object: %s", resolution)
+
+
+securities.add_command(show)
+securities.add_command(add)
+securities.add_command(delete, name="delete")

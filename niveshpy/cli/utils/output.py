@@ -1,0 +1,349 @@
+"""Utility functions for styling CLI output."""
+
+from collections.abc import Callable, Generator, MutableMapping, Sequence
+from contextlib import contextmanager
+from datetime import date, datetime
+from decimal import Decimal
+from enum import StrEnum, auto
+from itertools import starmap, zip_longest
+from typing import Literal
+
+import click
+import polars as pl
+from rich import box, progress
+from rich.console import Console
+from rich.table import Table
+
+from niveshpy.cli.utils import logging
+from niveshpy.core.app import AppState
+from niveshpy.core.logging import logger
+from niveshpy.exceptions import NiveshPyError, NiveshPySystemError, NiveshPyUserError
+from niveshpy.models.output import BaseMessage, Message, ProgressUpdate, Warning
+
+_console = Console()  # Global console instance for utility functions
+_error_console = Console(stderr=True)  # Console for error messages
+
+
+FormatMap = Sequence[str | Callable[[str], str] | None]
+
+
+class OutputFormat(StrEnum):
+    """Enumeration of supported output formats."""
+
+    TABLE = auto()
+    CSV = auto()
+    JSON = auto()
+
+
+def _format_as_csv(df: pl.DataFrame, separator: str = ",") -> str:
+    """Convert a Polars DataFrame to CSV format, handling nested types appropriately."""
+    for col, dtype in df.collect_schema().items():
+        if dtype.is_nested():
+            if dtype == pl.Struct:
+                df = df.with_columns(pl.col(col).struct.json_encode().alias(col))
+            elif dtype == pl.List(pl.Struct({"key": pl.Utf8, "value": pl.Utf8})):
+                df = df.with_columns(
+                    pl.col(col)
+                    .list.eval(
+                        pl.concat_str(
+                            pl.element().struct.field("key"),
+                            pl.lit(":"),
+                            pl.element().struct.field("value"),
+                        )
+                    )
+                    .list.join(";")
+                    .alias(col)
+                )
+            elif dtype == pl.List(pl.Struct):
+                df = df.with_columns(
+                    pl.col(col)
+                    .list.eval(pl.element().struct.json_encode())
+                    .list.join(";")
+                    .alias(col)
+                )
+            elif dtype == pl.List:
+                df = df.with_columns(
+                    pl.col(col)
+                    .list.eval(pl.element().cast(pl.Utf8))
+                    .list.join(";")
+                    .alias(col)
+                )
+            else:
+                df = df.with_columns(pl.col(col).cast(pl.Utf8).alias(col))
+    return df.write_csv(separator=separator)
+
+
+def _format_datetime(dt: datetime) -> str:
+    """Format a datetime object to a relative time string.
+
+    If the datetime is within 7 days, it shows relative time (e.g., "about 3 hours ago").
+    If older than 7 days, it shows the absolute date (e.g., "on Jan 01, 2023").
+
+    Args:
+        dt (datetime): The datetime object to format.
+
+    Returns:
+        str: A human-readable relative time string.
+
+    """
+    now = datetime.now()
+    delta = now - dt
+    seconds = int(delta.total_seconds())
+    if seconds < 60:
+        return f"about {seconds} seconds ago"
+    elif seconds < 3600:
+        minutes = seconds // 60
+        return f"about {minutes} minutes ago"
+    elif seconds < 86400:
+        hours = seconds // 3600
+        return f"about {hours} hours ago"
+    else:
+        days = seconds // 86400
+        if days < 7:
+            return f"about {days} days ago"
+        else:
+            date = dt.strftime("%d %b %Y")
+            return f"on {date}"
+
+
+def _format_list_or_dict(data: list | dict) -> str:
+    """Format a list or dictionary into a pretty-printed string."""
+    # For empty list or dict, return empty string
+    if not data:
+        return ""
+
+    # If it is a dictionary with "key" and "value" as keys, convert to a simple key-value pair
+    if isinstance(data, dict) and set(data.keys()) == {"key", "value"}:
+        return f"{data['key']}: {data['value']}"
+
+    # If it is a list of such dictionaries, format each item recursively
+    if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+        formatted_items = [_format_list_or_dict(item) for item in data]
+        return ", ".join(formatted_items)
+
+    # Fallback to string representation
+    return str(data)
+
+
+def _convert_polars_to_rich_table(df: pl.DataFrame, fmt_map: FormatMap | None) -> Table:
+    """Convert a Polars DataFrame to a Rich Table for pretty printing."""
+    table = Table(header_style="dim", box=box.SIMPLE)
+    for i, (col, dtype) in enumerate(df.schema.to_python().items()):
+        style = fmt_map[i] if fmt_map and i < len(fmt_map) else None
+        style = style if isinstance(style, str) else None
+        justify: Literal["left", "right"] = (
+            "right" if dtype in (int, float, Decimal) else "left"
+        )
+
+        table.add_column(col.upper(), justify=justify, style=style)
+
+    def mapper(data: object, fmt: str | None | Callable[[str], str]) -> str:
+        if isinstance(data, datetime):
+            data_str = _format_datetime(data)
+        elif isinstance(data, date):
+            data_str = data.strftime("%d %b %Y")
+        elif isinstance(data, list | dict):
+            data_str = _format_list_or_dict(data)
+        else:
+            data_str = str(data)
+
+        if fmt is None:
+            return data_str
+        elif callable(fmt):
+            return fmt(data_str)
+        else:
+            return data_str
+
+    for row in df.iter_rows():
+        if fmt_map is None:
+            table.add_row(*map(str, row))
+        else:
+            table.add_row(*starmap(mapper, zip_longest(row, fmt_map, fillvalue=None)))
+
+    return table
+
+
+def display_message(*objects: object, console: Console | None = None) -> None:
+    """Display a general message to the console."""
+    (console or _console).print(*objects)
+
+
+def display_success(message: str, console: Console | None = None) -> None:
+    """Display a success message to the console."""
+    (console or _console).print(message, style="green")
+
+
+def display_warning(message: object, console: Console | None = None) -> None:
+    """Display a warning message to the error console."""
+    (console or _error_console).print("[bold yellow]Warning:[/bold yellow]", message)
+
+
+def display_error(
+    message: str, tag: str = "Error:", console: Console | None = None
+) -> None:
+    """Display an error message to the error console."""
+    (console or _error_console).print(f"[bold red]{tag}[/bold red] {message}")
+
+
+@contextmanager
+def loading_spinner(
+    message: str, console: Console | None = None
+) -> Generator[None, None, None]:
+    """Context manager to show a loading spinner with a message."""
+    if (console or _error_console).is_terminal:
+        with (console or _error_console).status(message):
+            yield
+    else:
+        yield
+
+
+def display_dataframe(
+    df: pl.DataFrame,
+    fmt: OutputFormat,
+    fmt_map: FormatMap | None = None,
+    extra_message: str | None = None,
+) -> None:
+    """Display a Polars DataFrame to the console in the specified format using a pager (if in a terminal).
+
+    If the console is a terminal, the output is displayed using a pager for better readability.
+
+    If an extra message is provided, it is displayed before the DataFrame, provided the console is a terminal.
+
+    Args:
+        df (pl.DataFrame): The DataFrame to display.
+        fmt (OutputFormat): The desired output format (TABLE, CSV, JSON).
+        fmt_map (FormatMap | None): Optional formatting map for columns.
+        extra_message (str | None): An optional message to display before the DataFrame.
+    """
+    formatted_data: str | Table
+
+    if fmt == OutputFormat.CSV:
+        formatted_data = _format_as_csv(df)
+    elif fmt == OutputFormat.JSON:
+        formatted_data = df.write_json()
+    else:
+        formatted_data = (
+            _convert_polars_to_rich_table(df, fmt_map)
+            if _console.is_terminal
+            else _format_as_csv(df, separator="\t")
+        )
+
+    if _console.is_terminal:
+        with _console.capture() as capture:
+            if extra_message:
+                _console.print(extra_message)
+            if fmt == OutputFormat.JSON:
+                _console.print_json(str(formatted_data))
+            else:
+                _console.print(formatted_data)
+        click.echo_via_pager(capture.get())
+    else:
+        if extra_message:
+            _console.print(extra_message)
+        if fmt == OutputFormat.JSON:
+            _console.print_json(str(formatted_data))
+        else:
+            _console.print(formatted_data, soft_wrap=True)
+
+
+def ask_password(prompt: str = "Enter password: ") -> str:
+    """Prompt the user for a password securely.
+
+    Args:
+        prompt (str): The prompt message to display.
+
+    Returns:
+        str: The password entered by the user.
+    """
+    return _console.input(prompt, password=True).strip()
+
+
+def get_progress_bar() -> progress.Progress:
+    """Create and return a Rich Progress bar instance for displaying progress."""
+    return progress.Progress(
+        progress.TextColumn("[progress.description]{task.description}"),
+        progress.SpinnerColumn(),
+        progress.MofNCompleteColumn(),
+        progress.TimeElapsedColumn(),
+        console=_error_console,
+        disable=not _error_console.is_terminal,
+    )
+
+
+def update_progress_bar(
+    progress_bar: progress.Progress,
+    task_map: MutableMapping[str, progress.TaskID],
+    update: ProgressUpdate,
+) -> None:
+    """Update the progress bar for a given stage.
+
+    Args:
+        progress_bar (progress.Progress): The Rich Progress bar instance.
+        task_map (MutableMapping[str, progress.TaskID]): A mapping of stage names to task IDs.
+        update (ProgressUpdate): The progress update information.
+    """
+    if update.stage not in task_map:
+        task_map[update.stage] = progress_bar.add_task(
+            update.description,
+            start=True,
+            total=update.total,
+            completed=update.current if update.current is not None else 0,
+        )
+    else:
+        progress_bar.update(
+            task_map[update.stage],
+            total=update.total,
+            completed=update.current,
+            description=update.description,
+        )
+
+
+def initialize_app_state(state: AppState) -> None:
+    """Initialize the application state for CLI operations.
+
+    This function sets up the application state by determining interactivity,
+    color settings, and initializing logging.
+
+    Args:
+        state (AppState): The application state object to initialize.
+    """
+    if not state.no_input:
+        # If no_input is not set, determine interactivity from console
+        state.no_input = not _console.is_interactive
+
+    if state.no_color:
+        _console.no_color = True
+        _error_console.no_color = True
+
+    logging.setup(state.debug, _error_console)  # Initialize logging with debug flag
+
+
+def handle_error(error: NiveshPyError) -> None:
+    """Handle and display errors in the CLI.
+
+    Args:
+        error (NiveshPyError): The error to handle.
+    """
+    if isinstance(error, NiveshPyUserError):
+        display_error(error.message)
+    elif isinstance(error, NiveshPySystemError):
+        logger.info("A system error occurred: %s", error)
+        display_error(error.message, tag="System Error:")
+    else:
+        logger.info("An unexpected error occurred: %s", error)
+        display_error("An unexpected error occurred. Check logs for details.")
+
+
+def handle_niveshpy_message(
+    message: BaseMessage, console: Console | None = None
+) -> None:
+    """Handle and display NiveshPy messages in the CLI.
+
+    Args:
+        message (BaseMessage): The message to handle.
+        console (Console | None): Optional Rich Console to use for output.
+    """
+    if isinstance(message, Warning):
+        display_warning(message, console=console)
+    elif isinstance(message, Message):
+        display_message(message, console=console)

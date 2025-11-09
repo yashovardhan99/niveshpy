@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- New CLI interface for easier use
 - New Github workflow for automated testing and coverage.
 - New classifiers to properly describe the project
+
+### Changed
+
+- Redesigned entire app from the group-up to focus on CLI instead.
 
 ### Fixed
 
@@ -18,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation URL fixes
 
 
-## [0.1.0.dev0]
+## [0.1.0.dev0] - 2025-05-25
 
 ### Added
 
