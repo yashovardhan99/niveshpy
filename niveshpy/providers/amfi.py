@@ -96,8 +96,10 @@ class AMFIProvider:
                 )
 
         except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                raise InvalidSecurityError from e
             raise PriceNotFoundError(
-                should_retry=response.status_code != 404,
+                should_retry=True,
             ) from e
 
     def fetch_latest_price(self, security: SecurityRead) -> PriceDataWrite:

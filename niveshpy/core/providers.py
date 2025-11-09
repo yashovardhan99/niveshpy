@@ -42,9 +42,12 @@ def list_providers_starting_with(
 
 
 @functools.cache
-def list_providers() -> list[type[ProviderFactory]]:
+def list_providers() -> list[tuple[str, type[ProviderFactory]]]:
     """List all registered providers."""
-    return list(_REGISTERED_PROVIDERS.values())
+    return [
+        (key, provider_factory)
+        for key, provider_factory in _REGISTERED_PROVIDERS.items()
+    ]
 
 
 def discover_installed_providers(name: str | None = None) -> None:

@@ -2,13 +2,17 @@
 
 import datetime
 import decimal
+from collections.abc import MutableMapping
 
 import click
+import rich
+import rich.progress
 
+import niveshpy.models.output
 from niveshpy.cli.utils import flags, output, overrides
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.app import AppState
-from niveshpy.exceptions import NiveshPyUserError
+from niveshpy.exceptions import NiveshPySystemError, NiveshPyUserError
 from niveshpy.models.price import PriceDataRead
 from niveshpy.services.result import MergeAction
 
@@ -152,10 +156,31 @@ def sync_prices(
 
     See https://yashovardhan99.github.io/niveshpy/cli/prices for example usage.
     """
-    print(
-        f"Syncing prices for queries: {queries}, force: {force}, provider: {provider}"
-    )
-    raise NiveshPyUserError("Not implemented yet.")
+    state = ctx.ensure_object(AppState)
+
+    progress_bar = output.get_progress_bar()
+    progress_tasks: MutableMapping[str, rich.progress.TaskID] = dict()
+
+    # Validate provider key (if provided)
+    if provider is not None:
+        state.app.price.validate_provider(provider)
+
+    # Start sync process
+
+    with progress_bar:
+        for message in state.app.price.sync_prices(
+            queries=queries, force=force, provider_key=provider
+        ):
+            if isinstance(message, niveshpy.models.output.ProgressUpdate):
+                output.update_progress_bar(progress_bar, progress_tasks, message)
+            elif isinstance(message, niveshpy.models.output.BaseMessage):
+                output.handle_niveshpy_message(message, console=progress_bar.console)
+            else:
+                raise NiveshPySystemError(
+                    "Unexpected message type received during price sync.",
+                    f"Received unknown message type: {type(message).__name__}.",
+                    message,
+                )
 
 
 prices.add_command(list_prices, name="list")
