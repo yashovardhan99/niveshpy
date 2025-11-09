@@ -27,4 +27,5 @@ jobs:
             mkdocs-material-
       - run: pip install --upgrade pip
       - run: pip install --group docs
+      - run: pip install -e .
       - run: mkdocs gh-deploy --force
