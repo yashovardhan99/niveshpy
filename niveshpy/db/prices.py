@@ -51,6 +51,12 @@ class PriceRepository:
             query += " WHERE " + filter_query
         else:
             params = ()
+
+        if not options.filters or not any(
+            f.field == ast.Field.DATE for f in options.filters
+        ):
+            query += " QUALIFY row_number() OVER (PARTITION BY p.security_key ORDER BY p.price_date DESC) = 1 "
+
         query += ";"
 
         logger.debug("Executing count query: %s with params: %s", query, params)
@@ -80,7 +86,10 @@ class PriceRepository:
             query.ResultFormat.POLARS, query.ResultFormat.LIST
         ] = query.ResultFormat.POLARS,
     ) -> pl.DataFrame | Iterable[PriceDataRead]:
-        """Search for price records matching the query options."""
+        """Search for price records matching the query options.
+
+        If no date filter is provided, returns the latest price for each security.
+        """
         base_query = f"""
         SELECT 
             concat(securities.name, ' (', securities.key, ')') AS security,
@@ -97,10 +106,15 @@ class PriceRepository:
             )
             base_query += " WHERE " + filter_query
 
+        if not options.filters or not any(
+            f.field == ast.Field.DATE for f in options.filters
+        ):
+            base_query += " QUALIFY row_number() OVER (PARTITION BY p.security_key ORDER BY p.price_date DESC) = 1 "
+
         base_query += " ORDER BY security, p.price_date DESC"
 
         if options.limit is not None:
-            base_query += " LIMIT %s"
+            base_query += " LIMIT ?"
             params += (options.limit,)
 
         base_query += ";"
