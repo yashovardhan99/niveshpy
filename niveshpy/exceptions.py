@@ -52,3 +52,31 @@ class ProviderConfigurationError(PriceProviderError):
         """
         super().__init__(message, *args)
         self.message = message
+
+
+class NiveshPyUserError(NiveshPyError):
+    """Exception raised for errors caused by incorrect user input or actions."""
+
+    def __init__(self, message: str, *args: object) -> None:
+        """Initialize the NiveshPyUserError.
+
+        Args:
+            message: The user-friendly error message.
+            *args: Additional arguments to pass to the base Exception class.
+        """
+        super().__init__(message, *args)
+        self.message = message
+
+
+class NiveshPySystemError(NiveshPyError):
+    """Exception raised when a system error occurs."""
+
+    def __init__(self, message: str, *args: object) -> None:
+        """Initialize the NiveshPySystemError.
+
+        Args:
+            message: The user-friendly error message.
+            *args: Additional arguments to pass to the base Exception class.
+        """
+        super().__init__(message, *args)
+        self.message = message

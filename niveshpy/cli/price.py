@@ -1,5 +1,6 @@
 """Update and sync market prices for securities."""
 
+import datetime
 import decimal
 
 import click
@@ -7,9 +8,9 @@ import click
 from niveshpy.cli.utils import flags, output, overrides
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.app import AppState
-from niveshpy.core.logging import logger
-from niveshpy.db.database import DatabaseError
+from niveshpy.exceptions import NiveshPyUserError
 from niveshpy.models.price import PriceDataRead
+from niveshpy.services.result import MergeAction
 
 
 class ProviderType(click.ParamType):
@@ -72,15 +73,7 @@ def list_prices(
     """
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading prices..."):
-        try:
-            result = state.app.price.list_prices(queries=queries, limit=limit)
-        except DatabaseError as e:
-            logger.critical(e, exc_info=True)
-            ctx.exit(1)
-        except ValueError as e:
-            logger.error(e, exc_info=True)
-            ctx.exit(1)
-
+        result = state.app.price.list_prices(queries=queries, limit=limit)
     if result.total == 0:
         msg = (
             "No prices "
@@ -102,28 +95,35 @@ def list_prices(
 @overrides.command("update")
 @click.pass_context
 @flags.common_options
-@click.argument("key", required=False, metavar="[<security_key>]")
-@click.argument("date", required=False, metavar="[<date>]")
+@click.argument("key", required=True, metavar="[<security_key>]")
 @click.argument(
-    "ohlc", type=decimal.Decimal, required=False, nargs=-1, metavar="[<ohlc>]"
+    "date", required=True, metavar="[<date>]", type=click.DateTime(formats=["%Y-%m-%d"])
+)
+@click.argument(
+    "ohlc", type=decimal.Decimal, required=True, nargs=-1, metavar="[<ohlc>]"
 )
 def update_prices(
     ctx: click.Context,
-    key: str | None,
-    date: str | None,
+    key: str,
+    date: datetime.date,
     ohlc: tuple[decimal.Decimal, ...],
 ):
     """Update price for a specific security.
 
-    If run without an argument,
-    interactively prompts for security and date to update the price for.
-
-    Alternatively, provide the security <key>, <date>, and <ohlc> as arguments.
+    Requires the security <key>, <date>, and <ohlc> as arguments.
 
     See https://yashovardhan99.github.io/niveshpy/cli/prices for example usage and notes.
     """
-    print(f"Updating price for key: {key}, date: {date}, OHLC: {ohlc}")
-    raise NotImplementedError
+    if len(ohlc) not in (1, 2, 4):
+        raise NiveshPyUserError(
+            "Invalid number of OHLC values provided. Provide 1 (close), "
+            "2 (open, close), or 4 (open, high, low, close) values."
+        )
+    state = ctx.ensure_object(AppState)
+    result = state.app.price.update_price(key, date, ohlc, source="cli")
+
+    action = "added" if result == MergeAction.INSERT else "updated"
+    output.display_success(f"Price was {action} successfully.")
 
 
 @overrides.command("sync")
@@ -155,7 +155,7 @@ def sync_prices(
     print(
         f"Syncing prices for queries: {queries}, force: {force}, provider: {provider}"
     )
-    raise NotImplementedError
+    raise NiveshPyUserError("Not implemented yet.")
 
 
 prices.add_command(list_prices, name="list")

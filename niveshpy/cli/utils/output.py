@@ -16,6 +16,8 @@ from rich.table import Table
 
 from niveshpy.cli.utils import logging
 from niveshpy.core.app import AppState
+from niveshpy.core.logging import logger
+from niveshpy.exceptions import NiveshPyError, NiveshPySystemError, NiveshPyUserError
 
 _console = Console()  # Global console instance for utility functions
 _error_console = Console(stderr=True)  # Console for error messages
@@ -175,9 +177,9 @@ def display_warning(message: str) -> None:
     _error_console.print(f"[bold yellow]Warning:[/bold yellow] {message}")
 
 
-def display_error(message: str) -> None:
+def display_error(message: str, tag: str = "Error:") -> None:
     """Display an error message to the error console."""
-    _error_console.print(f"[bold red]Error:[/bold red] {message}")
+    _error_console.print(f"[bold red]{tag}[/bold red] {message}")
 
 
 @contextmanager
@@ -281,3 +283,19 @@ def initialize_app_state(state: AppState) -> None:
         _error_console.no_color = True
 
     logging.setup(state.debug, _error_console)  # Initialize logging with debug flag
+
+
+def handle_error(error: NiveshPyError) -> None:
+    """Handle and display errors in the CLI.
+
+    Args:
+        error (NiveshPyError): The error to handle.
+    """
+    if isinstance(error, NiveshPyUserError):
+        display_error(error.message)
+    elif isinstance(error, NiveshPySystemError):
+        logger.info("A system error occurred: %s", error)
+        display_error(error.message, tag="System Error:")
+    else:
+        logger.info("An unexpected error occurred: %s", error)
+        display_error("An unexpected error occurred. Check logs for details.")

@@ -49,5 +49,6 @@ CREATE TABLE IF NOT EXISTS prices (
     low DECIMAL(24, 2),
     close DECIMAL(24, 2),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    metadata MAP(VARCHAR, VARCHAR) DEFAULT map()
+    metadata MAP(VARCHAR, VARCHAR) DEFAULT map(),
+    PRIMARY KEY (security_key, price_date)
 );

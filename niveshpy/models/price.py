@@ -1,7 +1,7 @@
 """Price data models."""
 
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -73,6 +73,9 @@ class PriceDataWrite:
 
     close: Decimal
     """Closing price."""
+
+    metadata: dict[str, str] = field(default_factory=dict)
+    """Additional metadata associated with this price data."""
 
     @classmethod
     def from_single_price(

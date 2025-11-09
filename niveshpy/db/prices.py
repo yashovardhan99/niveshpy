@@ -15,7 +15,7 @@ from niveshpy.db.query import (
     ast,
     prepare_query_filters,
 )
-from niveshpy.models.price import PriceDataRead
+from niveshpy.models.price import PriceDataRead, PriceDataWrite
 
 
 class PriceRepository:
@@ -113,3 +113,29 @@ class PriceRepository:
                 return cursor.pl()
             else:
                 return itertools.starmap(PriceDataRead, cursor.fetchall())
+
+    def upsert_price(self, price_data: PriceDataWrite) -> str | None:
+        """Insert or update a price record in the database."""
+        query = f"""
+                INSERT OR REPLACE INTO {self._table_name} 
+                (security_key, price_date, open, high, low, close, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                RETURNING merge_action;
+                """
+        with self._db.cursor() as cursor:
+            cursor.begin()
+            cursor.execute(
+                query,
+                (
+                    price_data.security_key,
+                    price_data.date,
+                    price_data.open,
+                    price_data.high,
+                    price_data.low,
+                    price_data.close,
+                    price_data.metadata,
+                ),
+            )
+            result = cursor.fetchone()
+            cursor.commit()
+        return result[0] if result else None
