@@ -16,7 +16,6 @@ dependencies = [
     "click>=8.3.0",
     "inquirerpy>=0.3.4",
     "rich>=13.9.4",
-    "mkdocs-click>=0.9.0",
     "requests>=2.32.5",
 ]
 requires-python = ">=3.11"
@@ -79,6 +78,7 @@ docs = [
     "mkdocs-material == 9.*",
     "mkdocstrings[python]",
     "mkdocs-macros-plugin == 1.*",
+    "mkdocs-click>=0.9.0",
 ]
 dev = [
     { include-group = "testing" },
