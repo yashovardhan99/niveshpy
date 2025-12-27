@@ -2,10 +2,56 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from sqlmodel import JSON, Column, Field, SQLModel
 
 if TYPE_CHECKING:
     from niveshpy.cli.utils import output
+
+
+class AccountBase(SQLModel):
+    """Base model for investment accounts."""
+
+    name: str = Field(schema_extra={"json_schema_extra": {"order": 1}})
+    institution: str = Field(
+        schema_extra={"json_schema_extra": {"style": "bold", "order": 2}}
+    )
+    properties: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON),
+        schema_extra={"json_schema_extra": {"style": "dim", "order": 4}},
+    )
+
+    def __init_subclass__(cls, **kwargs):
+        """Ensure subclasses inherit schema extra metadata."""
+        return super().__init_subclass__(**kwargs)
+
+
+class AccountCreate(AccountBase):
+    """Model for creating a new account."""
+
+    pass
+
+
+class Account(AccountBase, table=True):
+    """Database model for investment accounts."""
+
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        title="ID",
+        schema_extra={
+            "json_schema_extra": {"style": "dim", "justify": "right", "order": 0}
+        },
+    )
+    created_at: datetime = Field(
+        default_factory=datetime.now,
+        title="Created",
+        schema_extra={
+            "json_schema_extra": {"style": "dim", "justify": "right", "order": 3}
+        },
+    )
 
 
 @dataclass

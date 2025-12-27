@@ -3,10 +3,11 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from niveshpy.database import initialize as initialize_database
 from niveshpy.db.database import Database
 from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.parser import Parser
-from niveshpy.services.account import AccountService
+from niveshpy.services.account import AccountService, AccountServiceV2
 from niveshpy.services.parsing import ParsingService
 from niveshpy.services.price import PriceService
 from niveshpy.services.security import SecurityService
@@ -21,8 +22,10 @@ class Application:
         self._repos = RepositoryContainer(db)
         self._security: SecurityService | None = None
         self._account: AccountService | None = None
+        self._accountv2: AccountServiceV2 | None = None
         self._transaction: TransactionService | None = None
         self._price: PriceService | None = None
+        initialize_database()
 
     @property
     def security(self) -> SecurityService:
@@ -37,6 +40,13 @@ class Application:
         if self._account is None:
             self._account = AccountService(self._repos)
         return self._account
+
+    @property
+    def account_v2(self) -> AccountServiceV2:
+        """Return the account service v2."""
+        if self._accountv2 is None:
+            self._accountv2 = AccountServiceV2()
+        return self._accountv2
 
     @property
     def transaction(self) -> TransactionService:

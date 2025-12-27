@@ -25,6 +25,16 @@ def limit(name: str, default: int = 30) -> Callable[[FC], FC]:
     )
 
 
+def offset(name: str, default: int = 0) -> Callable[[FC], FC]:
+    """Common offset option for CLI commands."""
+    return click.option(
+        "--offset",
+        default=default,
+        help=f"Number of {name} to skip before starting to list. Use with --limit for pagination.",
+        show_default=True,
+    )
+
+
 def _callback(ctx: click.Context, param: click.Parameter, value: Any) -> Any:
     """Callback to handle common flag."""
     logger.debug("Flag %s set to %s", param.name, value)

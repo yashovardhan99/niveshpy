@@ -1,25 +1,82 @@
 """Account service for managing investment accounts."""
 
 import itertools
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
-import polars as pl
+from sqlmodel import select
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.parser import QueryParser
-from niveshpy.core.query.prepare import prepare_filters
+from niveshpy.core.query.prepare import (
+    get_filters_from_queries_v2,
+    prepare_filters,
+)
 from niveshpy.core.query.tokenizer import QueryLexer
+from niveshpy.database import session
 from niveshpy.db.query import QueryOptions, ResultFormat
 from niveshpy.db.repositories import RepositoryContainer
-from niveshpy.models.account import AccountRead, AccountWrite
+from niveshpy.models.account import Account, AccountCreate, AccountRead
 from niveshpy.services.result import (
     InsertResult,
-    ListResult,
     MergeAction,
     ResolutionStatus,
     SearchResolution,
 )
+
+
+class AccountServiceV2:
+    """Service handler for the accounts command group."""
+
+    _column_mappings: dict[ast.Field, list[str]] = {
+        ast.Field.ACCOUNT: ["name", "institution"],
+    }
+
+    def list_accounts(
+        self, queries: tuple[str, ...], limit: int = 30, offset: int = 0
+    ) -> Sequence[Account]:
+        """List accounts, optionally filtered by a query string."""
+        where_clause = get_filters_from_queries_v2(
+            queries, ast.Field.ACCOUNT, self._column_mappings
+        )
+
+        with session() as sql_session:
+            accounts = sql_session.exec(
+                select(Account).where(*where_clause).offset(offset).limit(limit)
+            ).all()
+            return accounts
+
+    def add_account(
+        self, name: str, institution: str, source: str | None = None
+    ) -> InsertResult[Account]:
+        """Add a new account."""
+        if not name.strip() or not institution.strip():
+            raise ValueError("Account name and institution cannot be empty.")
+        if source:
+            properties = {"source": source}
+        else:
+            properties = {}
+        account = AccountCreate(
+            name=name.strip(), institution=institution.strip(), properties=properties
+        )
+        # Check for existing account
+        query = select(Account).where(
+            (Account.name == account.name)
+            & (Account.institution == account.institution)
+        )
+        with session() as sql_session:
+            existing_account = sql_session.exec(query).first()
+            if existing_account is not None:
+                logger.debug("Account already exists: %s", existing_account)
+                return InsertResult(MergeAction.NOTHING, existing_account)
+
+            # Otherwise, insert new account
+            new_account = Account.model_validate(account)
+            sql_session.add(new_account)
+            sql_session.commit()
+            sql_session.refresh(new_account)
+            logger.debug("Inserted new account with ID: %s", new_account.id)
+            return InsertResult(MergeAction.INSERT, new_account)
 
 
 class AccountService:
@@ -28,58 +85,6 @@ class AccountService:
     def __init__(self, repos: RepositoryContainer):
         """Initialize the AccountService with repositories."""
         self._repos = repos
-
-    def list_accounts(
-        self, queries: tuple[str, ...], limit: int = 30
-    ) -> ListResult[pl.DataFrame]:
-        """List accounts, optionally filtered by a query string."""
-        stripped_queries = map(str.strip, queries)
-        lexers = map(QueryLexer, stripped_queries)
-        parsers = map(QueryParser, lexers)
-        filters: Iterable[ast.FilterNode] = itertools.chain.from_iterable(
-            map(QueryParser.parse, parsers)
-        )
-        filters = prepare_filters(filters, ast.Field.ACCOUNT)
-        logger.debug("Prepared filters: %s", filters)
-
-        options = QueryOptions(filters=filters, limit=limit)
-
-        if limit < 1:
-            logger.debug("Received non-positive limit: %d", limit)
-            raise ValueError("Limit must be positive.")
-
-        N = self._repos.account.count_accounts(options)
-        if N == 0:
-            return ListResult(pl.DataFrame(), 0)
-
-        res = self._repos.account.search_accounts(
-            options, format=ResultFormat.POLARS
-        ).rename({"created_at": "created"})
-        return ListResult(res, N)
-
-    def add_account(
-        self, name: str, institution: str, source: str | None = None
-    ) -> InsertResult[AccountRead]:
-        """Add a new account."""
-        if not name.strip() or not institution.strip():
-            raise ValueError("Account name and institution cannot be empty.")
-
-        if source:
-            metadata = {"source": source}
-        else:
-            metadata = {}
-        account = AccountWrite(
-            name=name.strip(), institution=institution.strip(), metadata=metadata
-        )
-        existing_account = self._repos.account.find_account(account)
-        if existing_account is not None:
-            logger.debug("Account already exists: %s", existing_account)
-            return InsertResult(MergeAction.NOTHING, existing_account)
-        new_account = self._repos.account.insert_single_account(account)
-        if new_account is None:
-            raise RuntimeError("Failed to insert new account.")
-        logger.debug("Inserted new account with ID: %s", new_account.id)
-        return InsertResult(MergeAction.INSERT, new_account)
 
     def resolve_account_id(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True

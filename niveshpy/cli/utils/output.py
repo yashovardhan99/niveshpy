@@ -1,15 +1,19 @@
 """Utility functions for styling CLI output."""
 
+import csv
 from collections.abc import Callable, Generator, MutableMapping, Sequence
 from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum, auto
+from io import StringIO
 from itertools import starmap, zip_longest
-from typing import Literal
+from typing import Literal, TypeVar
 
 import click
 import polars as pl
+from pydantic import BaseModel, RootModel
+from pydantic.fields import FieldInfo
 from rich import box, progress
 from rich.console import Console
 from rich.table import Table
@@ -125,6 +129,52 @@ def _format_list_or_dict(data: list | dict) -> str:
     return str(data)
 
 
+def _convert_models_to_rich_table(
+    items: Sequence[BaseModel], schema: dict[str, FieldInfo]
+) -> Table:
+    """Convert a list of Pydantic models to a Rich Table for pretty printing."""
+    table = Table(header_style="dim", box=box.SIMPLE)
+    ordered_fields = sorted(
+        schema.keys(),
+        key=lambda x: (schema[x].json_schema_extra or {}).get("order", 0),  # type: ignore
+    )
+    for field_name in ordered_fields:
+        field_info = schema[field_name]
+        extras: dict = field_info.json_schema_extra or {}  # type: ignore
+        table.add_column(
+            field_info.title or field_name.capitalize(),
+            justify=extras.get("justify", "left"),
+            style=extras.get("style") if isinstance(extras.get("style"), str) else None,
+        )
+
+    def mapper(data: object, fmt: Callable[[str], str] | None) -> str:
+        if isinstance(data, datetime):
+            data_str = _format_datetime(data)
+        elif isinstance(data, date):
+            data_str = data.strftime("%d %b %Y")
+        else:
+            data_str = str(data)
+
+        if fmt is None:
+            return data_str
+        elif callable(fmt):
+            return fmt(data_str)
+        else:
+            return data_str
+
+    for item in items:
+        row = []
+        for field_name in ordered_fields:
+            fmt = None
+            extras: dict = schema[field_name].json_schema_extra or {}  # type: ignore
+            fmt = extras.get("style") if callable(extras.get("style")) else None
+            value = getattr(item, field_name)
+            row.append(mapper(value, fmt))
+        table.add_row(*row)
+
+    return table
+
+
 def _convert_polars_to_rich_table(df: pl.DataFrame, fmt_map: FormatMap | None) -> Table:
     """Convert a Polars DataFrame to a Rich Table for pretty printing."""
     table = Table(header_style="dim", box=box.SIMPLE)
@@ -195,6 +245,61 @@ def loading_spinner(
             yield
     else:
         yield
+
+
+T = TypeVar("T", bound=BaseModel)
+
+
+def display_list(
+    cls: type[T],
+    items: Sequence[T],
+    fmt: OutputFormat,
+    extra_message: str | None = None,
+) -> None:
+    """Display a list of items to the console in the specified format.
+
+    If the console is a terminal, the output is displayed using a pager for better readability.
+
+    Args:
+        cls: The class type of the models in the list.
+        items (Sequence): The list of items to display.
+        fmt (OutputFormat): The desired output format (TABLE, CSV, JSON).
+        extra_message (str | None): An optional message to display before the list.
+    """
+    formatted_data: str | Table
+
+    root_model = RootModel[Sequence[T]](items)
+    if fmt == OutputFormat.JSON:
+        formatted_data = root_model.model_dump_json(indent=4)
+    elif fmt == OutputFormat.CSV:
+        headers = cls.model_fields.keys()
+
+        f = StringIO()
+
+        writer = csv.DictWriter(f, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(root_model.model_dump())
+
+        formatted_data = f.getvalue()
+    else:
+        formatted_data = _convert_models_to_rich_table(items, cls.model_fields)
+
+    if _console.is_terminal:
+        with _console.capture() as capture:
+            if extra_message:
+                _console.print(extra_message)
+            if fmt == OutputFormat.JSON:
+                _console.print_json(str(formatted_data))
+            else:
+                _console.print(formatted_data)
+        click.echo_via_pager(capture.get())
+    else:
+        if extra_message:
+            _console.print(extra_message)
+        if fmt == OutputFormat.JSON:
+            _console.print_json(str(formatted_data))
+        else:
+            _console.print(formatted_data, soft_wrap=True)
 
 
 def display_dataframe(

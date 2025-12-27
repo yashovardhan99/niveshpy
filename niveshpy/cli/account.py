@@ -10,7 +10,7 @@ from niveshpy.cli.utils.overrides import command, group
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.db.database import DatabaseError
-from niveshpy.models.account import AccountRead
+from niveshpy.models.account import Account
 from niveshpy.services.result import MergeAction, ResolutionStatus
 
 
@@ -25,6 +25,7 @@ def accounts(ctx: click.Context) -> None:
 @command("list")
 @click.argument("queries", default=(), required=False, nargs=-1, metavar="[<queries>]")
 @flags.limit("accounts", default=30)
+@flags.offset("accounts", default=0)
 @flags.output("format")
 @flags.common_options
 @click.pass_context
@@ -32,6 +33,7 @@ def show(
     ctx: click.Context,
     queries: tuple[str, ...],
     limit: int,
+    offset: int,
     format: output.OutputFormat,
 ) -> None:
     """List all accounts.
@@ -41,7 +43,9 @@ def show(
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading accounts..."):
         try:
-            result = state.app.account.list_accounts(queries=queries, limit=limit)
+            result = state.app.account_v2.list_accounts(
+                queries=queries, limit=limit, offset=offset
+            )
         except ValueError as e:
             logger.error(e, exc_info=True)
             ctx.exit(1)
@@ -49,20 +53,24 @@ def show(
             logger.critical(e, exc_info=True)
             ctx.exit(1)
 
-        if result.total == 0:
+        if len(result) == 0:
             msg = "No accounts " + (
                 "match your queries." if queries else "found in the database."
             )
             output.display_warning(msg)
             ctx.exit()
 
-    output.display_dataframe(
-        result.data,
+    output.display_list(
+        Account,
+        result,
         format,
-        AccountRead.rich_format_map(),
-        extra_message=f"Showing {limit:,} of {result.total:,} accounts."
-        if result.total > limit
-        else None,
+        extra_message=f"Showing first {limit:,} accounts."
+        if len(result) == limit and offset == 0
+        else (
+            f"Showing accounts {offset + 1:,} to {offset + len(result):,}."
+            if offset > 0
+            else None
+        ),
     )
 
 
@@ -91,7 +99,7 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
             ctx.exit(1)
 
         try:
-            result = state.app.account.add_account(
+            result = state.app.account_v2.add_account(
                 name=name, institution=institution, source="cli"
             )
         except ValueError as e:
@@ -135,7 +143,7 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
             )
 
             try:
-                result = state.app.account.add_account(
+                result = state.app.account_v2.add_account(
                     name=name, institution=institution, source="cli"
                 )
                 if result.action == MergeAction.NOTHING:
