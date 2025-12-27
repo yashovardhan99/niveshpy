@@ -1,5 +1,6 @@
 """Holders for service results."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum, auto
 from typing import Generic, TypeVar
@@ -45,5 +46,5 @@ class SearchResolution(Generic[T]):
 
     status: ResolutionStatus
     exact: T | None = None
-    candidates: list[T] | None = None
+    candidates: Sequence[T] | None = None
     queries: tuple[str, ...] = ()

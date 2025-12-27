@@ -43,7 +43,7 @@ def show(
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading accounts..."):
         try:
-            result = state.app.account_v2.list_accounts(
+            result = state.app.account.list_accounts(
                 queries=queries, limit=limit, offset=offset
             )
         except ValueError as e:
@@ -99,7 +99,7 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
             ctx.exit(1)
 
         try:
-            result = state.app.account_v2.add_account(
+            result = state.app.account.add_account(
                 name=name, institution=institution, source="cli"
             )
         except ValueError as e:
@@ -143,7 +143,7 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
             )
 
             try:
-                result = state.app.account_v2.add_account(
+                result = state.app.account.add_account(
                     name=name, institution=institution, source="cli"
                 )
                 if result.action == MergeAction.NOTHING:
@@ -203,6 +203,7 @@ def delete(
     resolution = state.app.account.resolve_account_id(
         queries, limit, allow_ambiguous=not state.no_input
     )
+    account: Account | None = None
 
     if resolution.status == ResolutionStatus.NOT_FOUND:
         output.display_error(

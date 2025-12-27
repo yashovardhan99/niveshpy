@@ -54,6 +54,12 @@ class Account(AccountBase, table=True):
     )
 
 
+class AccountPublic(Account):
+    """Public model for account data exposure."""
+
+    id: int
+
+
 @dataclass
 class AccountRead:
     """Model for account data."""

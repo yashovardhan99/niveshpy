@@ -1,22 +1,16 @@
 """Account service for managing investment accounts."""
 
-import itertools
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 
 from sqlmodel import select
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
-from niveshpy.core.query.parser import QueryParser
 from niveshpy.core.query.prepare import (
     get_filters_from_queries_v2,
-    prepare_filters,
 )
-from niveshpy.core.query.tokenizer import QueryLexer
 from niveshpy.database import session
-from niveshpy.db.query import QueryOptions, ResultFormat
-from niveshpy.db.repositories import RepositoryContainer
-from niveshpy.models.account import Account, AccountCreate, AccountRead
+from niveshpy.models.account import Account, AccountCreate, AccountPublic
 from niveshpy.services.result import (
     InsertResult,
     MergeAction,
@@ -25,7 +19,7 @@ from niveshpy.services.result import (
 )
 
 
-class AccountServiceV2:
+class AccountService:
     """Service handler for the accounts command group."""
 
     _column_mappings: dict[ast.Field, list[str]] = {
@@ -78,17 +72,9 @@ class AccountServiceV2:
             logger.debug("Inserted new account with ID: %s", new_account.id)
             return InsertResult(MergeAction.INSERT, new_account)
 
-
-class AccountService:
-    """Service handler for the accounts command group."""
-
-    def __init__(self, repos: RepositoryContainer):
-        """Initialize the AccountService with repositories."""
-        self._repos = repos
-
     def resolve_account_id(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
-    ) -> SearchResolution[AccountRead]:
+    ) -> SearchResolution[AccountPublic]:
         """Resolve an account id to an Account object if it exists.
 
         Logic:
@@ -107,9 +93,11 @@ class AccountService:
                 return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
 
             # Return top `limit` accounts as candidates
-            options = QueryOptions(limit=limit)
-            res = self._repos.account.search_accounts(options, ResultFormat.LIST)
-            accounts = [AccountRead(*row) for row in res] if res else []
+            query = select(Account).limit(limit)
+            with session() as sql_session:
+                accounts = list(
+                    map(AccountPublic.model_validate, sql_session.exec(query).all())
+                )
             return SearchResolution(
                 status=ResolutionStatus.AMBIGUOUS,
                 candidates=accounts,
@@ -119,11 +107,12 @@ class AccountService:
         # First, try to find an exact match by id
         account_id = int(queries[0].strip()) if queries[0].strip().isdigit() else None
         if account_id is not None:
-            exact_account = self._repos.account.get_account(account_id)
+            with session() as sql_session:
+                exact_account = sql_session.get(Account, account_id)
             if exact_account:
                 return SearchResolution(
                     status=ResolutionStatus.EXACT,
-                    exact=exact_account,
+                    exact=AccountPublic.model_validate(exact_account),
                     queries=queries,
                 )
 
@@ -132,32 +121,33 @@ class AccountService:
             return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
 
         # Perform a text search for candidates
-        stripped_queries = map(str.strip, queries)
-        lexers = map(QueryLexer, stripped_queries)
-        parsers = map(QueryParser, lexers)
-        filters: Iterable[ast.FilterNode] = itertools.chain.from_iterable(
-            map(QueryParser.parse, parsers)
+        accounts = list(
+            map(AccountPublic.model_validate, self.list_accounts(queries, limit=limit))
         )
-        filters = prepare_filters(filters, ast.Field.ACCOUNT)
-
-        options = QueryOptions(filters=filters, limit=limit)
-        res = self._repos.account.search_accounts(options, ResultFormat.LIST)
-        if not res:
+        if not accounts:
             return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
-        elif len(res) == 1:
+        elif len(accounts) == 1:
             return SearchResolution(
                 status=ResolutionStatus.EXACT,
-                exact=AccountRead(*res[0]),
+                exact=accounts[0],
                 queries=queries,
             )
         else:
             return SearchResolution(
                 status=ResolutionStatus.AMBIGUOUS,
-                candidates=[AccountRead(*row) for row in res],
+                candidates=accounts,
                 queries=queries,
             )
             # If we reach here, it means we have ambiguous results
 
     def delete_account(self, account_id: int) -> bool:
-        """Delete an account by its ID."""
-        return self._repos.account.delete_account(account_id) is not None
+        """Delete an account."""
+        with session() as sql_session:
+            account = sql_session.get(Account, account_id)
+            if account is None:
+                logger.debug("Account not found for deletion: %s", account_id)
+                return False
+            sql_session.delete(account)
+            sql_session.commit()
+            logger.debug("Deleted account with ID: %s", account_id)
+            return True
