@@ -272,7 +272,10 @@ def display_list(
     if fmt == OutputFormat.JSON:
         formatted_data = root_model.model_dump_json(indent=4)
     elif fmt == OutputFormat.CSV:
-        headers = cls.model_fields.keys()
+        headers = sorted(
+            cls.model_fields.keys(),
+            key=lambda x: (cls.model_fields[x].json_schema_extra or {}).get("order", 0),  # type: ignore
+        )
 
         f = StringIO()
 

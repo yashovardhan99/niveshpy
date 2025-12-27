@@ -37,27 +37,25 @@ class AccountCreate(AccountBase):
 class Account(AccountBase, table=True):
     """Database model for investment accounts."""
 
-    id: int | None = Field(
-        default=None,
-        primary_key=True,
+    id: int | None = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class AccountPublic(AccountBase):
+    """Public model for account data exposure."""
+
+    id: int = Field(
         title="ID",
         schema_extra={
             "json_schema_extra": {"style": "dim", "justify": "right", "order": 0}
         },
     )
     created_at: datetime = Field(
-        default_factory=datetime.now,
         title="Created",
         schema_extra={
             "json_schema_extra": {"style": "dim", "justify": "right", "order": 3}
         },
     )
-
-
-class AccountPublic(Account):
-    """Public model for account data exposure."""
-
-    id: int
 
 
 @dataclass

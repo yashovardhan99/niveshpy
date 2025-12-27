@@ -28,7 +28,7 @@ class AccountService:
 
     def list_accounts(
         self, queries: tuple[str, ...], limit: int = 30, offset: int = 0
-    ) -> Sequence[Account]:
+    ) -> Sequence[AccountPublic]:
         """List accounts, optionally filtered by a query string."""
         where_clause = get_filters_from_queries_v2(
             queries, ast.Field.ACCOUNT, self._column_mappings
@@ -38,7 +38,7 @@ class AccountService:
             accounts = sql_session.exec(
                 select(Account).where(*where_clause).offset(offset).limit(limit)
             ).all()
-            return accounts
+            return list(map(AccountPublic.model_validate, accounts))
 
     def add_account(
         self, name: str, institution: str, source: str | None = None
@@ -121,9 +121,7 @@ class AccountService:
             return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
 
         # Perform a text search for candidates
-        accounts = list(
-            map(AccountPublic.model_validate, self.list_accounts(queries, limit=limit))
-        )
+        accounts = list(self.list_accounts(queries, limit=limit))
         if not accounts:
             return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
         elif len(accounts) == 1:

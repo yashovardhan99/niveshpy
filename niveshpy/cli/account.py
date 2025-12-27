@@ -10,7 +10,7 @@ from niveshpy.cli.utils.overrides import command, group
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.db.database import DatabaseError
-from niveshpy.models.account import Account
+from niveshpy.models.account import AccountPublic
 from niveshpy.services.result import MergeAction, ResolutionStatus
 
 
@@ -61,7 +61,7 @@ def show(
             ctx.exit()
 
     output.display_list(
-        Account,
+        AccountPublic,
         result,
         format,
         extra_message=f"Showing first {limit:,} accounts."
@@ -203,7 +203,6 @@ def delete(
     resolution = state.app.account.resolve_account_id(
         queries, limit, allow_ambiguous=not state.no_input
     )
-    account: Account | None = None
 
     if resolution.status == ResolutionStatus.NOT_FOUND:
         output.display_error(
