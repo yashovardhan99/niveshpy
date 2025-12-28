@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlmodel import JSON, Column, Field, SQLModel
+from sqlmodel import JSON, Column, Field, SQLModel, UniqueConstraint
 
 if TYPE_CHECKING:
     from niveshpy.cli.utils import output
@@ -34,6 +34,10 @@ class AccountCreate(AccountBase):
 
 class Account(AccountBase, table=True):
     """Database model for investment accounts."""
+
+    __table_args__ = (
+        UniqueConstraint("name", "institution", name="uix_name_institution"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     created_at: datetime = Field(default_factory=datetime.now)

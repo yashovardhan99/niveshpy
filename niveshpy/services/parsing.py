@@ -5,8 +5,16 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import TypeVar
 
+from pydantic import RootModel
+from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
+
+from niveshpy.database import session
 from niveshpy.db.repositories import RepositoryContainer
-from niveshpy.models.account import AccountRead, AccountWrite
+from niveshpy.models.account import (
+    Account,
+    AccountCreate,
+    AccountPublic,
+)
 from niveshpy.models.parser import Parser
 from niveshpy.models.security import SecurityRead, SecurityWrite
 from niveshpy.models.transaction import TransactionWrite
@@ -51,20 +59,42 @@ class ParsingService:
         # Parse transactions after accounts and securities are done
         self._parse_transactions(accounts, securities)
 
-    _T = TypeVar("_T", SecurityWrite, AccountWrite, TransactionWrite)
+    _T = TypeVar("_T", SecurityWrite, AccountCreate, TransactionWrite)
 
     def _add_metadata(self, item: _T) -> _T:
         """Add metadata to a parsed item."""
-        if item.metadata.get("source") is None:
-            item.metadata["source"] = "parser"
+        if isinstance(item, AccountCreate):
+            if item.properties.get("source") is None:
+                item.properties["source"] = "parser"
+        elif hasattr(item, "metadata"):
+            if item.metadata.get("source") is None:
+                item.metadata["source"] = "parser"
         return item
 
-    def _parse_accounts(self) -> list[AccountRead]:
+    def _bulk_insert_accounts(
+        self, accounts: list[AccountCreate]
+    ) -> list[AccountPublic]:
+        """Bulk insert accounts into the database."""
+        # TODO: Implement bulk insert logic
+        account_dicts = RootModel[list[Account]].model_validate(accounts).model_dump()
+        with session() as sql_session:
+            stm = sqlite_upsert(Account)
+            res = sql_session.scalars(
+                stm.on_conflict_do_update(
+                    index_elements=["name", "institution"],
+                    set_={"properties": stm.excluded.properties},
+                ).returning(Account),
+                account_dicts,
+            )
+            sql_session.commit()
+            return RootModel[list[AccountPublic]].model_validate(res.all()).root
+
+    def _parse_accounts(self) -> list[AccountPublic]:
         """Parse and store accounts using the parser."""
         self._report_progress("accounts", 0, -1)
         accounts = list(map(self._add_metadata, self._parser.get_accounts()))
         self._report_progress("accounts", 0, len(accounts))
-        inserted_accounts = self._repos.account.insert_multiple_accounts(accounts)
+        inserted_accounts = self._bulk_insert_accounts(accounts)
         self._report_progress("accounts", len(inserted_accounts), len(accounts))
         return inserted_accounts
 
@@ -78,7 +108,7 @@ class ParsingService:
         return inserted
 
     def _parse_transactions(
-        self, accounts: list[AccountRead], securities: list[SecurityRead]
+        self, accounts: list[AccountPublic], securities: list[SecurityRead]
     ) -> None:
         """Parse and store transactions using the parser."""
         self._report_progress("transactions", 0, -1)

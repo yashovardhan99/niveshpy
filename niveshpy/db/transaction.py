@@ -17,7 +17,7 @@ from niveshpy.db.query import (
     ResultFormat,
     prepare_query_filters,
 )
-from niveshpy.models.account import AccountRead
+from niveshpy.models.account import AccountPublic
 from niveshpy.models.security import SecurityRead
 from niveshpy.models.transaction import TransactionRead, TransactionWrite
 
@@ -173,7 +173,7 @@ class TransactionRepository:
     def insert_multiple_transactions(
         self,
         transactions: list[TransactionWrite],
-        accounts: list[AccountRead],
+        accounts: list[AccountPublic],
         securities: list[SecurityRead],
         date_range: tuple[datetime.date, datetime.date],
     ) -> list[TransactionRead]:
@@ -189,7 +189,7 @@ class TransactionRepository:
             cursor.register(
                 "current_accounts",
                 pl.from_dicts(
-                    [asdict(acc) for acc in accounts],
+                    [acc.model_dump() for acc in accounts],
                 ),
             )
             cursor.register(

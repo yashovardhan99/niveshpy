@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from niveshpy.models.account import AccountRead, AccountWrite
+from niveshpy.models.account import (
+    AccountCreate,
+    AccountPublic,
+)
 from niveshpy.models.security import SecurityWrite
 from niveshpy.models.transaction import TransactionWrite
 
@@ -39,11 +42,11 @@ class Parser(Protocol):
         """
         ...
 
-    def get_accounts(self) -> Iterable[AccountWrite]:
+    def get_accounts(self) -> Iterable[AccountCreate]:
         """Get the list of accounts from the parser.
 
         Returns:
-            An iterable of AccountWrite objects representing the accounts found in the data.
+            An iterable of AccountCreate objects representing the accounts found in the data.
         """
         ...
 
@@ -56,7 +59,7 @@ class Parser(Protocol):
         ...
 
     def get_transactions(
-        self, accounts: Iterable[AccountRead]
+        self, accounts: Iterable[AccountPublic]
     ) -> Iterable[TransactionWrite]:
         """Get the list of transactions from the parser.
 

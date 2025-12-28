@@ -6,7 +6,7 @@ from pathlib import Path
 
 import casparser  # type: ignore
 
-from niveshpy.models.account import AccountRead, AccountWrite
+from niveshpy.models.account import AccountCreate, AccountRead
 from niveshpy.models.parser import ParserInfo
 from niveshpy.models.security import (
     SecurityCategory,
@@ -38,10 +38,14 @@ class CASParser:
         ).date()
         return start_date, end_date
 
-    def get_accounts(self) -> list[AccountWrite]:
+    def get_accounts(self) -> list[AccountCreate]:
         """Get the list of folios as accounts from the CAS data."""
         return [
-            AccountWrite(folio_data.folio, folio_data.amc, {"source": "cas"})
+            AccountCreate(
+                name=folio_data.folio,
+                institution=folio_data.amc,
+                properties={"source": "cas"},
+            )
             for folio_data in self.data.folios
         ]
 

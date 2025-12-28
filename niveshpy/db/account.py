@@ -1,6 +1,5 @@
 """Account database operations."""
 
-from dataclasses import asdict
 from typing import Literal, overload
 
 import polars as pl
@@ -13,7 +12,7 @@ from niveshpy.db.query import (
     ResultFormat,
     prepare_query_filters,
 )
-from niveshpy.models.account import AccountRead, AccountWrite
+from niveshpy.models.account import AccountRead
 
 
 class AccountRepository:
@@ -27,23 +26,6 @@ class AccountRepository:
     def __init__(self, db: Database):
         """Initialize the AccountRepository."""
         self._db = db
-
-    def count_accounts(self, options: QueryOptions = DEFAULT_QUERY_OPTIONS) -> int:
-        """Count the number of accounts matching the query options."""
-        query = f"SELECT COUNT(*) FROM {self._table_name}"
-        if options.filters:
-            filter_query, params = prepare_query_filters(
-                options.filters, self._column_mappings
-            )
-            query += " WHERE " + filter_query
-        else:
-            params = ()
-        query += ";"
-
-        with self._db.cursor() as cursor:
-            res = cursor.execute(query, params)
-            count = res.fetchone()
-            return count[0] if count is not None else 0
 
     @overload
     def search_accounts(
@@ -94,73 +76,6 @@ class AccountRepository:
             else:
                 return res.fetchall()
 
-    def find_account(self, account: AccountWrite) -> AccountRead | None:
-        """Find an account by name and institution."""
-        query = f"""SELECT * FROM {self._table_name}
-                    WHERE name = ? AND institution = ?;"""
-        params = (account.name, account.institution)
-
-        with self._db.cursor() as cursor:
-            res = cursor.execute(query, params).fetchone()
-            return AccountRead(*res) if res else None
-
-    def insert_single_account(self, account: AccountWrite) -> AccountRead | None:
-        """Insert a single account into the database."""
-        with self._db.cursor() as cursor:
-            res = cursor.execute(
-                f"""INSERT INTO {self._table_name} (name, institution, metadata)
-                VALUES (?, ?, ?)
-                RETURNING *;
-                """,
-                (account.name, account.institution, account.metadata),
-            ).fetchone()
-            cursor.commit()
-            return AccountRead(*res) if res else None
-
-    def get_accounts(self) -> pl.DataFrame:
-        """Retrieve all accounts from the database."""
-        with self._db.cursor() as cursor:
-            return cursor.execute(
-                f"SELECT id, name, institution FROM {self._table_name}"
-            ).pl()
-
-    def insert_multiple_accounts(
-        self, accounts: list[AccountWrite]
-    ) -> list[AccountRead]:
-        """Insert multiple accounts into the database."""
-        with self._db.cursor() as cursor:
-            cursor.begin()
-            cursor.register("new_accounts", pl.from_dicts(map(asdict, accounts)))
-            cursor.execute(
-                f"""MERGE INTO {self._table_name} target
-                USING (SELECT * FROM new_accounts) AS new
-                ON target.name = new.name AND target.institution = new.institution
-                WHEN MATCHED THEN UPDATE SET metadata = new.metadata
-                WHEN NOT MATCHED THEN INSERT BY NAME
-                RETURNING *;
-                """
-            )
-            res = cursor.fetchall()
-            cursor.commit()
-            return [AccountRead(*data) for data in res]
-
-    # def add_accounts(self, accounts: Iterable[AccountWrite]) -> Iterable[AccountRead]:
-    #     """Add new accounts to the database."""
-    #     with self._db.cursor() as cursor:
-    #         cursor.register("new_accounts", pl.from_dicts(map(asdict, accounts)))
-    #         data = cursor.execute(
-    #             f"""MERGE INTO {self._table_name} target
-    #             USING (SELECT * FROM new_accounts) AS new
-    #             ON target.name = new.name AND target.institution = new.institution
-    #             WHEN NOT MATCHED THEN INSERT BY NAME;
-
-    #             FROM {self._table_name}
-    #             ORDER BY id;
-    #             """
-    #         )
-    #         cursor.commit()
-    #         return starmap(AccountRead, data.fetchall())
-
     def get_account(self, id: int) -> AccountRead | None:
         """Retrieve an account by its ID."""
         query = f"SELECT id, name, institution, created_at, metadata FROM {self._table_name} WHERE id = ?;"
@@ -169,17 +84,3 @@ class AccountRepository:
         with self._db.cursor() as cursor:
             res = cursor.execute(query, params).fetchone()
             return AccountRead(*res) if res else None
-
-    def delete_account(self, id: int) -> AccountRead | None:
-        """Delete an account by its ID.
-
-        Returns the deleted account if successful, None otherwise.
-        """
-        with self._db.cursor() as cursor:
-            res = cursor.execute(
-                f"DELETE FROM {self._table_name} WHERE id = ? RETURNING *;",
-                (id,),
-            )
-            cursor.commit()
-            data = res.fetchone()
-            return AccountRead(*data) if data else None
