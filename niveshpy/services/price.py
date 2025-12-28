@@ -8,11 +8,16 @@ from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import polars as pl
+from sqlmodel import select, update
 
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
-from niveshpy.core.query.prepare import get_filters_from_queries
+from niveshpy.core.query.prepare import (
+    get_filters_from_queries,
+    get_filters_from_queries_v2,
+)
+from niveshpy.database import get_session
 from niveshpy.db import query
 from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.exceptions import (
@@ -25,7 +30,10 @@ from niveshpy.exceptions import (
 from niveshpy.models.output import BaseMessage, ProgressUpdate, Warning
 from niveshpy.models.price import PriceDataWrite
 from niveshpy.models.provider import Provider, ProviderInfo
-from niveshpy.models.security import SecurityRead, SecurityWrite
+from niveshpy.models.security import (
+    SECURITY_COLUMN_MAPPING,
+    Security,
+)
 from niveshpy.services.result import ListResult, MergeAction
 
 
@@ -84,7 +92,8 @@ class PriceService:
             raise NiveshPyUserError("OHLC must contain 1, 2, or 4 values.")
 
         # Check if security exists
-        security = self._repos.security.get_security(security_key)
+        with get_session() as session:
+            security = session.get(Security, security_key)
         if security is None:
             raise NiveshPyUserError(f"Security with key {security_key} does not exist.")
 
@@ -160,21 +169,22 @@ class PriceService:
 
         # Let's fetch all matching securities
         yield ProgressUpdate("sync.setup.securities", "Fetching securities", None, None)
-        filters = get_filters_from_queries(queries, default_field=ast.Field.SECURITY)
 
-        security_tuples = self._repos.security.search_securities(
-            query.QueryOptions(filters=filters),
-            query.ResultFormat.LIST,
+        where_clause = get_filters_from_queries_v2(
+            queries, ast.Field.SECURITY, SECURITY_COLUMN_MAPPING
         )
-        securities = itertools.starmap(SecurityRead, security_tuples)
+
+        with get_session() as session:
+            securities = session.exec(select(Security).where(*where_clause)).all()
+
         yield ProgressUpdate(
             "sync.setup.securities",
             "Fetched securities",
             None,
-            len(security_tuples),
+            len(securities),
         )
 
-        if len(security_tuples) == 0:
+        if len(securities) == 0:
             raise NiveshPyUserError("No securities found matching the given queries.")
 
         # Now, for each security, determine which provider to use.
@@ -183,7 +193,7 @@ class PriceService:
             "sync.setup.securities",
             "Setting up securities for sync",
             None,
-            len(security_tuples),
+            len(securities),
         )
 
         securities_setup, securities_process = itertools.tee(securities, 2)
@@ -209,7 +219,7 @@ class PriceService:
                 "sync.setup.securities",
                 "Setting up securities for sync",
                 i + 1,
-                len(security_tuples),
+                len(securities),
             )
 
         # Now, process syncing prices for each security using ThreadPoolExecutor
@@ -245,13 +255,13 @@ class PriceService:
 
     def _process_sync(
         self,
-        security: SecurityRead,
+        security: Security,
         providers: list[tuple[int, str, ProviderInfo, Provider]],
         force: bool,
     ) -> int | None:
         """Process sync for a single security with given providers."""
         # First, find the last date for which we have price data
-        last_price = security.metadata.get("last_price_date", None)
+        last_price = security.properties.get("last_price_date", None)
 
         if last_price is not None:
             last_price_date = datetime.datetime.strptime(last_price, "%Y-%m-%d").date()
@@ -307,8 +317,10 @@ class PriceService:
                         )
 
                     # Only update metadata after successful save
-                    security.metadata["last_price_date"] = max_date.strftime("%Y-%m-%d")
-                    security.metadata["price_provider"] = key
+                    security.properties["last_price_date"] = max_date.strftime(
+                        "%Y-%m-%d"
+                    )
+                    security.properties["price_provider"] = key
 
                     # Successfully fetched prices, break out of the loop
                     break
@@ -332,15 +344,14 @@ class PriceService:
                     ) from e
 
         # Also update the security metadata in the database
-        self._repos.security.insert_single_security(
-            SecurityWrite(
-                key=security.key,
-                name=security.name,
-                type=security.type,
-                category=security.category,
-                metadata=security.metadata,
-            )
+        update_stmt = (
+            update(Security)
+            .where(Security.key == security.key)  # type: ignore
+            .values(properties=security.properties)
         )
+        with get_session() as session:
+            session.exec(update_stmt)
+            session.commit()
 
         return result
 

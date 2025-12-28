@@ -10,8 +10,8 @@ from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.models.parser import ParserInfo
 from niveshpy.models.security import (
     SecurityCategory,
+    SecurityCreate,
     SecurityType,
-    SecurityWrite,
 )
 from niveshpy.models.transaction import TransactionType, TransactionWrite
 
@@ -49,21 +49,21 @@ class CASParser:
             for folio_data in self.data.folios
         ]
 
-    def get_securities(self) -> Iterable[SecurityWrite]:
+    def get_securities(self) -> Iterable[SecurityCreate]:
         """Get the list of securities from the CAS data."""
         securities = set()
         for folio in self.data.folios:
             for scheme in folio.schemes:
                 if scheme.amfi not in securities:
                     securities.add(scheme.amfi)
-                    yield SecurityWrite(
-                        scheme.amfi,
-                        scheme.scheme,
-                        SecurityType.MUTUAL_FUND,
-                        SecurityCategory(scheme.type.lower())
+                    yield SecurityCreate(
+                        key=scheme.amfi,
+                        name=scheme.scheme,
+                        type=SecurityType.MUTUAL_FUND,
+                        category=SecurityCategory(scheme.type.lower())
                         if scheme.type in ("EQUITY", "DEBT")
                         else SecurityCategory.OTHER,
-                        metadata={"source": "cas", "isin": scheme.isin},
+                        properties={"source": "cas", "isin": scheme.isin},
                     )
 
     def get_transactions(

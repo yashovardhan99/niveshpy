@@ -17,6 +17,7 @@ from niveshpy.database import get_session
 from niveshpy.db.query import QueryOptions, ResultFormat
 from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.account import Account
+from niveshpy.models.security import Security
 from niveshpy.models.transaction import (
     TransactionRead,
     TransactionType,
@@ -89,10 +90,9 @@ class TransactionService:
         # Validate account and security exists
         with get_session() as session:
             account = session.get(Account, account_id)
+            security = session.get(Security, security_key)
         if account is None:
             raise ValueError(f"Account with ID {account_id} does not exist.")
-
-        security = self._repos.security.get_security(security_key)
         if security is None:
             raise ValueError(f"Security with key {security_key} does not exist.")
 
@@ -126,11 +126,10 @@ class TransactionService:
 
     def get_security_choices(self) -> list[dict[str, str]]:
         """Get a list of securities for selection."""
-        securities = self._repos.security.search_securities(
-            QueryOptions(limit=10_000), ResultFormat.LIST
-        )
+        with get_session() as session:
+            securities = session.exec(select(Security).limit(10_000)).all()
         return [
-            {"value": security[0], "name": f"{security[1]} ({security[0]})"}
+            {"value": security.key, "name": f"{security.name} ({security.key})"}
             for security in securities
         ]
 

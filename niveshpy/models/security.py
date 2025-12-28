@@ -1,14 +1,12 @@
 """Models for securities."""
 
-from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum, auto
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlmodel import JSON, Column, Field, SQLModel
 
-if TYPE_CHECKING:
-    from niveshpy.cli.utils import output
+from niveshpy.core.query import ast
 
 
 class SecurityType(StrEnum):
@@ -100,36 +98,7 @@ class Security(SecurityBase, table=True):
     )
 
 
-@dataclass
-class SecurityRead:
-    """Model for security data."""
-
-    key: str
-    name: str
-    type: SecurityType
-    category: SecurityCategory
-    created: datetime = datetime.now()
-    metadata: dict[str, str] = field(default_factory=dict)
-
-    @staticmethod
-    def rich_format_map() -> "output.FormatMap":
-        """Get a list of formatting styles for rich table display."""
-        return [
-            "green",
-            "bold",
-            None,
-            None,
-            "dim",
-            "dim",
-        ]
-
-
-@dataclass
-class SecurityWrite:
-    """Model for creating or updating security data."""
-
-    key: str
-    name: str
-    type: SecurityType
-    category: SecurityCategory
-    metadata: dict[str, str] = field(default_factory=dict)
+SECURITY_COLUMN_MAPPING: dict[ast.Field, list[str]] = {
+    ast.Field.SECURITY: ["key", "name"],
+    ast.Field.TYPE: ["type", "category"],
+}

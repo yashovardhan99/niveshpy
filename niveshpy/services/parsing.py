@@ -16,7 +16,10 @@ from niveshpy.models.account import (
     AccountPublic,
 )
 from niveshpy.models.parser import Parser
-from niveshpy.models.security import SecurityRead, SecurityWrite
+from niveshpy.models.security import (
+    Security,
+    SecurityCreate,
+)
 from niveshpy.models.transaction import TransactionWrite
 
 
@@ -59,11 +62,11 @@ class ParsingService:
         # Parse transactions after accounts and securities are done
         self._parse_transactions(accounts, securities)
 
-    _T = TypeVar("_T", SecurityWrite, AccountCreate, TransactionWrite)
+    _T = TypeVar("_T", SecurityCreate, AccountCreate, TransactionWrite)
 
     def _add_metadata(self, item: _T) -> _T:
         """Add metadata to a parsed item."""
-        if isinstance(item, AccountCreate):
+        if isinstance(item, AccountCreate | SecurityCreate):
             if item.properties.get("source") is None:
                 item.properties["source"] = "parser"
         elif hasattr(item, "metadata"):
@@ -89,6 +92,31 @@ class ParsingService:
             session.commit()
             return RootModel[list[AccountPublic]].model_validate(res.all()).root
 
+    def _bulk_insert_securities(
+        self, securities: list[SecurityCreate]
+    ) -> list[Security]:
+        """Bulk insert securities into the database."""
+        # TODO: Implement bulk insert logic
+        security_dicts = (
+            RootModel[list[Security]].model_validate(securities).model_dump()
+        )
+        with get_session() as session:
+            stm = sqlite_upsert(Security)
+            res = session.scalars(
+                stm.on_conflict_do_update(
+                    index_elements=["key"],
+                    set_={
+                        "name": stm.excluded.name,
+                        "type": stm.excluded.type,
+                        "category": stm.excluded.category,
+                        "properties": stm.excluded.properties,
+                    },
+                ).returning(Security),
+                security_dicts,
+            )
+            session.commit()
+            return RootModel[list[Security]].model_validate(res.all()).root
+
     def _parse_accounts(self) -> list[AccountPublic]:
         """Parse and store accounts using the parser."""
         self._report_progress("accounts", 0, -1)
@@ -98,17 +126,17 @@ class ParsingService:
         self._report_progress("accounts", len(inserted_accounts), len(accounts))
         return inserted_accounts
 
-    def _parse_securities(self) -> list[SecurityRead]:
+    def _parse_securities(self) -> list[Security]:
         """Parse and store securities using the parser."""
         self._report_progress("securities", 0, -1)
         securities = list(map(self._add_metadata, self._parser.get_securities()))
         self._report_progress("securities", 0, len(securities))
-        inserted = self._repos.security.insert_multiple_securities(securities)
+        inserted = self._bulk_insert_securities(securities)
         self._report_progress("securities", len(inserted), len(securities))
         return inserted
 
     def _parse_transactions(
-        self, accounts: list[AccountPublic], securities: list[SecurityRead]
+        self, accounts: list[AccountPublic], securities: list[Security]
     ) -> None:
         """Parse and store transactions using the parser."""
         self._report_progress("transactions", 0, -1)

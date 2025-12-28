@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from niveshpy.models.price import PriceDataWrite
-from niveshpy.models.security import SecurityRead
+from niveshpy.models.security import Security
 
 
 @dataclass
@@ -36,7 +36,7 @@ class ProviderInfo:
 class Provider(Protocol):
     """Protocol for price provider classes."""
 
-    def get_priority(self, security: SecurityRead) -> int | None:
+    def get_priority(self, security: Security) -> int | None:
         """Get the priority of this provider for the given security.
 
         Lower numbers = higher priority. Providers are tried in priority order
@@ -48,7 +48,7 @@ class Provider(Protocol):
         """
         ...
 
-    def fetch_latest_price(self, security: SecurityRead) -> PriceDataWrite:
+    def fetch_latest_price(self, security: Security) -> PriceDataWrite:
         """Fetch the latest price for a security.
 
         Args:
@@ -61,7 +61,7 @@ class Provider(Protocol):
 
     def fetch_historical_prices(
         self,
-        security: SecurityRead,
+        security: Security,
         start_date: datetime.date,
         end_date: datetime.date,
     ) -> Iterable[PriceDataWrite]:

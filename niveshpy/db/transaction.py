@@ -18,7 +18,7 @@ from niveshpy.db.query import (
     prepare_query_filters,
 )
 from niveshpy.models.account import AccountPublic
-from niveshpy.models.security import SecurityRead
+from niveshpy.models.security import Security
 from niveshpy.models.transaction import TransactionRead, TransactionWrite
 
 
@@ -174,7 +174,7 @@ class TransactionRepository:
         self,
         transactions: list[TransactionWrite],
         accounts: list[AccountPublic],
-        securities: list[SecurityRead],
+        securities: list[Security],
         date_range: tuple[datetime.date, datetime.date],
     ) -> list[TransactionRead]:
         """Insert multiple transactions into the database."""
@@ -195,7 +195,7 @@ class TransactionRepository:
             cursor.register(
                 "current_securities",
                 pl.from_dicts(
-                    [asdict(sec) for sec in securities],
+                    [sec.model_dump() for sec in securities],
                 ),
             )
             # Delete existing transactions in the date range for the given accounts and securities

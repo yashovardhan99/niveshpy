@@ -9,6 +9,7 @@ from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import get_filters_from_queries_v2
 from niveshpy.database import get_session
 from niveshpy.models.security import (
+    SECURITY_COLUMN_MAPPING,
     Security,
     SecurityCategory,
     SecurityCreate,
@@ -25,11 +26,6 @@ from niveshpy.services.result import (
 class SecurityService:
     """Service handler for the securities command group."""
 
-    _column_mappings: dict[ast.Field, list[str]] = {
-        ast.Field.SECURITY: ["key", "name"],
-        ast.Field.TYPE: ["type", "category"],
-    }
-
     def list_securities(
         self,
         queries: tuple[str, ...],
@@ -38,7 +34,7 @@ class SecurityService:
     ) -> Sequence[Security]:
         """List securities matching the query."""
         where_clause = get_filters_from_queries_v2(
-            queries, ast.Field.SECURITY, self._column_mappings
+            queries, ast.Field.SECURITY, SECURITY_COLUMN_MAPPING
         )
         with get_session() as session:
             return session.exec(

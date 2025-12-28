@@ -10,7 +10,7 @@ from niveshpy.models.account import (
     AccountCreate,
     AccountPublic,
 )
-from niveshpy.models.security import SecurityWrite
+from niveshpy.models.security import SecurityCreate
 from niveshpy.models.transaction import TransactionWrite
 
 
@@ -50,11 +50,11 @@ class Parser(Protocol):
         """
         ...
 
-    def get_securities(self) -> Iterable[SecurityWrite]:
+    def get_securities(self) -> Iterable[SecurityCreate]:
         """Get the list of securities from the parser.
 
         Returns:
-            An iterable of SecurityWrite objects representing the securities found in the data.
+            An iterable of SecurityCreate objects representing the securities found in the data.
         """
         ...
 
