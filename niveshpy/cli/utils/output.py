@@ -167,7 +167,7 @@ def _convert_models_to_rich_table(
         for field_name in ordered_fields:
             fmt = None
             extras: dict = schema[field_name].json_schema_extra or {}  # type: ignore
-            fmt = extras.get("style") if callable(extras.get("style")) else None
+            fmt = extras.get("formatter") if callable(extras.get("formatter")) else None
             value = getattr(item, field_name)
             row.append(mapper(value, fmt))
         table.add_row(*row)

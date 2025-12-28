@@ -3,7 +3,9 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum, auto
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from sqlmodel import JSON, Column, Field, SQLModel
 
 if TYPE_CHECKING:
     from niveshpy.cli.utils import output
@@ -18,17 +20,6 @@ class SecurityType(StrEnum):
     MUTUAL_FUND = auto()
     OTHER = auto()
 
-    @staticmethod
-    def rich_format(security_type: str) -> str:
-        """Format the security type for display."""
-        return {
-            SecurityType.STOCK.value: "[white]Stock",
-            SecurityType.BOND.value: "[cyan]Bond",
-            SecurityType.ETF.value: "[yellow]ETF",
-            SecurityType.MUTUAL_FUND.value: "[green]Mutual Fund",
-            SecurityType.OTHER.value: "[dim]Other",
-        }.get(security_type, "[reverse]Unknown")
-
 
 class SecurityCategory(StrEnum):
     """Enum for security categories."""
@@ -39,16 +30,74 @@ class SecurityCategory(StrEnum):
     REAL_ESTATE = auto()
     OTHER = auto()
 
-    @staticmethod
-    def rich_format(category: str) -> str:
-        """Format the security category for display."""
-        return {
-            SecurityCategory.EQUITY.value: "[white]Equity",
-            SecurityCategory.DEBT.value: "[cyan]Debt",
-            SecurityCategory.COMMODITY.value: "[yellow]Commodity",
-            SecurityCategory.REAL_ESTATE.value: "[bright_red]Real Estate",
-            SecurityCategory.OTHER.value: "[dim]Other",
-        }.get(category, "[reverse]Unknown")
+
+type_format_map = {
+    SecurityType.STOCK.value: "[white]Stock",
+    SecurityType.BOND.value: "[cyan]Bond",
+    SecurityType.ETF.value: "[yellow]ETF",
+    SecurityType.MUTUAL_FUND.value: "[green]Mutual Fund",
+    SecurityType.OTHER.value: "[dim]Other",
+}
+
+category_format_map = {
+    SecurityCategory.EQUITY.value: "[white]Equity",
+    SecurityCategory.DEBT.value: "[cyan]Debt",
+    SecurityCategory.COMMODITY.value: "[yellow]Commodity",
+    SecurityCategory.REAL_ESTATE.value: "[bright_red]Real Estate",
+    SecurityCategory.OTHER.value: "[dim]Other",
+}
+
+
+class SecurityBase(SQLModel):
+    """Base model for securities."""
+
+    key: str = Field(
+        primary_key=True,
+        schema_extra={
+            "json_schema_extra": {"style": "green", "order": 1, "justify": "right"}
+        },
+    )
+    name: str = Field(schema_extra={"json_schema_extra": {"style": "bold", "order": 2}})
+    type: SecurityType = Field(
+        schema_extra={
+            "json_schema_extra": {
+                "order": 3,
+                "formatter": lambda type: type_format_map.get(type, "[reverse]Unknown"),
+            }
+        }
+    )
+    category: SecurityCategory = Field(
+        schema_extra={
+            "json_schema_extra": {
+                "order": 4,
+                "formatter": lambda category: category_format_map.get(
+                    category, "[reverse]Unknown"
+                ),
+            }
+        }
+    )
+    properties: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON),
+        schema_extra={"json_schema_extra": {"style": "dim", "order": 6}},
+    )
+
+    def __init_subclass__(cls, **kwargs):
+        """Ensure subclasses inherit schema extra metadata."""
+        return super().__init_subclass__(**kwargs)
+
+
+class SecurityCreate(SecurityBase):
+    """Model for creating a new security."""
+
+
+class Security(SecurityBase, table=True):
+    """Database model for securities."""
+
+    created: datetime = Field(
+        default_factory=datetime.now,
+        schema_extra={"json_schema_extra": {"style": "dim", "order": 5}},
+    )
 
 
 @dataclass
@@ -68,8 +117,8 @@ class SecurityRead:
         return [
             "green",
             "bold",
-            SecurityType.rich_format,
-            SecurityCategory.rich_format,
+            None,
+            None,
             "dim",
             "dim",
         ]

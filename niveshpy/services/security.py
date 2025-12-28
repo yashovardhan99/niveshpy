@@ -1,26 +1,21 @@
 """Security service for managing securities."""
 
-import itertools
-from collections.abc import Iterable
+from collections.abc import Sequence
 
-import polars as pl
+from sqlmodel import select
 
-from niveshpy.core.logging import logger
+from niveshpy.core import logging
 from niveshpy.core.query import ast
-from niveshpy.core.query.parser import QueryParser
-from niveshpy.core.query.prepare import prepare_filters
-from niveshpy.core.query.tokenizer import QueryLexer
-from niveshpy.db.query import QueryOptions, ResultFormat
-from niveshpy.db.repositories import RepositoryContainer
+from niveshpy.core.query.prepare import get_filters_from_queries_v2
+from niveshpy.database import get_session
 from niveshpy.models.security import (
+    Security,
     SecurityCategory,
-    SecurityRead,
+    SecurityCreate,
     SecurityType,
-    SecurityWrite,
 )
 from niveshpy.services.result import (
     InsertResult,
-    ListResult,
     MergeAction,
     ResolutionStatus,
     SearchResolution,
@@ -30,42 +25,25 @@ from niveshpy.services.result import (
 class SecurityService:
     """Service handler for the securities command group."""
 
-    def __init__(self, repos: RepositoryContainer):
-        """Initialize the SecurityService with repositories."""
-        self._repos = repos
+    _column_mappings: dict[ast.Field, list[str]] = {
+        ast.Field.SECURITY: ["key", "name"],
+        ast.Field.TYPE: ["type", "category"],
+    }
 
     def list_securities(
         self,
         queries: tuple[str, ...],
         limit: int = 30,
-    ) -> ListResult[pl.DataFrame]:
+        offset: int = 0,
+    ) -> Sequence[Security]:
         """List securities matching the query."""
-        stripped_queries = map(str.strip, queries)
-        lexers = map(QueryLexer, stripped_queries)
-        parsers = map(QueryParser, lexers)
-        filters: Iterable[ast.FilterNode] = itertools.chain.from_iterable(
-            map(QueryParser.parse, parsers)
+        where_clause = get_filters_from_queries_v2(
+            queries, ast.Field.SECURITY, self._column_mappings
         )
-        filters = prepare_filters(filters, ast.Field.SECURITY)
-        logger.debug("Prepared filters: %s", filters)
-
-        options = QueryOptions(
-            filters=filters,
-            limit=limit,
-        )
-
-        if limit < 1:
-            logger.debug("Received non-positive limit: %d", limit)
-            raise ValueError("Limit must be positive.")
-
-        N = self._repos.security.count_securities(options)
-        if N == 0:
-            return ListResult(pl.DataFrame(), 0)
-
-        res = self._repos.security.search_securities(
-            options, ResultFormat.POLARS
-        ).rename({"created_at": "created"})
-        return ListResult(res, N)
+        with get_session() as session:
+            return session.exec(
+                select(Security).where(*where_clause).offset(offset).limit(limit)
+            ).all()
 
     def add_security(
         self,
@@ -74,7 +52,7 @@ class SecurityService:
         stype: SecurityType,
         category: SecurityCategory,
         source: str | None = None,
-    ) -> InsertResult[SecurityRead]:
+    ) -> InsertResult[Security]:
         """Add a single security to the database."""
         if not key.strip() or not name.strip():
             raise ValueError("Security key and name cannot be empty.")
@@ -84,32 +62,61 @@ class SecurityService:
             raise ValueError(f"Invalid security category: {category}")
 
         if source:
-            metadata = {"source": source}
+            properties = {"source": source}
         else:
-            metadata = {}
+            properties = {}
 
-        security = SecurityWrite(
-            key.strip(), name.strip(), stype, category, metadata=metadata
+        security = SecurityCreate(
+            key=key.strip(),
+            name=name.strip(),
+            type=stype,
+            category=category,
+            properties=properties,
         )
 
-        result = self._repos.security.insert_single_security(security)
-        try:
-            if result is None:
-                raise ValueError("Action could not be determined.")
-            return InsertResult(MergeAction(result[0]), result[1])
-        except ValueError as e:
-            raise ValueError("Failed to add security.") from e
+        with get_session() as session:
+            # Check existing
+            existing = session.get(Security, security.key)
+
+            if existing is not None:
+                logging.logger.debug("Updating existing security: %s", existing)
+
+                # Update existing security
+                existing.name = security.name
+                existing.type = security.type
+                existing.category = security.category
+                existing.properties = security.properties
+                db_security = existing
+            else:
+                db_security = Security.model_validate(security)
+
+            # Insert or update security
+            session.add(db_security)
+            session.commit()
+
+            session.refresh(db_security)
+
+            if existing is not None:
+                return InsertResult(MergeAction.UPDATE, db_security)
+            else:
+                return InsertResult(MergeAction.INSERT, db_security)
 
     def delete_security(self, key: str) -> bool:
         """Delete a security by its key.
 
         Returns True if a security was deleted, False otherwise.
         """
-        return self._repos.security.delete_security(key.strip()) is not None
+        with get_session() as session:
+            security = session.get(Security, key)
+            if security is None:
+                return False
+            session.delete(security)
+            session.commit()
+            return True
 
     def resolve_security_key(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
-    ) -> SearchResolution[SecurityRead]:
+    ) -> SearchResolution[Security]:
         """Resolve a security key to a Security object if it exists.
 
         Logic:
@@ -127,10 +134,7 @@ class SecurityService:
             if not allow_ambiguous:
                 return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
 
-            # Return top `limit` securities as candidates
-            options = QueryOptions(limit=limit)
-            res = self._repos.security.search_securities(options, ResultFormat.LIST)
-            securities = [SecurityRead(*row) for row in res] if res else []
+            securities = self.list_securities(queries, limit=limit)
             return SearchResolution(
                 status=ResolutionStatus.AMBIGUOUS,
                 candidates=securities,
@@ -138,8 +142,9 @@ class SecurityService:
             )
 
         # First, try to find an exact match by key
-        exact_security = self._repos.security.get_security(queries[0].strip())
-        if exact_security:
+        with get_session() as session:
+            exact_security = session.get(Security, queries[0].strip())
+        if exact_security is not None:
             return SearchResolution(
                 status=ResolutionStatus.EXACT,
                 exact=exact_security,
@@ -151,28 +156,19 @@ class SecurityService:
             return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
 
         # Perform a text search for candidates
-        stripped_queries = map(str.strip, queries)
-        lexers = map(QueryLexer, stripped_queries)
-        parsers = map(QueryParser, lexers)
-        filters: Iterable[ast.FilterNode] = itertools.chain.from_iterable(
-            map(QueryParser.parse, parsers)
-        )
-        filters = prepare_filters(filters, ast.Field.SECURITY)
-
-        options = QueryOptions(filters=filters, limit=limit)
-        res = self._repos.security.search_securities(options, ResultFormat.LIST)
-        if not res:
+        securities = self.list_securities(queries, limit=limit)
+        if not securities:
             return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
-        elif len(res) == 1:
+        elif len(securities) == 1:
             return SearchResolution(
                 status=ResolutionStatus.EXACT,
-                exact=SecurityRead(*res[0]),
+                exact=securities[0],
                 queries=queries,
             )
         else:
             return SearchResolution(
                 status=ResolutionStatus.AMBIGUOUS,
-                candidates=[SecurityRead(*row) for row in res],
+                candidates=securities,
                 queries=queries,
             )
             # If we reach here, it means we have ambiguous results

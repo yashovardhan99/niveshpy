@@ -30,7 +30,7 @@ class Application:
     def security(self) -> SecurityService:
         """Return the security service."""
         if self._security is None:
-            self._security = SecurityService(self._repos)
+            self._security = SecurityService()
         return self._security
 
     @property
