@@ -159,7 +159,7 @@ def sync_prices(
     state = ctx.ensure_object(AppState)
 
     progress_bar = output.get_progress_bar()
-    progress_tasks: MutableMapping[str, rich.progress.TaskID] = dict()
+    progress_tasks: MutableMapping[str, rich.progress.TaskID] = {}
 
     # Validate provider key (if provided)
     if provider is not None:
