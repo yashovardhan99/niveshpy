@@ -30,7 +30,7 @@ def main(*args) -> int:
             elif arg.startswith("v"):
                 version_no = arg[1:]
                 break
-    logger.info("Updating changelog for version number:", version_no)
+    logger.info("Updating changelog for version number: %s", version_no)
 
     if not version_no:
         raise ValueError("Version number must be specified in the format 'v<version>'")

@@ -6,8 +6,6 @@ from dataclasses import dataclass
 class BaseMessage:
     """Base model for messages."""
 
-    pass
-
 
 @dataclass
 class Message(BaseMessage):

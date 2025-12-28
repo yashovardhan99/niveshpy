@@ -92,15 +92,19 @@ dev = [
 
 [tool.ruff.lint]
 select = [
-    "E",  # PyCodestyle errors
-    "W",  # PyCodestyle warnings
-    "F",  # PyFlakes
-    "D",  # Docstrings
-    "B",  # Bugbear
-    "Q",  # Quotes
-    "UP", # PyUpgrade
-    "I",  # isort
-    "C4", # Flake8-comprehensions
+    "E",   # PyCodestyle errors
+    "W",   # PyCodestyle warnings
+    "F",   # PyFlakes
+    "D",   # Docstrings
+    "B",   # Bugbear
+    "Q",   # Quotes
+    "UP",  # PyUpgrade
+    "I",   # isort
+    "C4",  # Flake8-comprehensions
+    "G",   # logging-format
+    "ISC", # Implicit string concatenation
+    "PIE", # flake8-pie
+    "PLE", # Pylint errors
 ]
 ignore = ["E501"] # Line too long
 

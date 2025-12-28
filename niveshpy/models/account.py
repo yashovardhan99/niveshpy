@@ -31,8 +31,6 @@ class AccountBase(SQLModel):
 class AccountCreate(AccountBase):
     """Model for creating a new account."""
 
-    pass
-
 
 class Account(AccountBase, table=True):
     """Database model for investment accounts."""

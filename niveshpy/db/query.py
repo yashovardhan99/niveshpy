@@ -33,8 +33,6 @@ DEFAULT_QUERY_OPTIONS = QueryOptions()
 class UnmappedFieldError(ValueError):
     """Error raised when a field is not mapped to a database column."""
 
-    pass
-
 
 def prepare_where_clause(operator: ast.Operator, column: str) -> str:
     """Prepare a SQL WHERE clause based on the operator and column.

@@ -18,8 +18,6 @@ _db_path = (app_path / "niveshpy.db").resolve()
 class DatabaseError(Exception):
     """Exception for database-related errors."""
 
-    ...
-
 
 class Database:
     """Manages a DuckDB connection lifecycle."""

@@ -4,13 +4,9 @@
 class NiveshPyError(Exception):
     """Base exception class for NiveshPy errors."""
 
-    pass
-
 
 class PriceProviderError(NiveshPyError):
     """Base class for errors related to price providers."""
-
-    pass
 
 
 class PriceNotFoundError(PriceProviderError):
@@ -33,8 +29,6 @@ class InvalidSecurityError(NiveshPyError):
     If it is not clear whether the security is invalid or just temporarily unsupported,
     consider using PriceNotFoundError instead.
     """
-
-    pass
 
 
 class ProviderConfigurationError(PriceProviderError):
