@@ -6,7 +6,7 @@ from pathlib import Path
 
 import casparser  # type: ignore
 
-from niveshpy.models.account import AccountCreate, AccountRead
+from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.models.parser import ParserInfo
 from niveshpy.models.security import (
     SecurityCategory,
@@ -67,7 +67,7 @@ class CASParser:
                     )
 
     def get_transactions(
-        self, accounts: Iterable[AccountRead]
+        self, accounts: Iterable[AccountPublic]
     ) -> Iterable[TransactionWrite]:
         """Get the list of transactions from the CAS data."""
         accounts_map = {(acc.name, acc.institution): acc.id for acc in accounts}

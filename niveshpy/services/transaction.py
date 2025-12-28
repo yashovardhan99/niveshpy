@@ -6,14 +6,17 @@ import itertools
 from collections.abc import Iterable
 
 import polars as pl
+from sqlmodel import select
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.parser import QueryParser
 from niveshpy.core.query.prepare import prepare_filters
 from niveshpy.core.query.tokenizer import QueryLexer
+from niveshpy.database import session
 from niveshpy.db.query import QueryOptions, ResultFormat
 from niveshpy.db.repositories import RepositoryContainer
+from niveshpy.models.account import Account
 from niveshpy.models.transaction import (
     TransactionRead,
     TransactionType,
@@ -84,7 +87,8 @@ class TransactionService:
             metadata = {}
 
         # Validate account and security exists
-        account = self._repos.account.get_account(account_id)
+        with session() as sql_session:
+            account = sql_session.get(Account, account_id)
         if account is None:
             raise ValueError(f"Account with ID {account_id} does not exist.")
 
@@ -110,11 +114,13 @@ class TransactionService:
 
     def get_account_choices(self) -> list[dict[str, str | int]]:
         """Get a list of accounts for selection."""
-        accounts = self._repos.account.search_accounts(
-            QueryOptions(limit=10_000), ResultFormat.LIST
-        )
+        with session() as sql_session:
+            accounts = sql_session.exec(select(Account).limit(10_000)).all()
         return [
-            {"value": account[0], "name": f"{account[0]}: {account[1]} ({account[2]})"}
+            {
+                "value": str(account.id),
+                "name": f"{account.id}: {account.name} ({account.institution})",
+            }
             for account in accounts
         ]
 
