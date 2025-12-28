@@ -39,6 +39,6 @@ def initialize():
     logging.logger.info("Custom SQLite functions added successfully.")
 
 
-def session() -> Session:
-    """Create a new database session."""
+def get_session() -> Session:
+    """Obtain a new database session."""
     return Session(_engine)

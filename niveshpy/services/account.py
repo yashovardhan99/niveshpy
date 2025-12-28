@@ -9,7 +9,7 @@ from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import (
     get_filters_from_queries_v2,
 )
-from niveshpy.database import session
+from niveshpy.database import get_session
 from niveshpy.models.account import Account, AccountCreate, AccountPublic
 from niveshpy.services.result import (
     InsertResult,
@@ -34,8 +34,8 @@ class AccountService:
             queries, ast.Field.ACCOUNT, self._column_mappings
         )
 
-        with session() as sql_session:
-            accounts = sql_session.exec(
+        with get_session() as session:
+            accounts = session.exec(
                 select(Account).where(*where_clause).offset(offset).limit(limit)
             ).all()
             return list(map(AccountPublic.model_validate, accounts))
@@ -58,17 +58,17 @@ class AccountService:
             (Account.name == account.name)
             & (Account.institution == account.institution)
         )
-        with session() as sql_session:
-            existing_account = sql_session.exec(query).first()
+        with get_session() as session:
+            existing_account = session.exec(query).first()
             if existing_account is not None:
                 logger.debug("Account already exists: %s", existing_account)
                 return InsertResult(MergeAction.NOTHING, existing_account)
 
             # Otherwise, insert new account
             new_account = Account.model_validate(account)
-            sql_session.add(new_account)
-            sql_session.commit()
-            sql_session.refresh(new_account)
+            session.add(new_account)
+            session.commit()
+            session.refresh(new_account)
             logger.debug("Inserted new account with ID: %s", new_account.id)
             return InsertResult(MergeAction.INSERT, new_account)
 
@@ -94,9 +94,9 @@ class AccountService:
 
             # Return top `limit` accounts as candidates
             query = select(Account).limit(limit)
-            with session() as sql_session:
+            with get_session() as session:
                 accounts = list(
-                    map(AccountPublic.model_validate, sql_session.exec(query).all())
+                    map(AccountPublic.model_validate, session.exec(query).all())
                 )
             return SearchResolution(
                 status=ResolutionStatus.AMBIGUOUS,
@@ -107,8 +107,8 @@ class AccountService:
         # First, try to find an exact match by id
         account_id = int(queries[0].strip()) if queries[0].strip().isdigit() else None
         if account_id is not None:
-            with session() as sql_session:
-                exact_account = sql_session.get(Account, account_id)
+            with get_session() as session:
+                exact_account = session.get(Account, account_id)
             if exact_account:
                 return SearchResolution(
                     status=ResolutionStatus.EXACT,
@@ -140,12 +140,12 @@ class AccountService:
 
     def delete_account(self, account_id: int) -> bool:
         """Delete an account."""
-        with session() as sql_session:
-            account = sql_session.get(Account, account_id)
+        with get_session() as session:
+            account = session.get(Account, account_id)
             if account is None:
                 logger.debug("Account not found for deletion: %s", account_id)
                 return False
-            sql_session.delete(account)
-            sql_session.commit()
+            session.delete(account)
+            session.commit()
             logger.debug("Deleted account with ID: %s", account_id)
             return True

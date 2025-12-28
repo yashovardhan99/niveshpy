@@ -13,7 +13,7 @@ from niveshpy.core.query import ast
 from niveshpy.core.query.parser import QueryParser
 from niveshpy.core.query.prepare import prepare_filters
 from niveshpy.core.query.tokenizer import QueryLexer
-from niveshpy.database import session
+from niveshpy.database import get_session
 from niveshpy.db.query import QueryOptions, ResultFormat
 from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.account import Account
@@ -87,8 +87,8 @@ class TransactionService:
             metadata = {}
 
         # Validate account and security exists
-        with session() as sql_session:
-            account = sql_session.get(Account, account_id)
+        with get_session() as session:
+            account = session.get(Account, account_id)
         if account is None:
             raise ValueError(f"Account with ID {account_id} does not exist.")
 
@@ -114,8 +114,8 @@ class TransactionService:
 
     def get_account_choices(self) -> list[dict[str, str | int]]:
         """Get a list of accounts for selection."""
-        with session() as sql_session:
-            accounts = sql_session.exec(select(Account).limit(10_000)).all()
+        with get_session() as session:
+            accounts = session.exec(select(Account).limit(10_000)).all()
         return [
             {
                 "value": str(account.id),

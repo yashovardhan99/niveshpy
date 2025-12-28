@@ -8,7 +8,7 @@ from typing import TypeVar
 from pydantic import RootModel
 from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
 
-from niveshpy.database import session
+from niveshpy.database import get_session
 from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.account import (
     Account,
@@ -77,16 +77,16 @@ class ParsingService:
         """Bulk insert accounts into the database."""
         # TODO: Implement bulk insert logic
         account_dicts = RootModel[list[Account]].model_validate(accounts).model_dump()
-        with session() as sql_session:
+        with get_session() as session:
             stm = sqlite_upsert(Account)
-            res = sql_session.scalars(
+            res = session.scalars(
                 stm.on_conflict_do_update(
                     index_elements=["name", "institution"],
                     set_={"properties": stm.excluded.properties},
                 ).returning(Account),
                 account_dicts,
             )
-            sql_session.commit()
+            session.commit()
             return RootModel[list[AccountPublic]].model_validate(res.all()).root
 
     def _parse_accounts(self) -> list[AccountPublic]:
