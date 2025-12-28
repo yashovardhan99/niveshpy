@@ -122,7 +122,7 @@ class SecurityRepository:
         """
         with self._db.cursor() as cursor:
             res = cursor.execute(
-                f"""INSERT OR REPLACE INTO {self._table_name} 
+                f"""INSERT OR REPLACE INTO {self._table_name}
                 (key, name, type, category, metadata)
                 VALUES (?, ?, ?, ?, ?)
                 RETURNING merge_action, *;
@@ -156,7 +156,7 @@ class SecurityRepository:
                 ON target.key = new.key
                 WHEN MATCHED THEN UPDATE BY NAME
                 WHEN NOT MATCHED THEN INSERT BY NAME
-                
+
                 RETURNING *;
                 """
             )

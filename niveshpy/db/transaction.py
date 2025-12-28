@@ -49,7 +49,7 @@ class TransactionRepository:
         """Count the number of transactions matching the query options."""
         query = f"""
         SELECT COUNT(*) FROM {self._table_name} t
-        INNER JOIN securities ON t.security_key = securities.key 
+        INNER JOIN securities ON t.security_key = securities.key
         INNER JOIN accounts ON t.account_id = accounts.id
         """
         if options.filters:
@@ -89,12 +89,12 @@ class TransactionRepository:
     ) -> pl.DataFrame | Iterable[TransactionRead]:
         """Search for transactions matching the query options."""
         query = f"""
-        SELECT t.id, t.transaction_date, t.type, t.description, t.amount, t.units, 
+        SELECT t.id, t.transaction_date, t.type, t.description, t.amount, t.units,
         concat(securities.name, ' (', securities.key, ')') AS security,
         concat(accounts.name, ' (', accounts.institution, ')') AS account,
         t.created_at AS created, t.metadata
         FROM {self._table_name} t
-        INNER JOIN securities ON t.security_key = securities.key 
+        INNER JOIN securities ON t.security_key = securities.key
         INNER JOIN accounts ON t.account_id = accounts.id
         """
 
@@ -124,12 +124,12 @@ class TransactionRepository:
     def get_transaction(self, transaction_id: int) -> TransactionRead | None:
         """Get a single transaction by its ID."""
         query = f"""
-        SELECT t.id, t.transaction_date, t.type, t.description, t.amount, t.units, 
+        SELECT t.id, t.transaction_date, t.type, t.description, t.amount, t.units,
         concat(securities.name, ' (', securities.key, ')') AS security,
         concat(accounts.name, ' (', accounts.institution, ')') AS account,
         t.created_at AS created, t.metadata
         FROM {self._table_name} t
-        INNER JOIN securities ON t.security_key = securities.key 
+        INNER JOIN securities ON t.security_key = securities.key
         INNER JOIN accounts ON t.account_id = accounts.id
         WHERE t.id = ?;
         """
@@ -146,7 +146,7 @@ class TransactionRepository:
     def insert_single_transaction(self, transaction: TransactionWrite) -> int | None:
         """Insert a single transaction into the database."""
         query = f"""
-        INSERT INTO {self._table_name} 
+        INSERT INTO {self._table_name}
         (transaction_date, type, description, amount, units, account_id, security_key, metadata)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING id;
@@ -229,7 +229,7 @@ class TransactionRepository:
 
             # Insert new transactions
             insert_query = f"""
-            INSERT INTO {self._table_name} 
+            INSERT INTO {self._table_name}
             (transaction_date, type, description, amount, units, account_id, security_key, metadata)
             SELECT nt.transaction_date, nt.type, nt.description, nt.amount, nt.units,
             nt.account_id, nt.security_key, nt.metadata

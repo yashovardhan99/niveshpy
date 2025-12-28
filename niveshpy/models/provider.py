@@ -27,7 +27,7 @@ class ProviderInfo:
 
     max_concurrent_requests: int = field(default=0)
     """Maximum number of concurrent requests allowed (0 = no limit).
-    
+
     Currently not enforced by the application. It may be used in the future to
     limit concurrency when fetching data from providers that have rate limits.
     """

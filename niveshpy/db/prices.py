@@ -100,9 +100,9 @@ class PriceRepository:
         If no date filter is provided, returns the latest price for each security.
         """
         base_query = f"""
-        SELECT 
+        SELECT
             concat(securities.name, ' (', securities.key, ')') AS security,
-            p.price_date AS date, p.open, p.high, p.low, p.close, 
+            p.price_date AS date, p.open, p.high, p.low, p.close,
             p.created_at AS created, p.metadata
         FROM {self._table_name} p
         INNER JOIN securities ON p.security_key = securities.key
@@ -140,7 +140,7 @@ class PriceRepository:
     def upsert_price(self, price_data: PriceDataWrite) -> str | None:
         """Insert or update a price record in the database."""
         query = f"""
-                INSERT OR REPLACE INTO {self._table_name} 
+                INSERT OR REPLACE INTO {self._table_name}
                 (security_key, price_date, open, high, low, close, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 RETURNING merge_action;
@@ -189,7 +189,7 @@ class PriceRepository:
         """
 
         insert_query = f"""
-        INSERT INTO {self._table_name} 
+        INSERT INTO {self._table_name}
         (security_key, price_date, open, high, low, close, metadata)
         SELECT * FROM new_prices;
         """
