@@ -154,7 +154,7 @@ def prepare_expression(filter: FilterNode, column: ColumnClause) -> ColumnElemen
 def get_filters_from_queries_v2(
     queries: tuple[str, ...],
     default_field: Field,
-    column_mappings: dict[Field, list[str]],
+    column_mappings: dict[Field, list],
 ) -> list[ColumnElement[bool]]:
     """Convert query strings into a combined SQLAlchemy filter expression.
 
@@ -176,7 +176,9 @@ def get_filters_from_queries_v2(
 
         col_expressions: list[ColumnElement[bool]] = []
         for col in cols:
-            col_expressions.append(prepare_expression(filter, column(col)))
+            col_expressions.append(
+                prepare_expression(filter, column(col) if isinstance(col, str) else col)
+            )
         expressions.append(or_(*col_expressions))
 
     return expressions

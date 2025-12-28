@@ -14,7 +14,9 @@ from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.db.database import DatabaseError
 from niveshpy.models.transaction import (
-    TransactionRead,
+    TransactionDisplay,
+    TransactionPublic,
+    TransactionPublicWithRelations,
     TransactionType,
 )
 from niveshpy.services.result import ResolutionStatus
@@ -32,6 +34,7 @@ def transactions(ctx: click.Context) -> None:
 @command("list")
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
 @flags.limit("accounts", default=30)
+@flags.offset("accounts", default=0)
 @flags.output("format")
 @flags.common_options
 @click.pass_context
@@ -39,6 +42,7 @@ def show(
     ctx: click.Context,
     queries: tuple[str, ...],
     limit: int,
+    offset: int,
     format: output.OutputFormat,
 ) -> None:
     """List all transactions.
@@ -50,8 +54,8 @@ def show(
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading transactions..."):
         try:
-            result = state.app.transaction.list_transactions(
-                queries=queries, limit=limit
+            transactions = state.app.transaction.list_transactions(
+                queries=queries, limit=limit, offset=offset
             )
         except DatabaseError as e:
             logger.critical(e, exc_info=True)
@@ -60,19 +64,37 @@ def show(
             logger.error(e, exc_info=True)
             ctx.exit(1)
 
-    if result.total == 0:
+    if len(transactions) == 0:
         msg = "No transactions " + (
             "match your query." if queries else "found in the database."
         )
         output.display_warning(msg)
     else:
-        output.display_dataframe(
-            result.data,
+        fmt_cls = (
+            TransactionPublicWithRelations
+            if format == output.OutputFormat.JSON
+            else (
+                TransactionPublic
+                if format == output.OutputFormat.CSV
+                else TransactionDisplay
+            )
+        )
+
+        transformed_transactions = [
+            fmt_cls.model_validate(transaction) for transaction in transactions
+        ]
+
+        output.display_list(
+            fmt_cls,
+            transformed_transactions,
             format,
-            TransactionRead.rich_format_map(),
-            extra_message=f"Showing {limit:,} of {result.total:,} transactions."
-            if result.total > limit
-            else None,
+            extra_message=f"Showing first {limit:,} transactions."
+            if len(transactions) == limit and offset == 0
+            else (
+                f"Showing transactions {offset + 1:,} to {offset + len(transactions):,}."
+                if offset > 0
+                else None
+            ),
         )
 
 
@@ -158,7 +180,7 @@ def add(
                 source="cli",
             )
             output.display_success(
-                f"Transaction added successfully with ID: {result.data}"
+                f"Transaction added successfully with ID: {result.id}"
             )
         except DatabaseError as e:
             logger.critical(e, exc_info=True)
@@ -264,7 +286,7 @@ def add(
                     source="cli",
                 )
                 output.display_success(
-                    f"Transaction added successfully with ID: {result.data}"
+                    f"Transaction added successfully with ID: {result.id}"
                 )
             except DatabaseError as e:
                 logger.critical(e, exc_info=True)

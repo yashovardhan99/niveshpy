@@ -2,31 +2,27 @@
 
 import datetime
 import decimal
-import itertools
-from collections.abc import Iterable
+from collections.abc import Sequence
 
-import polars as pl
+from pydantic import RootModel
 from sqlmodel import select
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
-from niveshpy.core.query.parser import QueryParser
-from niveshpy.core.query.prepare import prepare_filters
-from niveshpy.core.query.tokenizer import QueryLexer
+from niveshpy.core.query.prepare import get_filters_from_queries_v2
 from niveshpy.database import get_session
-from niveshpy.db.query import QueryOptions, ResultFormat
 from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.account import Account
 from niveshpy.models.security import Security
 from niveshpy.models.transaction import (
-    TransactionRead,
+    TRANSACTION_COLUMN_MAPPING,
+    Transaction,
+    TransactionCreate,
+    TransactionDisplay,
+    TransactionPublicWithRelations,
     TransactionType,
-    TransactionWrite,
 )
 from niveshpy.services.result import (
-    InsertResult,
-    ListResult,
-    MergeAction,
     ResolutionStatus,
     SearchResolution,
 )
@@ -43,32 +39,30 @@ class TransactionService:
         self,
         queries: tuple[str, ...],
         limit: int = 30,
-    ) -> ListResult[pl.DataFrame]:
+        offset: int = 0,
+    ) -> Sequence[TransactionPublicWithRelations]:
         """List transactions matching the query."""
         if limit < 1:
             logger.debug("Received non-positive limit: %d", limit)
             raise ValueError("Limit must be positive.")
 
-        stripped_queries = map(str.strip, queries)
-        lexers = map(QueryLexer, stripped_queries)
-        parsers = map(QueryParser, lexers)
-        filters: Iterable[ast.FilterNode] = itertools.chain.from_iterable(
-            map(QueryParser.parse, parsers)
+        where_clause = get_filters_from_queries_v2(
+            queries, ast.Field.SECURITY, TRANSACTION_COLUMN_MAPPING
         )
-        filters = prepare_filters(filters, ast.Field.SECURITY)
-        logger.debug("Prepared filters: %s", filters)
-
-        options = QueryOptions(
-            filters=filters,
-            limit=limit,
-        )
-
-        N = self._repos.transaction.count_transactions(options)
-        if N == 0:
-            return ListResult(pl.DataFrame(), 0)
-
-        res = self._repos.transaction.search_transactions(options, ResultFormat.POLARS)
-        return ListResult(res, N)
+        with get_session() as session:
+            transactions = session.exec(
+                select(Transaction)
+                .join(Security)
+                .join(Account)
+                .where(*where_clause)
+                .offset(offset)
+                .limit(limit)
+            ).all()
+            return (
+                RootModel[Sequence[TransactionPublicWithRelations]]
+                .model_validate(transactions)
+                .root
+            )
 
     def add_transaction(
         self,
@@ -80,12 +74,12 @@ class TransactionService:
         account_id: int,
         security_key: str,
         source: str | None = None,
-    ) -> InsertResult[int]:
+    ) -> Transaction:
         """Add a single transaction to the database."""
         if source:
-            metadata = {"source": source}
+            properties = {"source": source}
         else:
-            metadata = {}
+            properties = {}
 
         # Validate account and security exists
         with get_session() as session:
@@ -96,21 +90,24 @@ class TransactionService:
         if security is None:
             raise ValueError(f"Security with key {security_key} does not exist.")
 
-        transaction = TransactionWrite(
-            transaction_date=transaction_date,
-            type=transaction_type,
-            description=description,
-            amount=amount,
-            units=units,
-            account_id=account_id,
-            security_key=security_key,
-            metadata=metadata,
+        transaction = Transaction.model_validate(
+            TransactionCreate(
+                transaction_date=transaction_date,
+                type=transaction_type,
+                description=description,
+                amount=amount,
+                units=units,
+                account_id=account_id,
+                security_key=security_key,
+                properties=properties,
+            )
         )
 
-        txn_id = self._repos.transaction.insert_single_transaction(transaction)
-        if txn_id is None:
-            raise RuntimeError("Failed to insert new transaction.")
-        return InsertResult(MergeAction.INSERT, txn_id)
+        with get_session() as session:
+            session.add(transaction)
+            session.commit()
+            session.refresh(transaction)
+        return transaction
 
     def get_account_choices(self) -> list[dict[str, str | int]]:
         """Get a list of accounts for selection."""
@@ -135,7 +132,7 @@ class TransactionService:
 
     def resolve_transaction(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
-    ) -> SearchResolution[TransactionRead]:
+    ) -> SearchResolution[TransactionDisplay]:
         """Resolve a query to a Transaction object if it exists.
 
         Logic:
@@ -154,13 +151,14 @@ class TransactionService:
                 return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
 
             # Return top `limit` transactions as candidates
-            options = QueryOptions(limit=limit)
-            transactions = self._repos.transaction.search_transactions(
-                options, ResultFormat.LIST
-            )
+            transactions = self.list_transactions(queries, limit=limit)
             return SearchResolution(
                 status=ResolutionStatus.AMBIGUOUS,
-                candidates=list(transactions),
+                candidates=list(
+                    RootModel[Sequence[TransactionDisplay]]
+                    .model_validate(transactions)
+                    .root
+                ),
                 queries=queries,
             )
 
@@ -169,11 +167,12 @@ class TransactionService:
             int(queries[0].strip()) if queries[0].strip().isdigit() else None
         )
         if transaction_id is not None:
-            exact_transaction = self._repos.transaction.get_transaction(transaction_id)
+            with get_session() as session:
+                exact_transaction = session.get(Transaction, transaction_id)
             if exact_transaction:
                 return SearchResolution(
                     status=ResolutionStatus.EXACT,
-                    exact=exact_transaction,
+                    exact=TransactionDisplay.model_validate(exact_transaction),
                     queries=queries,
                 )
 
@@ -182,34 +181,35 @@ class TransactionService:
             return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
 
         # Perform a text search for candidates
-        stripped_queries = map(str.strip, queries)
-        lexers = map(QueryLexer, stripped_queries)
-        parsers = map(QueryParser, lexers)
-        filters: Iterable[ast.FilterNode] = itertools.chain.from_iterable(
-            map(QueryParser.parse, parsers)
-        )
-        filters = prepare_filters(filters, ast.Field.SECURITY)
-
-        options = QueryOptions(filters=filters, limit=limit)
-        res = list(
-            self._repos.transaction.search_transactions(options, ResultFormat.LIST)
-        )
+        res = self.list_transactions(queries, limit=limit)
         if not res:
             return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
         elif len(res) == 1:
             return SearchResolution(
                 status=ResolutionStatus.EXACT,
-                exact=res[0],
+                exact=TransactionDisplay.model_validate(res[0]),
                 queries=queries,
             )
         else:
             return SearchResolution(
                 status=ResolutionStatus.AMBIGUOUS,
-                candidates=res,
+                candidates=RootModel[Sequence[TransactionDisplay]]
+                .model_validate(res)
+                .root,
                 queries=queries,
             )
             # If we reach here, it means we have ambiguous results
 
     def delete_transaction(self, transaction_id: int) -> bool:
         """Delete a transaction by its ID."""
-        return self._repos.transaction.delete_transaction(transaction_id)
+        with get_session() as session:
+            transaction = session.get(Transaction, transaction_id)
+            if transaction is None:
+                logger.debug(
+                    "Transaction with ID %d does not exist for deletion.",
+                    transaction_id,
+                )
+                return False
+            session.delete(transaction)
+            session.commit()
+            return True

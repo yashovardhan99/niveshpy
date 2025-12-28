@@ -134,8 +134,12 @@ def _convert_models_to_rich_table(
 ) -> Table:
     """Convert a list of Pydantic models to a Rich Table for pretty printing."""
     table = Table(header_style="dim", box=box.SIMPLE)
-    ordered_fields = sorted(
+    filtered_fields = filter(
+        lambda x: not (schema[x].json_schema_extra or {}).get("hidden", False),  # type: ignore
         schema.keys(),
+    )
+    ordered_fields = sorted(
+        filtered_fields,
         key=lambda x: (schema[x].json_schema_extra or {}).get("order", 0),  # type: ignore
     )
     for field_name in ordered_fields:
