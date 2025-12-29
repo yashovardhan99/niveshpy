@@ -2,7 +2,6 @@
 
 from niveshpy.db.database import Database
 from niveshpy.db.prices import PriceRepository
-from niveshpy.db.transaction import TransactionRepository
 
 
 class RepositoryContainer:
@@ -11,15 +10,7 @@ class RepositoryContainer:
     def __init__(self, db: Database):
         """Initialize all repositories with the given database connection."""
         self._db = db
-        self._transaction: TransactionRepository | None = None
         self._price: PriceRepository | None = None
-
-    @property
-    def transaction(self) -> TransactionRepository:
-        """Get the TransactionRepository instance."""
-        if self._transaction is None:
-            self._transaction = TransactionRepository(self._db)
-        return self._transaction
 
     @property
     def price(self) -> PriceRepository:

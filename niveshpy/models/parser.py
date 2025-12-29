@@ -11,7 +11,7 @@ from niveshpy.models.account import (
     AccountPublic,
 )
 from niveshpy.models.security import SecurityCreate
-from niveshpy.models.transaction import TransactionWrite
+from niveshpy.models.transaction import TransactionCreate
 
 
 @dataclass
@@ -60,7 +60,7 @@ class Parser(Protocol):
 
     def get_transactions(
         self, accounts: Iterable[AccountPublic]
-    ) -> Iterable[TransactionWrite]:
+    ) -> Iterable[TransactionCreate]:
         """Get the list of transactions from the parser.
 
         The returned transactions should reference the provided accounts and the securities created earlier.
@@ -69,10 +69,10 @@ class Parser(Protocol):
         The service will overwrite all transactions for the referenced account-security pairs.
 
         Args:
-            accounts: An iterable of AccountRead objects representing the accounts to reference.
+            accounts: An iterable of AccountPublic objects representing the accounts to reference.
 
         Returns:
-            An iterable of TransactionWrite objects representing the transactions found in the data.
+            An iterable of TransactionCreate objects representing the transactions found in the data.
         """
         ...
 

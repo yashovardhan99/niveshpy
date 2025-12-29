@@ -3,10 +3,12 @@
 # import polars as pl
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from typing import TypeVar
 
 from pydantic import RootModel
 from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
+from sqlmodel import delete, insert
 
 from niveshpy.database import get_session
 from niveshpy.db.repositories import RepositoryContainer
@@ -20,7 +22,11 @@ from niveshpy.models.security import (
     Security,
     SecurityCreate,
 )
-from niveshpy.models.transaction import TransactionWrite
+from niveshpy.models.transaction import (
+    Transaction,
+    TransactionCreate,
+    TransactionPublic,
+)
 
 
 class ParsingService:
@@ -62,16 +68,12 @@ class ParsingService:
         # Parse transactions after accounts and securities are done
         self._parse_transactions(accounts, securities)
 
-    _T = TypeVar("_T", SecurityCreate, AccountCreate, TransactionWrite)
+    _T = TypeVar("_T", SecurityCreate, AccountCreate, TransactionCreate)
 
     def _add_metadata(self, item: _T) -> _T:
         """Add metadata to a parsed item."""
-        if isinstance(item, AccountCreate | SecurityCreate):
-            if item.properties.get("source") is None:
-                item.properties["source"] = "parser"
-        elif hasattr(item, "metadata"):
-            if item.metadata.get("source") is None:
-                item.metadata["source"] = "parser"
+        if item.properties.get("source") is None:
+            item.properties["source"] = "parser"
         return item
 
     def _bulk_insert_accounts(
@@ -117,6 +119,32 @@ class ParsingService:
             session.commit()
             return RootModel[list[Security]].model_validate(res.all()).root
 
+    def _bulk_insert_transactions(
+        self,
+        transactions: list[TransactionCreate],
+        date_range: tuple[date, date],
+    ) -> list[TransactionPublic]:
+        """Bulk insert transactions into the database.
+
+        Delete existing transactions in the date range before inserting.
+        """
+        transaction_dicts = (
+            RootModel[list[Transaction]].model_validate(transactions).model_dump()
+        )
+        with get_session() as session:
+            session.exec(
+                delete(Transaction).where(
+                    Transaction.transaction_date >= date_range[0],  # type: ignore[arg-type]
+                    Transaction.transaction_date <= date_range[1],  # type: ignore[arg-type]
+                )
+            )
+            results = session.scalars(
+                insert(Transaction).returning(Transaction),
+                transaction_dicts,
+            )
+            session.commit()
+            return RootModel[list[TransactionPublic]].model_validate(results).root
+
     def _parse_accounts(self) -> list[AccountPublic]:
         """Parse and store accounts using the parser."""
         self._report_progress("accounts", 0, -1)
@@ -144,7 +172,7 @@ class ParsingService:
             map(self._add_metadata, self._parser.get_transactions(accounts))
         )
         self._report_progress("transactions", 0, len(transactions))
-        self._repos.transaction.insert_multiple_transactions(
-            transactions, accounts, securities, self._parser.get_date_range()
+        inserted = self._bulk_insert_transactions(
+            transactions, self._parser.get_date_range()
         )
-        self._report_progress("transactions", len(transactions), len(transactions))
+        self._report_progress("transactions", len(inserted), len(transactions))

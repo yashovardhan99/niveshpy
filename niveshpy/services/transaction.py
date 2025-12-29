@@ -11,7 +11,6 @@ from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import get_filters_from_queries_v2
 from niveshpy.database import get_session
-from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.account import Account
 from niveshpy.models.security import Security
 from niveshpy.models.transaction import (
@@ -30,10 +29,6 @@ from niveshpy.services.result import (
 
 class TransactionService:
     """Service handler for the transactions command group."""
-
-    def __init__(self, repos: RepositoryContainer):
-        """Initialize the TransactionService with repositories."""
-        self._repos = repos
 
     def list_transactions(
         self,

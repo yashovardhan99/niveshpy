@@ -19,12 +19,12 @@ class Application:
 
     def __init__(self, db: Database):
         """Initialize the application with its services."""
+        initialize_database()
         self._repos = RepositoryContainer(db)
         self._security: SecurityService | None = None
         self._account: AccountService | None = None
         self._transaction: TransactionService | None = None
         self._price: PriceService | None = None
-        initialize_database()
 
     @property
     def security(self) -> SecurityService:
@@ -44,7 +44,7 @@ class Application:
     def transaction(self) -> TransactionService:
         """Return the transaction service."""
         if self._transaction is None:
-            self._transaction = TransactionService(self._repos)
+            self._transaction = TransactionService()
         return self._transaction
 
     def get_parsing_service(

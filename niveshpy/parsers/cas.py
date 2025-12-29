@@ -13,7 +13,10 @@ from niveshpy.models.security import (
     SecurityCreate,
     SecurityType,
 )
-from niveshpy.models.transaction import TransactionType, TransactionWrite
+from niveshpy.models.transaction import (
+    TransactionCreate,
+    TransactionType,
+)
 
 
 class CASParser:
@@ -68,7 +71,7 @@ class CASParser:
 
     def get_transactions(
         self, accounts: Iterable[AccountPublic]
-    ) -> Iterable[TransactionWrite]:
+    ) -> Iterable[TransactionCreate]:
         """Get the list of transactions from the CAS data."""
         accounts_map = {(acc.name, acc.institution): acc.id for acc in accounts}
         for folio in self.data.folios:
@@ -97,7 +100,7 @@ class CASParser:
                     else:
                         continue  # Skip unknown transaction types
 
-                    txn = TransactionWrite(
+                    txn = TransactionCreate(
                         transaction_date=transaction.date,
                         type=txn_type,
                         description=transaction.description,
@@ -105,7 +108,7 @@ class CASParser:
                         units=transaction.units,
                         security_key=scheme.amfi,
                         account_id=account_id,
-                        metadata={"source": "cas", "original_type": transaction.type},
+                        properties={"source": "cas", "original_type": transaction.type},
                     )
                     yield txn
 
