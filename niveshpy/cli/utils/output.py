@@ -301,8 +301,6 @@ def display_list(
                 _console.print(formatted_data)
         click.echo_via_pager(capture.get())
     else:
-        if extra_message:
-            _console.print(extra_message)
         if fmt == OutputFormat.JSON:
             _console.print_json(str(formatted_data))
         else:
