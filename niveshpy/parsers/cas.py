@@ -6,14 +6,17 @@ from pathlib import Path
 
 import casparser  # type: ignore
 
-from niveshpy.models.account import AccountRead, AccountWrite
+from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.models.parser import ParserInfo
 from niveshpy.models.security import (
     SecurityCategory,
+    SecurityCreate,
     SecurityType,
-    SecurityWrite,
 )
-from niveshpy.models.transaction import TransactionType, TransactionWrite
+from niveshpy.models.transaction import (
+    TransactionCreate,
+    TransactionType,
+)
 
 
 class CASParser:
@@ -38,33 +41,37 @@ class CASParser:
         ).date()
         return start_date, end_date
 
-    def get_accounts(self) -> list[AccountWrite]:
+    def get_accounts(self) -> list[AccountCreate]:
         """Get the list of folios as accounts from the CAS data."""
         return [
-            AccountWrite(folio_data.folio, folio_data.amc, {"source": "cas"})
+            AccountCreate(
+                name=folio_data.folio,
+                institution=folio_data.amc,
+                properties={"source": "cas"},
+            )
             for folio_data in self.data.folios
         ]
 
-    def get_securities(self) -> Iterable[SecurityWrite]:
+    def get_securities(self) -> Iterable[SecurityCreate]:
         """Get the list of securities from the CAS data."""
         securities = set()
         for folio in self.data.folios:
             for scheme in folio.schemes:
                 if scheme.amfi not in securities:
                     securities.add(scheme.amfi)
-                    yield SecurityWrite(
-                        scheme.amfi,
-                        scheme.scheme,
-                        SecurityType.MUTUAL_FUND,
-                        SecurityCategory(scheme.type.lower())
+                    yield SecurityCreate(
+                        key=scheme.amfi,
+                        name=scheme.scheme,
+                        type=SecurityType.MUTUAL_FUND,
+                        category=SecurityCategory(scheme.type.lower())
                         if scheme.type in ("EQUITY", "DEBT")
                         else SecurityCategory.OTHER,
-                        metadata={"source": "cas", "isin": scheme.isin},
+                        properties={"source": "cas", "isin": scheme.isin},
                     )
 
     def get_transactions(
-        self, accounts: Iterable[AccountRead]
-    ) -> Iterable[TransactionWrite]:
+        self, accounts: Iterable[AccountPublic]
+    ) -> Iterable[TransactionCreate]:
         """Get the list of transactions from the CAS data."""
         accounts_map = {(acc.name, acc.institution): acc.id for acc in accounts}
         for folio in self.data.folios:
@@ -93,7 +100,7 @@ class CASParser:
                     else:
                         continue  # Skip unknown transaction types
 
-                    txn = TransactionWrite(
+                    txn = TransactionCreate(
                         transaction_date=transaction.date,
                         type=txn_type,
                         description=transaction.description,
@@ -101,7 +108,7 @@ class CASParser:
                         units=transaction.units,
                         security_key=scheme.amfi,
                         account_id=account_id,
-                        metadata={"source": "cas", "original_type": transaction.type},
+                        properties={"source": "cas", "original_type": transaction.type},
                     )
                     yield txn
 

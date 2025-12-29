@@ -5,8 +5,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from niveshpy.models.price import PriceDataWrite
-from niveshpy.models.security import SecurityRead
+from niveshpy.models.price import PriceCreate
+from niveshpy.models.security import Security
 
 
 @dataclass
@@ -27,7 +27,7 @@ class ProviderInfo:
 
     max_concurrent_requests: int = field(default=0)
     """Maximum number of concurrent requests allowed (0 = no limit).
-    
+
     Currently not enforced by the application. It may be used in the future to
     limit concurrency when fetching data from providers that have rate limits.
     """
@@ -36,7 +36,7 @@ class ProviderInfo:
 class Provider(Protocol):
     """Protocol for price provider classes."""
 
-    def get_priority(self, security: SecurityRead) -> int | None:
+    def get_priority(self, security: Security) -> int | None:
         """Get the priority of this provider for the given security.
 
         Lower numbers = higher priority. Providers are tried in priority order
@@ -48,23 +48,23 @@ class Provider(Protocol):
         """
         ...
 
-    def fetch_latest_price(self, security: SecurityRead) -> PriceDataWrite:
+    def fetch_latest_price(self, security: Security) -> PriceCreate:
         """Fetch the latest price for a security.
 
         Args:
             security: The security to fetch price for
 
         Returns:
-            PriceData
+            A PriceCreate object.
         """
         ...
 
     def fetch_historical_prices(
         self,
-        security: SecurityRead,
+        security: Security,
         start_date: datetime.date,
         end_date: datetime.date,
-    ) -> Iterable[PriceDataWrite]:
+    ) -> Iterable[PriceCreate]:
         """Fetch historical prices for a security.
 
         Args:
@@ -73,7 +73,7 @@ class Provider(Protocol):
             end_date: End date (inclusive)
 
         Returns:
-            An iterable of PriceData objects.
+            An iterable of PriceCreate objects.
         """
         ...
 

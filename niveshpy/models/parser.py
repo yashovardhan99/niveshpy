@@ -6,9 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from niveshpy.models.account import AccountRead, AccountWrite
-from niveshpy.models.security import SecurityWrite
-from niveshpy.models.transaction import TransactionWrite
+from niveshpy.models.account import (
+    AccountCreate,
+    AccountPublic,
+)
+from niveshpy.models.security import SecurityCreate
+from niveshpy.models.transaction import TransactionCreate
 
 
 @dataclass
@@ -39,25 +42,25 @@ class Parser(Protocol):
         """
         ...
 
-    def get_accounts(self) -> Iterable[AccountWrite]:
+    def get_accounts(self) -> Iterable[AccountCreate]:
         """Get the list of accounts from the parser.
 
         Returns:
-            An iterable of AccountWrite objects representing the accounts found in the data.
+            An iterable of AccountCreate objects representing the accounts found in the data.
         """
         ...
 
-    def get_securities(self) -> Iterable[SecurityWrite]:
+    def get_securities(self) -> Iterable[SecurityCreate]:
         """Get the list of securities from the parser.
 
         Returns:
-            An iterable of SecurityWrite objects representing the securities found in the data.
+            An iterable of SecurityCreate objects representing the securities found in the data.
         """
         ...
 
     def get_transactions(
-        self, accounts: Iterable[AccountRead]
-    ) -> Iterable[TransactionWrite]:
+        self, accounts: Iterable[AccountPublic]
+    ) -> Iterable[TransactionCreate]:
         """Get the list of transactions from the parser.
 
         The returned transactions should reference the provided accounts and the securities created earlier.
@@ -66,10 +69,10 @@ class Parser(Protocol):
         The service will overwrite all transactions for the referenced account-security pairs.
 
         Args:
-            accounts: An iterable of AccountRead objects representing the accounts to reference.
+            accounts: An iterable of AccountPublic objects representing the accounts to reference.
 
         Returns:
-            An iterable of TransactionWrite objects representing the transactions found in the data.
+            An iterable of TransactionCreate objects representing the transactions found in the data.
         """
         ...
 

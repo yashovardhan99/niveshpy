@@ -7,9 +7,9 @@ from collections.abc import Iterable
 import requests
 
 from niveshpy.exceptions import InvalidSecurityError, PriceNotFoundError
-from niveshpy.models.price import PriceDataWrite
+from niveshpy.models.price import PriceCreate
 from niveshpy.models.provider import ProviderInfo
-from niveshpy.models.security import SecurityRead, SecurityType
+from niveshpy.models.security import Security, SecurityType
 
 
 class AMFIProvider:
@@ -22,7 +22,7 @@ class AMFIProvider:
         self.session = requests.sessions.Session()
         self.session.headers.update({"Accept": "application/json"})
 
-    def get_priority(self, security: SecurityRead) -> int | None:
+    def get_priority(self, security: Security) -> int | None:
         """Get the priority of this provider for the given security.
 
         Lower numbers = higher priority. Providers are tried in priority order
@@ -36,11 +36,11 @@ class AMFIProvider:
             return None
         if security.key.isdigit() and len(security.key) == 6:
             return 15  # Medium priority if key looks like a 6-digit AMFI code
-        if security.metadata.get("amfi_code", None) is not None:
+        if security.properties.get("amfi_code", None) is not None:
             return 10  # Higher priority if AMFI code is provided
         return None  # Cannot handle this security
 
-    def _extract_amfi_code(self, security: SecurityRead) -> str:
+    def _extract_amfi_code(self, security: Security) -> str:
         """Extract the AMFI code from the security.
 
         Args:
@@ -51,7 +51,7 @@ class AMFIProvider:
         """
         if security.key.isdigit() and len(security.key) == 6:
             return security.key
-        amfi_code = security.metadata.get("amfi_code", None)
+        amfi_code = security.properties.get("amfi_code", None)
         if (
             amfi_code is not None
             and str(amfi_code).isdigit()
@@ -64,8 +64,8 @@ class AMFIProvider:
         )
 
     def _extract_price_data(
-        self, response: requests.Response, security: SecurityRead
-    ) -> Iterable[PriceDataWrite]:
+        self, response: requests.Response, security: Security
+    ) -> Iterable[PriceCreate]:
         """Handle the API response and convert it to PriceData instances.
 
         Args:
@@ -73,7 +73,7 @@ class AMFIProvider:
             security: The security for which prices are being fetched.
 
         Returns:
-            An iterable of PriceData instances.
+            An iterable of PriceCreate instances.
         """
         try:
             response.raise_for_status()
@@ -89,10 +89,14 @@ class AMFIProvider:
                 )
 
             for item in price_data_list:
-                yield PriceDataWrite.from_single_price(
+                price = decimal.Decimal(item["nav"])
+                yield PriceCreate(
                     security_key=security.key,
                     date=datetime.datetime.strptime(item["date"], "%d-%m-%Y").date(),
-                    price=decimal.Decimal(item["nav"]),
+                    open=price,
+                    high=price,
+                    low=price,
+                    close=price,
                 )
 
         except requests.HTTPError as e:
@@ -102,7 +106,7 @@ class AMFIProvider:
                 should_retry=True,
             ) from e
 
-    def fetch_latest_price(self, security: SecurityRead) -> PriceDataWrite:
+    def fetch_latest_price(self, security: Security) -> PriceCreate:
         """Fetch the latest price for a security.
 
         Args:
@@ -129,10 +133,10 @@ class AMFIProvider:
 
     def fetch_historical_prices(
         self,
-        security: SecurityRead,
+        security: Security,
         start_date: datetime.date,
         end_date: datetime.date,
-    ) -> Iterable[PriceDataWrite]:
+    ) -> Iterable[PriceCreate]:
         """Fetch historical prices for a security.
 
         Args:
@@ -141,7 +145,7 @@ class AMFIProvider:
             end_date: End date (inclusive)
 
         Returns:
-            An iterable of PriceData objects.
+            An iterable of PriceCreate objects.
         """
         amfi_code = self._extract_amfi_code(security)
 

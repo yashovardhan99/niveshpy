@@ -11,8 +11,12 @@ from niveshpy.cli.utils import flags, output
 from niveshpy.cli.utils.overrides import command, group
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
-from niveshpy.db.database import DatabaseError
-from niveshpy.models.security import SecurityCategory, SecurityRead, SecurityType
+from niveshpy.database import DatabaseError
+from niveshpy.models.security import (
+    Security,
+    SecurityCategory,
+    SecurityType,
+)
 from niveshpy.services.result import MergeAction, ResolutionStatus
 
 
@@ -28,6 +32,7 @@ def securities(ctx: click.Context) -> None:
 @command("list")
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
 @flags.limit("securities", default=30)
+@flags.offset("securities", default=0)
 @flags.output("format")
 @flags.common_options
 @click.pass_context
@@ -35,6 +40,7 @@ def show(
     ctx: click.Context,
     queries: tuple[str, ...],
     limit: int,
+    offset: int,
     format: output.OutputFormat,
 ) -> None:
     """List all securities.
@@ -44,7 +50,9 @@ def show(
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading securities..."):
         try:
-            result = state.app.security.list_securities(queries=queries, limit=limit)
+            securities = state.app.security.list_securities(
+                queries=queries, limit=limit, offset=offset
+            )
         except ValueError as e:
             logger.error(e, exc_info=True)
             ctx.exit(1)
@@ -52,19 +60,23 @@ def show(
             logger.critical(e, exc_info=True)
             ctx.exit(1)
 
-    if result.total == 0:
+    if len(securities) == 0:
         output.display_warning(
             "No securities "
             + ("match your query." if queries else "found in the database.")
         )
     else:
-        output.display_dataframe(
-            result.data,
+        output.display_list(
+            Security,
+            securities,
             format,
-            SecurityRead.rich_format_map(),
-            extra_message=f"Showing {limit:,} of {result.total:,} securities."
-            if result.total > limit
-            else None,
+            extra_message=f"Showing first {limit:,} securities."
+            if len(securities) == limit and offset == 0
+            else (
+                f"Showing securities {offset + 1:,} to {offset + len(securities):,}."
+                if offset > 0
+                else None
+            ),
         )
 
 

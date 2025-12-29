@@ -12,7 +12,7 @@ from niveshpy.cli.utils import flags, output
 from niveshpy.cli.utils.overrides import group
 from niveshpy.core.app import Application, AppState
 from niveshpy.core.logging import logger
-from niveshpy.db.database import Database, DatabaseError
+from niveshpy.database import DatabaseError
 
 
 @group()
@@ -27,9 +27,7 @@ def cli(ctx: click.Context) -> None:
     output.initialize_app_state(state)
 
     try:
-        db = Database()
-        ctx.with_resource(db)
-        application = Application(db)
+        application = Application()
     except DatabaseError as e:
         logger.critical(e, exc_info=True)
         ctx.exit(1)

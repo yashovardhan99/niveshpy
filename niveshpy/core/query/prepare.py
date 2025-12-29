@@ -5,6 +5,10 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import replace
 
+from sqlmodel import column, func
+from sqlmodel.sql.expression import ColumnClause, ColumnElement, or_
+
+from niveshpy.core.query import ast
 from niveshpy.core.query.ast import Field, FilterNode, FilterValue, Operator
 from niveshpy.core.query.parser import QueryParser
 from niveshpy.core.query.tokenizer import QueryLexer
@@ -101,17 +105,66 @@ COMBINED = {
 }
 
 
+def prepare_expression(filter: FilterNode, column: ColumnClause) -> ColumnElement[bool]:
+    """Prepare a SQLAlchemy expression for a given filter and column.
+
+    Args:
+        filter (FilterNode): The filter node to prepare.
+        column (str): The database column name.
+
+    Returns:
+        ColumnElement[bool]: The prepared SQLAlchemy expression.
+    """
+    op = filter.operator
+    match op:
+        case ast.Operator.REGEX_MATCH if isinstance(filter.value, str):
+            return func.iregexp(filter.value, column)
+        case ast.Operator.NOT_REGEX_MATCH if isinstance(filter.value, str):
+            return ~func.iregexp(filter.value, column)
+        case ast.Operator.EQUALS:
+            return column == filter.value
+        case ast.Operator.NOT_EQUALS:
+            return column != filter.value
+        case ast.Operator.GREATER_THAN:
+            return column > filter.value
+        case ast.Operator.GREATER_THAN_EQ:
+            return column >= filter.value
+        case ast.Operator.LESS_THAN:
+            return column < filter.value
+        case ast.Operator.LESS_THAN_EQ:
+            return column <= filter.value
+        case ast.Operator.BETWEEN if (
+            isinstance(filter.value, tuple) and len(filter.value) == 2
+        ):
+            return column.between(filter.value[0], filter.value[1])
+        case ast.Operator.NOT_BETWEEN if (
+            isinstance(filter.value, tuple) and len(filter.value) == 2
+        ):
+            return ~column.between(filter.value[0], filter.value[1])
+        case ast.Operator.IN if isinstance(filter.value, tuple):
+            return column.in_(filter.value)
+        case ast.Operator.NOT_IN if isinstance(filter.value, tuple):
+            return ~column.in_(filter.value)
+        case _:
+            raise ValueError(
+                f"Unsupported operator / value for WHERE clause: {op} / {filter.value}"
+            )
+
+
 def get_filters_from_queries(
-    queries: tuple[str, ...], default_field: Field
-) -> list[FilterNode]:
-    """Convert query strings into a list of prepared FilterNode objects.
+    queries: tuple[str, ...],
+    default_field: Field,
+    column_mappings: dict[Field, list],
+) -> list[ColumnElement[bool]]:
+    """Convert query strings into a combined SQLAlchemy filter expression.
 
     Args:
         queries (tuple): Tuple of query strings.
         default_field (Field): The default field to use for filters.
+        column_mappings (dict): Mapping of Fields to database column names.
 
     Returns:
-        list: The prepared list of FilterNode objects.
+        list: The list of SQLAlchemy filter expressions.
     """
     stripped_queries = map(str.strip, queries)
     lexers = map(QueryLexer, stripped_queries)
@@ -120,4 +173,43 @@ def get_filters_from_queries(
         map(QueryParser.parse, parsers)
     )
     filters = prepare_filters(filters, default_field)
-    return filters
+
+    expressions: list[ColumnElement[bool]] = []
+    for filter in filters:
+        cols = column_mappings.get(filter.field, [])
+        if not cols:
+            raise ValueError(f"Field {filter.field} not mapped to any column.")
+
+        col_expressions: list[ColumnElement[bool]] = []
+        for col in cols:
+            col_expressions.append(
+                prepare_expression(filter, column(col) if isinstance(col, str) else col)
+            )
+        expressions.append(or_(*col_expressions))
+
+    return expressions
+
+
+def get_fields_from_queries(
+    queries: tuple[str, ...],
+) -> set[Field]:
+    """Extract fields used in the query strings.
+
+    Args:
+        queries (tuple): Tuple of query strings.
+
+    Returns:
+        set: The set of Fields used in the queries.
+    """
+    stripped_queries = map(str.strip, queries)
+    lexers = map(QueryLexer, stripped_queries)
+    parsers = map(QueryParser, lexers)
+    filters: Iterable[FilterNode] = itertools.chain.from_iterable(
+        map(QueryParser.parse, parsers)
+    )
+
+    used_fields: set[Field] = set()
+    for filter in filters:
+        used_fields.add(filter.field)
+
+    return used_fields

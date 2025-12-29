@@ -1,104 +1,114 @@
 """Price data models."""
 
 import datetime
-from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import Any
 
-if TYPE_CHECKING:
-    from niveshpy.cli.utils import output
+from pydantic import Field as PydanticField
+from pydantic import field_validator
+from sqlmodel import JSON, NUMERIC, Column, Field, Relationship, SQLModel
 
-
-@dataclass
-class PriceDataRead:
-    """Model for a single price data point."""
-
-    security: str  # Formatted as "name (key)"
-    """The security this price belongs to."""
-
-    date: datetime.date
-    """The date of this price."""
-
-    open: Decimal
-    """Opening price."""
-
-    high: Decimal
-    """Highest price."""
-
-    low: Decimal
-    """Lowest price."""
-
-    close: Decimal
-    """Closing price."""
-
-    created: datetime.datetime
-    """Timestamp when this price data was created."""
-
-    metadata: dict[str, str]
-    """Additional metadata associated with this price data."""
-
-    @staticmethod
-    def rich_format_map() -> "output.FormatMap":
-        """Get a list of formatting styles for rich table display."""
-        return [
-            None,  # security
-            "cyan",  # date
-            None,  # open
-            "green",  # high
-            "red",  # low
-            "bold",  # close
-            "dim",  # created
-            "dim",  # metadata
-        ]
+from niveshpy.core.query import ast
+from niveshpy.models.security import Security
 
 
-@dataclass
-class PriceDataWrite:
-    """Model for a single price data point."""
+class PriceBase(SQLModel):
+    """Base model for price data."""
 
-    security_key: str
-    """The security key this price belongs to."""
+    security_key: str = Field(
+        foreign_key="security.key",
+        primary_key=True,
+        schema_extra={"json_schema_extra": {"order": 0, "hidden": True}},
+    )
+    date: datetime.date = Field(
+        primary_key=True,
+        schema_extra={"json_schema_extra": {"order": 1, "style": "cyan"}},
+    )
+    open: Decimal = Field(
+        sa_column=Column(NUMERIC(24, 4)),
+        schema_extra={"json_schema_extra": {"order": 2, "justify": "right"}},
+    )
+    high: Decimal = Field(
+        sa_column=Column(NUMERIC(24, 4)),
+        schema_extra={
+            "json_schema_extra": {"order": 3, "style": "green", "justify": "right"}
+        },
+    )
+    low: Decimal = Field(
+        sa_column=Column(NUMERIC(24, 4)),
+        schema_extra={
+            "json_schema_extra": {"order": 4, "style": "red", "justify": "right"}
+        },
+    )
+    close: Decimal = Field(
+        sa_column=Column(NUMERIC(24, 4)),
+        schema_extra={
+            "json_schema_extra": {"order": 5, "style": "bold", "justify": "right"}
+        },
+    )
+    properties: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON),
+        schema_extra={"json_schema_extra": {"style": "dim", "order": 7}},
+    )
 
-    date: datetime.date
-    """The date of this price."""
+    def __init_subclass__(cls, **kwargs):
+        """Ensure subclasses inherit schema extra metadata."""
+        return super().__init_subclass__(**kwargs)
 
-    open: Decimal
-    """Opening price."""
 
-    high: Decimal
-    """Highest price."""
+class PriceCreate(PriceBase):
+    """Model for creating price data."""
 
-    low: Decimal
-    """Lowest price."""
 
-    close: Decimal
-    """Closing price."""
+class Price(PriceBase, table=True):
+    """Database model for price data."""
 
-    metadata: dict[str, str] = field(default_factory=dict)
-    """Additional metadata associated with this price data."""
+    security: Security = Relationship()
+    created: datetime.datetime = Field(
+        default_factory=datetime.datetime.now, title="Created"
+    )
 
-    @classmethod
-    def from_single_price(
-        cls,
-        security_key: str,
-        date: datetime.date,
-        price: Decimal,
-    ) -> "PriceDataWrite":
-        """Create PriceData instance for a single price point.
 
-        Args:
-            security_key: The security key this price belongs to.
-            date: The date of this price.
-            price: The price value.
+class PricePublic(PriceBase):
+    """Public model for price data exposure."""
 
-        Returns:
-            An instance of PriceData with open, high, low, close set to the same price.
-        """
-        return cls(
-            security_key=security_key,
-            date=date,
-            open=price,
-            high=price,
-            low=price,
-            close=price,
-        )
+    created: datetime.datetime = Field(
+        title="Created",
+        schema_extra={"json_schema_extra": {"style": "dim", "order": 6}},
+    )
+
+
+class PricePublicWithRelations(PricePublic):
+    """Public model for price data with related security."""
+
+    security: Security = Field(
+        title="Security",
+        schema_extra={"json_schema_extra": {"order": 0}},
+    )
+
+
+class PriceDisplay(PricePublic):
+    """Model for displaying price data with related info."""
+
+    security: str = PydanticField(
+        json_schema_extra={"order": 0},
+    )
+
+    @field_validator("security", mode="before", json_schema_input_type=str | Security)
+    def format_security(cls, value: str | Security) -> str:
+        """Format the security field for display."""
+        if isinstance(value, Security):
+            return f"{value.name} ({value.key})"
+        return value
+
+
+PRICE_COLUMN_MAPPING: dict[ast.Field, list] = {
+    ast.Field.DATE: [Price.date],
+    ast.Field.SECURITY: [
+        Security.key,
+        Security.name,
+        Security.type,
+        Security.category,
+    ],
+}

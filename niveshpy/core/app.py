@@ -3,8 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from niveshpy.db.database import Database
-from niveshpy.db.repositories import RepositoryContainer
+from niveshpy.database import initialize as initialize_database
 from niveshpy.models.parser import Parser
 from niveshpy.services.account import AccountService
 from niveshpy.services.parsing import ParsingService
@@ -16,9 +15,9 @@ from niveshpy.services.transaction import TransactionService
 class Application:
     """Main application class to hold state for the CLI."""
 
-    def __init__(self, db: Database):
+    def __init__(self):
         """Initialize the application with its services."""
-        self._repos = RepositoryContainer(db)
+        initialize_database()
         self._security: SecurityService | None = None
         self._account: AccountService | None = None
         self._transaction: TransactionService | None = None
@@ -28,21 +27,21 @@ class Application:
     def security(self) -> SecurityService:
         """Return the security service."""
         if self._security is None:
-            self._security = SecurityService(self._repos)
+            self._security = SecurityService()
         return self._security
 
     @property
     def account(self) -> AccountService:
         """Return the account service."""
         if self._account is None:
-            self._account = AccountService(self._repos)
+            self._account = AccountService()
         return self._account
 
     @property
     def transaction(self) -> TransactionService:
         """Return the transaction service."""
         if self._transaction is None:
-            self._transaction = TransactionService(self._repos)
+            self._transaction = TransactionService()
         return self._transaction
 
     def get_parsing_service(
@@ -51,13 +50,13 @@ class Application:
         progress_callback: Callable[[str, int, int], None] | None = None,
     ) -> ParsingService:
         """Get the parsing service for the given parser key."""
-        return ParsingService(parser, self._repos, progress_callback=progress_callback)
+        return ParsingService(parser, progress_callback=progress_callback)
 
     @property
     def price(self) -> PriceService:
         """Return the price service."""
         if self._price is None:
-            self._price = PriceService(self._repos)
+            self._price = PriceService()
         return self._price
 
 
