@@ -12,7 +12,7 @@ from niveshpy.cli.utils import flags, inputs, output
 from niveshpy.cli.utils.overrides import command, group
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
-from niveshpy.db.database import DatabaseError
+from niveshpy.database import DatabaseError
 from niveshpy.models.transaction import (
     TransactionDisplay,
     TransactionPublic,

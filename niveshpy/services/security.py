@@ -6,7 +6,7 @@ from sqlmodel import select
 
 from niveshpy.core import logging
 from niveshpy.core.query import ast
-from niveshpy.core.query.prepare import get_filters_from_queries_v2
+from niveshpy.core.query.prepare import get_filters_from_queries
 from niveshpy.database import get_session
 from niveshpy.models.security import (
     SECURITY_COLUMN_MAPPING,
@@ -33,7 +33,7 @@ class SecurityService:
         offset: int = 0,
     ) -> Sequence[Security]:
         """List securities matching the query."""
-        where_clause = get_filters_from_queries_v2(
+        where_clause = get_filters_from_queries(
             queries, ast.Field.SECURITY, SECURITY_COLUMN_MAPPING
         )
         with get_session() as session:

@@ -11,7 +11,6 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
 from sqlmodel import delete, insert
 
 from niveshpy.database import get_session
-from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.models.account import (
     Account,
     AccountCreate,
@@ -35,12 +34,10 @@ class ParsingService:
     def __init__(
         self,
         parser: Parser,
-        repos: RepositoryContainer,
         progress_callback: Callable[[str, int, int], None] | None = None,
     ):
         """Initialize the ParsingService."""
         self._parser = parser
-        self._repos = repos
         self._progress_callback = progress_callback
 
     def _report_progress(self, stage: str, current: int, total: int) -> None:

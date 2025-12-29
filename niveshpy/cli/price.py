@@ -13,7 +13,11 @@ from niveshpy.cli.utils import flags, output, overrides
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.app import AppState
 from niveshpy.exceptions import NiveshPySystemError, NiveshPyUserError
-from niveshpy.models.price import PriceDataRead
+from niveshpy.models.price import (
+    PriceDisplay,
+    PricePublic,
+    PricePublicWithRelations,
+)
 from niveshpy.services.result import MergeAction
 
 
@@ -57,11 +61,13 @@ def prices(ctx: click.Context):
 @flags.common_options
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
 @flags.limit("securities", default=30)
+@flags.offset("securities", default=0)
 @flags.output("format")
 def list_prices(
     ctx: click.Context,
     queries: tuple[str, ...],
     limit: int,
+    offset: int,
     format: output.OutputFormat,
 ) -> None:
     """List latest price for all securities.
@@ -77,8 +83,10 @@ def list_prices(
     """
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading prices..."):
-        result = state.app.price.list_prices(queries=queries, limit=limit)
-    if result.total == 0:
+        result = state.app.price.list_prices(
+            queries=queries, limit=limit, offset=offset
+        )
+    if len(result) == 0:
         msg = (
             "No prices "
             + ("match your query." if queries else "found in the database.")
@@ -86,13 +94,24 @@ def list_prices(
         )
         output.display_warning(msg)
     else:
-        output.display_dataframe(
-            result.data,
+        fmt_cls = (
+            PricePublicWithRelations
+            if format == output.OutputFormat.JSON
+            else (PricePublic if format == output.OutputFormat.CSV else PriceDisplay)
+        )
+
+        prices = [fmt_cls.model_validate(price) for price in result]
+        output.display_list(
+            fmt_cls,
+            prices,
             format,
-            PriceDataRead.rich_format_map(),
-            extra_message=f"Showing {limit:,} of {result.total:,} prices."
-            if result.total > limit
-            else None,
+            extra_message=f"Showing first {limit:,} prices."
+            if len(result) == limit and offset == 0
+            else (
+                f"Showing prices {offset + 1:,} to {offset + len(result):,}."
+                if offset > 0
+                else None
+            ),
         )
 
 

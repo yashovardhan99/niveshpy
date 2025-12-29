@@ -7,7 +7,7 @@ from collections.abc import Iterable
 import requests
 
 from niveshpy.exceptions import InvalidSecurityError, PriceNotFoundError
-from niveshpy.models.price import PriceDataWrite
+from niveshpy.models.price import PriceCreate
 from niveshpy.models.provider import ProviderInfo
 from niveshpy.models.security import Security, SecurityType
 
@@ -65,7 +65,7 @@ class AMFIProvider:
 
     def _extract_price_data(
         self, response: requests.Response, security: Security
-    ) -> Iterable[PriceDataWrite]:
+    ) -> Iterable[PriceCreate]:
         """Handle the API response and convert it to PriceData instances.
 
         Args:
@@ -73,7 +73,7 @@ class AMFIProvider:
             security: The security for which prices are being fetched.
 
         Returns:
-            An iterable of PriceData instances.
+            An iterable of PriceCreate instances.
         """
         try:
             response.raise_for_status()
@@ -89,10 +89,14 @@ class AMFIProvider:
                 )
 
             for item in price_data_list:
-                yield PriceDataWrite.from_single_price(
+                price = decimal.Decimal(item["nav"])
+                yield PriceCreate(
                     security_key=security.key,
                     date=datetime.datetime.strptime(item["date"], "%d-%m-%Y").date(),
-                    price=decimal.Decimal(item["nav"]),
+                    open=price,
+                    high=price,
+                    low=price,
+                    close=price,
                 )
 
         except requests.HTTPError as e:
@@ -102,7 +106,7 @@ class AMFIProvider:
                 should_retry=True,
             ) from e
 
-    def fetch_latest_price(self, security: Security) -> PriceDataWrite:
+    def fetch_latest_price(self, security: Security) -> PriceCreate:
         """Fetch the latest price for a security.
 
         Args:
@@ -132,7 +136,7 @@ class AMFIProvider:
         security: Security,
         start_date: datetime.date,
         end_date: datetime.date,
-    ) -> Iterable[PriceDataWrite]:
+    ) -> Iterable[PriceCreate]:
         """Fetch historical prices for a security.
 
         Args:
@@ -141,7 +145,7 @@ class AMFIProvider:
             end_date: End date (inclusive)
 
         Returns:
-            An iterable of PriceData objects.
+            An iterable of PriceCreate objects.
         """
         amfi_code = self._extract_amfi_code(security)
 

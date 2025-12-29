@@ -7,7 +7,7 @@ from sqlmodel import select
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import (
-    get_filters_from_queries_v2,
+    get_filters_from_queries,
 )
 from niveshpy.database import get_session
 from niveshpy.models.account import Account, AccountCreate, AccountPublic
@@ -30,7 +30,7 @@ class AccountService:
         self, queries: tuple[str, ...], limit: int = 30, offset: int = 0
     ) -> Sequence[AccountPublic]:
         """List accounts, optionally filtered by a query string."""
-        where_clause = get_filters_from_queries_v2(
+        where_clause = get_filters_from_queries(
             queries, ast.Field.ACCOUNT, self._column_mappings
         )
 

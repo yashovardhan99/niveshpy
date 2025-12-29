@@ -9,7 +9,7 @@ from sqlmodel import select
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
-from niveshpy.core.query.prepare import get_filters_from_queries_v2
+from niveshpy.core.query.prepare import get_filters_from_queries
 from niveshpy.database import get_session
 from niveshpy.models.account import Account
 from niveshpy.models.security import Security
@@ -41,7 +41,7 @@ class TransactionService:
             logger.debug("Received non-positive limit: %d", limit)
             raise ValueError("Limit must be positive.")
 
-        where_clause = get_filters_from_queries_v2(
+        where_clause = get_filters_from_queries(
             queries, ast.Field.SECURITY, TRANSACTION_COLUMN_MAPPING
         )
         with get_session() as session:

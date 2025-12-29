@@ -11,7 +11,6 @@ dependencies = [
     "scipy >= 1.13.1, < 2.0.0",
     "numpy >= 2.0.2, < 3.0.0",
     "platformdirs >= 4.3.8, < 5.0.0",
-    "duckdb>=1.4.0, !=1.4.0",
     "casparser>=0.8.1",
     "click>=8.3.0",
     "inquirerpy>=0.3.4",
@@ -19,6 +18,7 @@ dependencies = [
     "requests>=2.32.5",
     "sqlmodel>=0.0.30",
     "pydantic>=2.11.10",
+    "sqlalchemy>=2.0.45",
 ]
 requires-python = ">=3.11"
 authors = [

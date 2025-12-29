@@ -151,7 +151,7 @@ def prepare_expression(filter: FilterNode, column: ColumnClause) -> ColumnElemen
             )
 
 
-def get_filters_from_queries_v2(
+def get_filters_from_queries(
     queries: tuple[str, ...],
     default_field: Field,
     column_mappings: dict[Field, list],
@@ -166,7 +166,13 @@ def get_filters_from_queries_v2(
     Returns:
         list: The list of SQLAlchemy filter expressions.
     """
-    filters = get_filters_from_queries(queries, default_field)
+    stripped_queries = map(str.strip, queries)
+    lexers = map(QueryLexer, stripped_queries)
+    parsers = map(QueryParser, lexers)
+    filters: Iterable[FilterNode] = itertools.chain.from_iterable(
+        map(QueryParser.parse, parsers)
+    )
+    filters = prepare_filters(filters, default_field)
 
     expressions: list[ColumnElement[bool]] = []
     for filter in filters:
@@ -184,17 +190,16 @@ def get_filters_from_queries_v2(
     return expressions
 
 
-def get_filters_from_queries(
-    queries: tuple[str, ...], default_field: Field
-) -> list[FilterNode]:
-    """Convert query strings into a list of prepared FilterNode objects.
+def get_fields_from_queries(
+    queries: tuple[str, ...],
+) -> set[Field]:
+    """Extract fields used in the query strings.
 
     Args:
         queries (tuple): Tuple of query strings.
-        default_field (Field): The default field to use for filters.
 
     Returns:
-        list: The prepared list of FilterNode objects.
+        set: The set of Fields used in the queries.
     """
     stripped_queries = map(str.strip, queries)
     lexers = map(QueryLexer, stripped_queries)
@@ -202,5 +207,9 @@ def get_filters_from_queries(
     filters: Iterable[FilterNode] = itertools.chain.from_iterable(
         map(QueryParser.parse, parsers)
     )
-    filters = prepare_filters(filters, default_field)
-    return filters
+
+    used_fields: set[Field] = set()
+    for filter in filters:
+        used_fields.add(filter.field)
+
+    return used_fields

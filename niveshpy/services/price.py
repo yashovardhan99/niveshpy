@@ -4,22 +4,21 @@ import datetime
 import decimal
 import heapq
 import itertools
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import polars as pl
-from sqlmodel import select, update
+from pydantic import RootModel
+from sqlalchemy.orm import aliased
+from sqlmodel import delete, func, insert, select, update
 
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import (
+    get_fields_from_queries,
     get_filters_from_queries,
-    get_filters_from_queries_v2,
 )
 from niveshpy.database import get_session
-from niveshpy.db import query
-from niveshpy.db.repositories import RepositoryContainer
 from niveshpy.exceptions import (
     InvalidSecurityError,
     NiveshPyError,
@@ -28,13 +27,18 @@ from niveshpy.exceptions import (
     PriceNotFoundError,
 )
 from niveshpy.models.output import BaseMessage, ProgressUpdate, Warning
-from niveshpy.models.price import PriceDataWrite
+from niveshpy.models.price import (
+    PRICE_COLUMN_MAPPING,
+    Price,
+    PriceCreate,
+    PricePublicWithRelations,
+)
 from niveshpy.models.provider import Provider, ProviderInfo
 from niveshpy.models.security import (
     SECURITY_COLUMN_MAPPING,
     Security,
 )
-from niveshpy.services.result import ListResult, MergeAction
+from niveshpy.services.result import MergeAction
 
 
 class PriceService:
@@ -43,32 +47,48 @@ class PriceService:
     DEFAULT_START_DATE = datetime.date(2000, 1, 1)
     RETRY_COUNT = 3
 
-    def __init__(self, repos: RepositoryContainer):
-        """Initialize the PriceService with a RepositoryContainer."""
-        self._repos = repos
-
     def list_prices(
-        self, queries: tuple[str, ...], limit: int
-    ) -> ListResult[pl.DataFrame]:
+        self,
+        queries: tuple[str, ...],
+        limit: int = 30,
+        offset: int = 0,
+    ) -> Sequence[PricePublicWithRelations]:
         """List latest prices for securities matching the queries.
 
         Args:
             queries: Tuple of query strings to filter securities.
             limit: Maximum number of securities to return.
+            offset: Number of securities to skip from the start.
         """
         if limit < 1:
             raise ValueError("Limit must be positive.")
-        filters = get_filters_from_queries(queries, default_field=ast.Field.SECURITY)
-        logger.debug("Prepared filters for price listing: %s", filters)
-
-        options = query.QueryOptions(filters=filters, limit=limit)
-
-        N = self._repos.price.count_prices(options)
-        if N == 0:
-            return ListResult(pl.DataFrame(), 0)
-
-        res = self._repos.price.search_prices(options, query.ResultFormat.POLARS)
-        return ListResult(res, N)
+        where_clause = get_filters_from_queries(
+            queries, ast.Field.SECURITY, PRICE_COLUMN_MAPPING
+        )
+        with get_session() as session:
+            if ast.Field.DATE not in get_fields_from_queries(queries):
+                # If no date filter, return only the latest price per security
+                row_num = (
+                    func.row_number()
+                    .over(partition_by=Price.security_key, order_by=Price.date.desc())  # type: ignore[attr-defined]
+                    .label("row_num")
+                )
+                cte = (
+                    select(Price, row_num)
+                    .join(Security)
+                    .where(*where_clause)
+                    .cte("cte_1")
+                )
+                aliased_price = aliased(Price, cte)
+                query = select(aliased_price).where(cte.c.row_num == 1)
+            else:
+                query = select(Price).join(Security).where(*where_clause)
+            prices = session.exec(query.offset(offset).limit(limit)).all()
+            return (
+                RootModel[Sequence[PricePublicWithRelations]]
+                .model_validate(prices)
+                .root
+            )
 
     def update_price(
         self,
@@ -91,13 +111,7 @@ class PriceService:
         if len(ohlc) not in (1, 2, 4):
             raise NiveshPyUserError("OHLC must contain 1, 2, or 4 values.")
 
-        # Check if security exists
-        with get_session() as session:
-            security = session.get(Security, security_key)
-        if security is None:
-            raise NiveshPyUserError(f"Security with key {security_key} does not exist.")
-
-        price_data = PriceDataWrite(
+        price_data = PriceCreate(
             security_key=security_key,
             date=date,
             open=ohlc[0],
@@ -108,14 +122,35 @@ class PriceService:
         if source:
             price_data = self._add_metadata(price_data, source)
 
-        result = self._repos.price.upsert_price(price_data)
+        result: MergeAction
 
-        if result is None:
-            raise NiveshPySystemError(
-                f"Failed to update price for security {security_key} on {date}."
-            )
+        with get_session() as session:
+            # Check if security exists
+            security = session.get(Security, security_key)
 
-        return MergeAction(result)
+            if security is None:
+                raise NiveshPyUserError(
+                    f"Security with key {security_key} does not exist."
+                )
+
+            # Check if price already exists
+            existing_price = session.get(Price, (security_key, date))
+            if existing_price is None:
+                price = Price.model_validate(price_data)
+                result = MergeAction.INSERT
+            else:
+                price = existing_price
+                price.open = price_data.open
+                price.high = price_data.high
+                price.low = price_data.low
+                price.close = price_data.close
+                price.properties = price_data.properties
+                result = MergeAction.UPDATE
+
+            session.add(price)
+            session.commit()
+
+        return result
 
     def validate_provider(self, provider_key: str) -> None:
         """Validate if the given provider key is installed.
@@ -170,7 +205,7 @@ class PriceService:
         # Let's fetch all matching securities
         yield ProgressUpdate("sync.setup.securities", "Fetching securities", None, None)
 
-        where_clause = get_filters_from_queries_v2(
+        where_clause = get_filters_from_queries(
             queries, ast.Field.SECURITY, SECURITY_COLUMN_MAPPING
         )
 
@@ -283,7 +318,7 @@ class PriceService:
 
         result: int | None = None
 
-        while providers:
+        while providers and (result is None or result == 0):
             _, key, provider_info, provider_instance = heapq.heappop(providers)
             for _ in range(
                 self.RETRY_COUNT
@@ -307,14 +342,23 @@ class PriceService:
                         self._add_metadata, price_data_iter, itertools.repeat(key)
                     )
 
-                    result = self._repos.price.overwrite_prices(
-                        security.key, start_date, end_date, price_data_iter
-                    )
+                    # Delete any previous prices in the date range and insert new prices
 
-                    if result == 0:
-                        raise NiveshPySystemError(
-                            f"Error saving prices for security {security.key} from provider {provider_info.name}."
+                    with get_session() as session:
+                        delete_stmt = delete(Price).where(
+                            Price.security_key == security.key,  # type: ignore
+                            Price.date >= start_date,  # type: ignore
+                            Price.date <= end_date,  # type: ignore
                         )
+                        session.exec(delete_stmt)
+
+                        prices = [
+                            Price.model_validate(price).model_dump()
+                            for price in price_data_iter
+                        ]
+
+                        session.exec(insert(Price), params=prices)
+                        session.commit()
 
                     # Only update metadata after successful save
                     security.properties["last_price_date"] = max_date.strftime(
@@ -322,7 +366,8 @@ class PriceService:
                     )
                     security.properties["price_provider"] = key
 
-                    # Successfully fetched prices, break out of the loop
+                    # Successfully fetched prices
+                    result = len(prices)
                     break
 
                 except InvalidSecurityError:
@@ -355,8 +400,8 @@ class PriceService:
 
         return result
 
-    def _add_metadata(self, price_data: PriceDataWrite, source: str) -> PriceDataWrite:
+    def _add_metadata(self, price_data: PriceCreate, source: str) -> PriceCreate:
         """Add source metadata to price data."""
-        if "source" not in price_data.metadata:
-            price_data.metadata["source"] = source
+        if "source" not in price_data.properties:
+            price_data.properties["source"] = source
         return price_data
