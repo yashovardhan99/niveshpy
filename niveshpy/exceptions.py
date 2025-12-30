@@ -94,15 +94,23 @@ class QuerySyntaxError(ValidationError):
 class ResourceNotFoundError(ResourceError):
     """Exception raised when a requested resource is not found."""
 
-    def __init__(self, resource_type: str, identifier: object, *args: object) -> None:
+    def __init__(
+        self,
+        resource_type: str,
+        identifier: object,
+        message: str | None = None,
+        *args: object,
+    ) -> None:
         """Initialize the ResourceNotFoundError.
 
         Args:
             resource_type: The type of the resource (e.g., "User", "File").
             identifier: The identifier used to look for the resource.
+            message: Optional custom error message.
             *args: Additional arguments to pass to the base Exception class.
         """
-        message = f"{resource_type} with identifier '{identifier}' not found."
+        if message is None:
+            message = f"{resource_type} with identifier '{identifier}' not found."
         super().__init__(message, *args)
         self.resource_type = resource_type
         self.identifier = identifier
@@ -159,17 +167,3 @@ class InvalidSecurityError(NiveshPyError):
     If it is not clear whether the security is invalid or just temporarily unsupported,
     consider using PriceNotFoundError instead.
     """
-
-
-class NiveshPyUserError(NiveshPyError):
-    """Exception raised for errors caused by incorrect user input or actions."""
-
-    def __init__(self, message: str, *args: object) -> None:
-        """Initialize the NiveshPyUserError.
-
-        Args:
-            message: The user-friendly error message.
-            *args: Additional arguments to pass to the base Exception class.
-        """
-        super().__init__(message, *args)
-        self.message = message

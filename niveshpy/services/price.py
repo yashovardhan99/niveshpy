@@ -20,11 +20,12 @@ from niveshpy.core.query.prepare import (
 )
 from niveshpy.database import get_session
 from niveshpy.exceptions import (
+    InvalidInputError,
     InvalidSecurityError,
     NiveshPyError,
-    NiveshPyUserError,
     OperationError,
     PriceNotFoundError,
+    ResourceNotFoundError,
 )
 from niveshpy.models.output import BaseMessage, ProgressUpdate, Warning
 from niveshpy.models.price import (
@@ -109,7 +110,7 @@ class PriceService:
             MergeAction containing the result of the upsert operation.
         """
         if len(ohlc) not in (1, 2, 4):
-            raise NiveshPyUserError("OHLC must contain 1, 2, or 4 values.")
+            raise InvalidInputError(ohlc, "OHLC must contain 1, 2, or 4 values.")
 
         price_data = PriceCreate(
             security_key=security_key,
@@ -129,9 +130,7 @@ class PriceService:
             security = session.get(Security, security_key)
 
             if security is None:
-                raise NiveshPyUserError(
-                    f"Security with key {security_key} does not exist."
-                )
+                raise ResourceNotFoundError("Security", security_key)
 
             # Check if price already exists
             existing_price = session.get(Price, (security_key, date))
@@ -165,7 +164,7 @@ class PriceService:
         provider_registry.discover_installed_providers(name=provider_key)
         provider = provider_registry.get_provider(provider_key)
         if provider is None:
-            raise NiveshPyUserError(f"Price provider '{provider_key}' is not found.")
+            raise ResourceNotFoundError("Price provider", provider_key)
 
     def sync_prices(
         self, queries: tuple[str, ...], force: bool, provider_key: str | None
@@ -220,7 +219,9 @@ class PriceService:
         )
 
         if len(securities) == 0:
-            raise NiveshPyUserError("No securities found matching the given queries.")
+            raise ResourceNotFoundError(
+                "Securities", queries, "No securities found matching the given queries."
+            )
 
         # Now, for each security, determine which provider to use.
         provider_map: dict[str, list[tuple[int, str, ProviderInfo, Provider]]] = {}
