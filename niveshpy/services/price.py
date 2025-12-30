@@ -20,11 +20,11 @@ from niveshpy.core.query.prepare import (
 )
 from niveshpy.database import get_session
 from niveshpy.exceptions import (
-    InvalidSecurityError,
+    InvalidInputError,
+    NetworkError,
     NiveshPyError,
-    NiveshPySystemError,
-    NiveshPyUserError,
-    PriceNotFoundError,
+    OperationError,
+    ResourceNotFoundError,
 )
 from niveshpy.models.output import BaseMessage, ProgressUpdate, Warning
 from niveshpy.models.price import (
@@ -61,7 +61,9 @@ class PriceService:
             offset: Number of securities to skip from the start.
         """
         if limit < 1:
-            raise ValueError("Limit must be positive.")
+            raise InvalidInputError(limit, "Limit must be positive.")
+        if offset < 0:
+            raise InvalidInputError(offset, "Offset cannot be negative.")
         where_clause = get_filters_from_queries(
             queries, ast.Field.SECURITY, PRICE_COLUMN_MAPPING
         )
@@ -109,7 +111,7 @@ class PriceService:
             MergeAction containing the result of the upsert operation.
         """
         if len(ohlc) not in (1, 2, 4):
-            raise NiveshPyUserError("OHLC must contain 1, 2, or 4 values.")
+            raise InvalidInputError(ohlc, "OHLC must contain 1, 2, or 4 values.")
 
         price_data = PriceCreate(
             security_key=security_key,
@@ -129,9 +131,7 @@ class PriceService:
             security = session.get(Security, security_key)
 
             if security is None:
-                raise NiveshPyUserError(
-                    f"Security with key {security_key} does not exist."
-                )
+                raise ResourceNotFoundError("Security", security_key)
 
             # Check if price already exists
             existing_price = session.get(Price, (security_key, date))
@@ -165,7 +165,7 @@ class PriceService:
         provider_registry.discover_installed_providers(name=provider_key)
         provider = provider_registry.get_provider(provider_key)
         if provider is None:
-            raise NiveshPyUserError(f"Price provider '{provider_key}' is not found.")
+            raise ResourceNotFoundError("Price provider", provider_key)
 
     def sync_prices(
         self, queries: tuple[str, ...], force: bool, provider_key: str | None
@@ -220,7 +220,9 @@ class PriceService:
         )
 
         if len(securities) == 0:
-            raise NiveshPyUserError("No securities found matching the given queries.")
+            raise ResourceNotFoundError(
+                "Securities", queries, "No securities found matching the given queries."
+            )
 
         # Now, for each security, determine which provider to use.
         provider_map: dict[str, list[tuple[int, str, ProviderInfo, Provider]]] = {}
@@ -282,10 +284,13 @@ class PriceService:
                         len(futures),
                     )
                 except NiveshPyError as e:
+                    e.add_note(
+                        f"Error occurred while syncing prices for security {security.key}."
+                    )
                     raise e
                 except Exception as e:
-                    raise NiveshPySystemError(
-                        "An unexpected error occurred during price sync."
+                    raise OperationError(
+                        f"An unexpected error occurred during price sync for security {security.key}."
                     ) from e
 
     def _process_sync(
@@ -370,21 +375,27 @@ class PriceService:
                     result = len(prices)
                     break
 
-                except InvalidSecurityError:
+                except ResourceNotFoundError as e:
+                    e.add_note(
+                        f"Provider {provider_info.name} reported resource not found for security {security.key}."
+                    )
+                    logger.info(
+                        "Resource not found from provider %s for security %s",
+                        provider_info.name,
+                        security.key,
+                        exc_info=True,
+                    )
                     break  # Try next provider TODO: Add blacklist mechanism
-                except PriceNotFoundError as e:
-                    if not e.should_retry:
-                        break  # Do not retry, try next provider
-                    else:
-                        continue  # Retry with the same provider
+                except NetworkError:
+                    logger.info(
+                        f"Network error fetching prices from provider {provider_info.name} for security {security.key}",
+                        exc_info=True,
+                    )
+                    continue  # Retry with the same provider
                 except NiveshPyError:
                     raise
                 except Exception as e:
-                    logger.info(
-                        f"Error fetching prices from provider {provider_info.name} for security {security.key}",
-                        exc_info=True,
-                    )
-                    raise NiveshPySystemError(
+                    raise OperationError(
                         f"An unexpected error occurred while fetching prices from provider {provider_info.name} for security {security.key}."
                     ) from e
 

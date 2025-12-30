@@ -56,13 +56,7 @@ def discover_installed_parsers(name: str | None = None) -> None:
         parser_entry_points = parser_entry_points.select(name=name)
 
     for entry_point in parser_entry_points:
-        try:
-            parser_factory = entry_point.load()
-            register_parser(entry_point.name, parser_factory)
-        except Exception as e:
-            logger.error(
-                f"Failed to load parser from entry point '{entry_point.name}': {e}"
-            )
-
+        parser_factory = entry_point.load()
+        register_parser(entry_point.name, parser_factory)
     list_parsers.cache_clear()
     list_parsers_starting_with.cache_clear()

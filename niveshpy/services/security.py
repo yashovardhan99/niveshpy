@@ -8,6 +8,7 @@ from niveshpy.core import logging
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import get_filters_from_queries
 from niveshpy.database import get_session
+from niveshpy.exceptions import InvalidInputError
 from niveshpy.models.security import (
     SECURITY_COLUMN_MAPPING,
     Security,
@@ -33,6 +34,11 @@ class SecurityService:
         offset: int = 0,
     ) -> Sequence[Security]:
         """List securities matching the query."""
+        if limit < 1:
+            raise InvalidInputError(limit, "Limit must be positive.")
+        if offset < 0:
+            raise InvalidInputError(offset, "Offset cannot be negative.")
+
         where_clause = get_filters_from_queries(
             queries, ast.Field.SECURITY, SECURITY_COLUMN_MAPPING
         )
@@ -51,12 +57,13 @@ class SecurityService:
     ) -> InsertResult[Security]:
         """Add a single security to the database."""
         if not key.strip() or not name.strip():
-            raise ValueError("Security key and name cannot be empty.")
+            raise InvalidInputError(
+                (key, name), "Security key and name cannot be empty."
+            )
         if stype not in SecurityType:
-            raise ValueError(f"Invalid security type: {stype}")
+            raise InvalidInputError(stype, f"Invalid security type: {stype}")
         if category not in SecurityCategory:
-            raise ValueError(f"Invalid security category: {category}")
-
+            raise InvalidInputError(category, f"Invalid security category: {category}")
         if source:
             properties = {"source": source}
         else:

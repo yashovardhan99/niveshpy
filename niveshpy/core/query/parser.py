@@ -8,6 +8,7 @@ from decimal import Decimal
 from niveshpy.core.query import ast
 from niveshpy.core.query import tokens as Tokens
 from niveshpy.core.query.tokenizer import QueryLexer
+from niveshpy.exceptions import OperationError, QuerySyntaxError
 
 
 class QueryParser:
@@ -48,8 +49,8 @@ class QueryParser:
                 case Tokens.Unknown(char=char):
                     strings.append(char)
                 case _:
-                    raise ValueError(
-                        f"Invalid token {tok} in sequence {tokens} for string conversion."
+                    raise OperationError(
+                        f"Unexpected token {tok} in sequence {tokens} for string conversion."
                     )
         return "".join(strings)
 
@@ -78,10 +79,10 @@ class QueryParser:
             case [Tokens.Int(value=int_value)]:  # Positive integer
                 return Decimal(int_value)
             case _:
-                raise ValueError(
-                    f"Invalid token sequence {tokens} for number conversion."
+                raise QuerySyntaxError(
+                    str(tokens),
+                    "Invalid token sequence for number conversion.",
                 )
-        raise NotImplementedError("Conversion to number not implemented yet.")
 
     @staticmethod
     def convert_to_date(tokens: Iterable[Tokens.Token], start: bool = True) -> date:
@@ -116,11 +117,9 @@ class QueryParser:
             case [Tokens.Int(value=year)] if not start:
                 return date(year=int(year) + 1, month=1, day=1) - timedelta(days=1)
             case _:
-                raise ValueError(
-                    f"Invalid token sequence {tokens} for date conversion."
+                raise QuerySyntaxError(
+                    str(tokens), "Invalid token sequence for date conversion."
                 )
-        """Convert a sequence of tokens to a date."""
-        raise NotImplementedError("Conversion to date not implemented yet.")
 
     def read_remaining_as_literal(self) -> str:
         """Read the entire input as a literal string."""
@@ -160,7 +159,9 @@ class QueryParser:
             case Tokens.LtEq():
                 return ast.Operator.LESS_THAN_EQ
             case _:
-                raise ValueError(f"Token {token} cannot be mapped to an operator.")
+                raise OperationError(
+                    f"Unexpected token {token} for operator conversion."
+                )
 
     def parse(self) -> list[ast.FilterNode]:
         """Parse the query and return a structured filter."""
@@ -192,11 +193,17 @@ class QueryParser:
 
                     case _ if Tokens.RangeSeparator() in tokens:  # Range expression
                         sep_index = tokens.index(Tokens.RangeSeparator())
+                        if len(tokens) == 1:  # Only '..' is present
+                            raise QuerySyntaxError(
+                                str(tokens),
+                                "Both start and end amount cannot be empty in a range expression.",
+                            )
                         start_value = self.convert_to_number(tokens[:sep_index])
                         end_value = self.convert_to_number(tokens[sep_index + 1 :])
                         if start_value > end_value:
-                            raise ValueError(
-                                f"Invalid amount range: start amount {start_value} is greater than end amount {end_value}."
+                            raise QuerySyntaxError(
+                                str(tokens),
+                                "Invalid amount range: start amount is greater than end amount.",
                             )
                         if start_value == end_value:
                             operator = ast.Operator.EQUALS
@@ -214,8 +221,9 @@ class QueryParser:
                 if Tokens.RangeSeparator() in tokens:  # Range expression
                     sep_index = tokens.index(Tokens.RangeSeparator())
                     if len(tokens) == 1:  # Only '..' is present
-                        raise ValueError(
-                            "Both start date and end date cannot be non-empty in a range expression."
+                        raise QuerySyntaxError(
+                            str(tokens),
+                            "Both start date and end date cannot be empty in a range expression.",
                         )
 
                     start_date = (
@@ -239,8 +247,9 @@ class QueryParser:
                     operator = ast.Operator.GREATER_THAN_EQ
                     value = start_date
                 elif start_date > end_date:
-                    raise ValueError(
-                        f"Invalid date range: start date {start_date} is after end date {end_date}."
+                    raise QuerySyntaxError(
+                        str(tokens),
+                        "Invalid date range: start date is after end date.",
                     )
                 elif start_date == end_date:
                     operator = ast.Operator.EQUALS

@@ -9,7 +9,6 @@ from niveshpy.cli.utils import flags, output
 from niveshpy.cli.utils.overrides import command, group
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
-from niveshpy.database import DatabaseError
 from niveshpy.models.account import AccountPublic
 from niveshpy.services.result import MergeAction, ResolutionStatus
 
@@ -42,16 +41,9 @@ def show(
     """
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading accounts..."):
-        try:
-            result = state.app.account.list_accounts(
-                queries=queries, limit=limit, offset=offset
-            )
-        except ValueError as e:
-            logger.error(e, exc_info=True)
-            ctx.exit(1)
-        except DatabaseError as e:
-            logger.critical(e, exc_info=True)
-            ctx.exit(1)
+        result = state.app.account.list_accounts(
+            queries=queries, limit=limit, offset=offset
+        )
 
         if len(result) == 0:
             msg = "No accounts " + (
@@ -98,16 +90,9 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
             )
             ctx.exit(1)
 
-        try:
-            result = state.app.account.add_account(
-                name=name, institution=institution, source="cli"
-            )
-        except ValueError as e:
-            output.display_error(str(e))
-            ctx.exit(1)
-        except RuntimeError as e:
-            output.display_error(str(e))
-            ctx.exit(1)
+        result = state.app.account.add_account(
+            name=name, institution=institution, source="cli"
+        )
         if result.action == MergeAction.NOTHING:
             output.display_warning(f"Account already exists with ID {result.data.id}.")
         else:
@@ -142,31 +127,21 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
                 .strip()
             )
 
-            try:
-                result = state.app.account.add_account(
-                    name=name, institution=institution, source="cli"
+            result = state.app.account.add_account(
+                name=name, institution=institution, source="cli"
+            )
+            if result.action == MergeAction.NOTHING:
+                output.display_warning(
+                    f"Account already exists with ID {result.data.id}."
                 )
-                if result.action == MergeAction.NOTHING:
-                    output.display_warning(
-                        f"Account already exists with ID {result.data.id}."
-                    )
-                else:
-                    output.display_success(
-                        f"Account [b]{name}[/b] added successfully with ID {result.data.id}."
-                    )
+            else:
+                output.display_success(
+                    f"Account [b]{name}[/b] added successfully with ID {result.data.id}."
+                )
 
-                # Reset for next iteration
-                name = ""
-                institution = ""
-            except ValueError as e:
-                logger.error(e)
-                continue
-            except RuntimeError as e:
-                logger.error(e)
-                continue
-            except DatabaseError as e:
-                logger.critical(e, exc_info=True)
-                ctx.exit(1)
+            # Reset for next iteration
+            name = ""
+            institution = ""
 
 
 @command()

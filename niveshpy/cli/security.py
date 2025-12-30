@@ -11,7 +11,6 @@ from niveshpy.cli.utils import flags, output
 from niveshpy.cli.utils.overrides import command, group
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
-from niveshpy.database import DatabaseError
 from niveshpy.models.security import (
     Security,
     SecurityCategory,
@@ -49,16 +48,9 @@ def show(
     """
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading securities..."):
-        try:
-            securities = state.app.security.list_securities(
-                queries=queries, limit=limit, offset=offset
-            )
-        except ValueError as e:
-            logger.error(e, exc_info=True)
-            ctx.exit(1)
-        except DatabaseError as e:
-            logger.critical(e, exc_info=True)
-            ctx.exit(1)
+        securities = state.app.security.list_securities(
+            queries=queries, limit=limit, offset=offset
+        )
 
     if len(securities) == 0:
         output.display_warning(
@@ -128,20 +120,14 @@ def add(
                 "When running in non-interactive mode, all arguments for adding a security must be provided."
             )
             ctx.exit(1)
-        try:
-            result = state.app.security.add_security(
-                default_key.strip(),
-                default_name.strip(),
-                SecurityType(default_type.strip().lower()),
-                SecurityCategory(default_category.strip().lower()),
-                source="cli",
-            )
-        except ValueError as e:
-            logger.error(e, exc_info=True)
-            ctx.exit(1)
-        except DatabaseError as e:
-            logger.critical(e, exc_info=True)
-            ctx.exit(1)
+
+        result = state.app.security.add_security(
+            default_key.strip(),
+            default_name.strip(),
+            SecurityType(default_type.strip().lower()),
+            SecurityCategory(default_category.strip().lower()),
+            source="cli",
+        )
 
         action = "added" if result.action == MergeAction.INSERT else "updated"
         output.display_success(
@@ -199,20 +185,14 @@ def add(
 
         # Add the security
         with output.loading_spinner(f"Adding security '{name}'..."):
-            try:
-                result = state.app.security.add_security(
-                    security_key,
-                    name,
-                    security_type,
-                    category,
-                    source="cli",
-                )
-            except ValueError as e:
-                logger.error(e, exc_info=True)
-                continue
-            except DatabaseError as e:
-                logger.critical(e, exc_info=True)
-                ctx.exit(1)
+            result = state.app.security.add_security(
+                security_key,
+                name,
+                security_type,
+                category,
+                source="cli",
+            )
+
         action = "added" if result.action == MergeAction.INSERT else "updated"
         output.display_success(
             f"Security '{result.data.name}' was {action} successfully."

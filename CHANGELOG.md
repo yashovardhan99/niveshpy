@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Migrate to using sqlmodel/sqlalchemy with sqlite database.
+- Standardize exceptions into a proper hierarchy.
 
 ## [1.0.0a1] - 2025-11-09
 

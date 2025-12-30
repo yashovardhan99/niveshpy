@@ -12,6 +12,7 @@ from niveshpy.core.query import ast
 from niveshpy.core.query.ast import Field, FilterNode, FilterValue, Operator
 from niveshpy.core.query.parser import QueryParser
 from niveshpy.core.query.tokenizer import QueryLexer
+from niveshpy.exceptions import OperationError, QuerySyntaxError
 
 
 def prepare_filters(
@@ -146,7 +147,7 @@ def prepare_expression(filter: FilterNode, column: ColumnClause) -> ColumnElemen
         case ast.Operator.NOT_IN if isinstance(filter.value, tuple):
             return ~column.in_(filter.value)
         case _:
-            raise ValueError(
+            raise OperationError(
                 f"Unsupported operator / value for WHERE clause: {op} / {filter.value}"
             )
 
@@ -166,19 +167,25 @@ def get_filters_from_queries(
     Returns:
         list: The list of SQLAlchemy filter expressions.
     """
-    stripped_queries = map(str.strip, queries)
-    lexers = map(QueryLexer, stripped_queries)
-    parsers = map(QueryParser, lexers)
-    filters: Iterable[FilterNode] = itertools.chain.from_iterable(
-        map(QueryParser.parse, parsers)
-    )
-    filters = prepare_filters(filters, default_field)
+    try:
+        stripped_queries = map(str.strip, queries)
+        lexers = map(QueryLexer, stripped_queries)
+        parsers = map(QueryParser, lexers)
+        filters: Iterable[FilterNode] = itertools.chain.from_iterable(
+            map(QueryParser.parse, parsers)
+        )
+        filters = prepare_filters(filters, default_field)
+    except QuerySyntaxError as e:
+        e.add_note(f"Error was reported on input: {e.input_value}")
+        raise QuerySyntaxError(" ".join(queries), cause=e.cause) from e
 
     expressions: list[ColumnElement[bool]] = []
     for filter in filters:
         cols = column_mappings.get(filter.field, [])
         if not cols:
-            raise ValueError(f"Field {filter.field} not mapped to any column.")
+            raise QuerySyntaxError(
+                " ".join(queries), f"Field {filter.field} not mapped to any column."
+            )
 
         col_expressions: list[ColumnElement[bool]] = []
         for col in cols:
@@ -201,12 +208,16 @@ def get_fields_from_queries(
     Returns:
         set: The set of Fields used in the queries.
     """
-    stripped_queries = map(str.strip, queries)
-    lexers = map(QueryLexer, stripped_queries)
-    parsers = map(QueryParser, lexers)
-    filters: Iterable[FilterNode] = itertools.chain.from_iterable(
-        map(QueryParser.parse, parsers)
-    )
+    try:
+        stripped_queries = map(str.strip, queries)
+        lexers = map(QueryLexer, stripped_queries)
+        parsers = map(QueryParser, lexers)
+        filters: Iterable[FilterNode] = itertools.chain.from_iterable(
+            map(QueryParser.parse, parsers)
+        )
+    except QuerySyntaxError as e:
+        e.add_note(f"Error was reported on input: {e.input_value}")
+        raise QuerySyntaxError(" ".join(queries), cause=e.cause) from e
 
     used_fields: set[Field] = set()
     for filter in filters:
