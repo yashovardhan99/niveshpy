@@ -159,11 +159,3 @@ class PriceNotFoundError(PriceProviderError):
         """
         super().__init__(*args)  # type: ignore # This will be removed very soon.
         self.should_retry = should_retry
-
-
-class InvalidSecurityError(NiveshPyError):
-    """Exception raised when a security is invalid or unsupported.
-
-    If it is not clear whether the security is invalid or just temporarily unsupported,
-    consider using PriceNotFoundError instead.
-    """

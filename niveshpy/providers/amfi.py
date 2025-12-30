@@ -6,7 +6,10 @@ from collections.abc import Iterable
 
 import requests
 
-from niveshpy.exceptions import InvalidSecurityError, PriceNotFoundError
+from niveshpy.exceptions import (
+    PriceNotFoundError,
+    ResourceNotFoundError,
+)
 from niveshpy.models.price import PriceCreate
 from niveshpy.models.provider import ProviderInfo
 from niveshpy.models.security import Security, SecurityType
@@ -59,9 +62,7 @@ class AMFIProvider:
         ):
             return str(amfi_code)
 
-        raise InvalidSecurityError(
-            f"Security {security.key} does not have a valid AMFI code."
-        )
+        raise ResourceNotFoundError("Security", security.key)
 
     def _extract_price_data(
         self, response: requests.Response, security: Security
@@ -101,7 +102,7 @@ class AMFIProvider:
 
         except requests.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
-                raise InvalidSecurityError from e
+                raise ResourceNotFoundError("Security", security.key) from e
             raise PriceNotFoundError(
                 should_retry=True,
             ) from e

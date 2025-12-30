@@ -21,7 +21,6 @@ from niveshpy.core.query.prepare import (
 from niveshpy.database import get_session
 from niveshpy.exceptions import (
     InvalidInputError,
-    InvalidSecurityError,
     NiveshPyError,
     OperationError,
     PriceNotFoundError,
@@ -374,7 +373,16 @@ class PriceService:
                     result = len(prices)
                     break
 
-                except InvalidSecurityError:
+                except ResourceNotFoundError as e:
+                    e.add_note(
+                        f"Provider {provider_info.name} reported resource not found for security {security.key}."
+                    )
+                    logger.info(
+                        "Resource not found from provider %s for security %s",
+                        provider_info.name,
+                        security.key,
+                        exc_info=True,
+                    )
                     break  # Try next provider TODO: Add blacklist mechanism
                 except PriceNotFoundError as e:
                     if not e.should_retry:
