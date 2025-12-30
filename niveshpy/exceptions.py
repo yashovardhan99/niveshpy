@@ -116,27 +116,3 @@ class ResourceNotFoundError(ResourceError):
         super().__init__(message, *args)
         self.resource_type = resource_type
         self.identifier = identifier
-
-
-class NoDataFoundError(ResourceError):
-    """Exception raised when no data is found.
-
-    This error should typically be used by data providers
-    when no data is available for a given query.
-
-    Ideally, this exception should not be propagated to end-users directly.
-    Instead, this exception should be caught by an orchestration layer,
-    which can then decide how to handle the absence of data
-    (e.g., by trying alternative data sources or notifying the user appropriately).
-    """
-
-    def __init__(self, message: str | None = None, *args: object) -> None:
-        """Initialize the NoDataFoundError.
-
-        Args:
-            message: Optional custom error message.
-            *args: Additional arguments to pass to the base Exception class.
-        """
-        if message is None:
-            message = "No data found for the given query."
-        super().__init__(message, *args)
