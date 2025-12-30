@@ -138,24 +138,3 @@ class NoDataFoundError(ResourceError):
         if message is None:
             message = "No data found for the given query."
         super().__init__(message, *args)
-
-
-# Older exceptions - to be deprecated
-
-
-class PriceProviderError(NiveshPyError):
-    """Base class for errors related to price providers."""
-
-
-class PriceNotFoundError(PriceProviderError):
-    """Exception raised when price data is not found for a security."""
-
-    def __init__(self, *args: object, should_retry: bool = False) -> None:
-        """Initialize the PriceNotFoundError.
-
-        Args:
-            should_retry: Indicates if the operation that caused this error should be retried.
-            *args: Additional arguments to pass to the base Exception class.
-        """
-        super().__init__(*args)  # type: ignore # This will be removed very soon.
-        self.should_retry = should_retry

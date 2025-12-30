@@ -21,9 +21,9 @@ from niveshpy.core.query.prepare import (
 from niveshpy.database import get_session
 from niveshpy.exceptions import (
     InvalidInputError,
+    NetworkError,
     NiveshPyError,
     OperationError,
-    PriceNotFoundError,
     ResourceNotFoundError,
 )
 from niveshpy.models.output import BaseMessage, ProgressUpdate, Warning
@@ -384,11 +384,12 @@ class PriceService:
                         exc_info=True,
                     )
                     break  # Try next provider TODO: Add blacklist mechanism
-                except PriceNotFoundError as e:
-                    if not e.should_retry:
-                        break  # Do not retry, try next provider
-                    else:
-                        continue  # Retry with the same provider
+                except NetworkError:
+                    logger.info(
+                        f"Network error fetching prices from provider {provider_info.name} for security {security.key}",
+                        exc_info=True,
+                    )
+                    continue  # Retry with the same provider
                 except NiveshPyError:
                     raise
                 except Exception as e:

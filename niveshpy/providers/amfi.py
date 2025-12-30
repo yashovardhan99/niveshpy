@@ -7,7 +7,7 @@ from collections.abc import Iterable
 import requests
 
 from niveshpy.exceptions import (
-    PriceNotFoundError,
+    NetworkError,
     ResourceNotFoundError,
 )
 from niveshpy.models.price import PriceCreate
@@ -84,11 +84,12 @@ class AMFIProvider:
             price_data_list = data.get("data", [])
 
             if not price_data_list:
-                raise PriceNotFoundError(
-                    f"No price data found for security {security.key}.",
-                    should_retry=False,
+                exc = ResourceNotFoundError(
+                    "Security",
+                    security.key,
                 )
-
+                exc.add_note("AMFI returned no price data.")
+                raise exc
             for item in price_data_list:
                 price = decimal.Decimal(item["nav"])
                 yield PriceCreate(
@@ -103,8 +104,8 @@ class AMFIProvider:
         except requests.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
                 raise ResourceNotFoundError("Security", security.key) from e
-            raise PriceNotFoundError(
-                should_retry=True,
+            raise NetworkError(
+                "HTTP error occurred while fetching data from AMFI."
             ) from e
 
     def fetch_latest_price(self, security: Security) -> PriceCreate:
@@ -127,10 +128,9 @@ class AMFIProvider:
             return next(price_data_iter)
 
         except StopIteration:
-            raise PriceNotFoundError(
-                f"No latest price data found for security {security.key}.",
-                should_retry=False,
-            ) from None
+            exc = ResourceNotFoundError("Security", security.key)
+            exc.add_note("AMFI returned no price data.")
+            raise exc from None
 
     def fetch_historical_prices(
         self,
