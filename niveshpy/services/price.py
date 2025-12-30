@@ -61,7 +61,9 @@ class PriceService:
             offset: Number of securities to skip from the start.
         """
         if limit < 1:
-            raise ValueError("Limit must be positive.")
+            raise InvalidInputError(limit, "Limit must be positive.")
+        if offset < 0:
+            raise InvalidInputError(offset, "Offset cannot be negative.")
         where_clause = get_filters_from_queries(
             queries, ast.Field.SECURITY, PRICE_COLUMN_MAPPING
         )
@@ -393,10 +395,6 @@ class PriceService:
                 except NiveshPyError:
                     raise
                 except Exception as e:
-                    logger.info(
-                        f"Error fetching prices from provider {provider_info.name} for security {security.key}",
-                        exc_info=True,
-                    )
                     raise OperationError(
                         f"An unexpected error occurred while fetching prices from provider {provider_info.name} for security {security.key}."
                     ) from e

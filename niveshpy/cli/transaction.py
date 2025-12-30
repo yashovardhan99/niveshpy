@@ -52,13 +52,9 @@ def show(
     """
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading transactions..."):
-        try:
-            transactions = state.app.transaction.list_transactions(
-                queries=queries, limit=limit, offset=offset
-            )
-        except ValueError as e:
-            logger.error(e, exc_info=True)
-            ctx.exit(1)
+        transactions = state.app.transaction.list_transactions(
+            queries=queries, limit=limit, offset=offset
+        )
 
     if len(transactions) == 0:
         msg = "No transactions " + (
@@ -164,24 +160,17 @@ def add(
             ctx.exit(1)
 
         # If all required arguments are provided, add the transaction
-        try:
-            result = state.app.transaction.add_transaction(
-                transaction_date=transaction_date,
-                transaction_type=transaction_type,
-                description=description,
-                amount=amount,
-                units=units,
-                account_id=account_id,
-                security_key=security_key,
-                source="cli",
-            )
-            output.display_success(
-                f"Transaction added successfully with ID: {result.id}"
-            )
-        except ValueError as e:
-            logger.error(e, exc_info=True)
-            ctx.exit(1)
-
+        result = state.app.transaction.add_transaction(
+            transaction_date=transaction_date,
+            transaction_type=transaction_type,
+            description=description,
+            amount=amount,
+            units=units,
+            account_id=account_id,
+            security_key=security_key,
+            source="cli",
+        )
+        output.display_success(f"Transaction added successfully with ID: {result.id}")
     else:
         output.display_message("Adding a new transaction.")
         output.display_message(
@@ -267,23 +256,19 @@ def add(
                 default=security_key,
             ).execute()
 
-            try:
-                result = state.app.transaction.add_transaction(
-                    transaction_date=transaction_date,
-                    transaction_type=transaction_type,
-                    description=description,
-                    amount=amount,
-                    units=units,
-                    account_id=int(account_id),
-                    security_key=security_key,
-                    source="cli",
-                )
-                output.display_success(
-                    f"Transaction added successfully with ID: {result.id}"
-                )
-            except ValueError as e:
-                logger.error(e, exc_info=True)
-                ctx.exit(1)
+            result = state.app.transaction.add_transaction(
+                transaction_date=transaction_date,
+                transaction_type=transaction_type,
+                description=description,
+                amount=amount,
+                units=units,
+                account_id=int(account_id),
+                security_key=security_key,
+                source="cli",
+            )
+            output.display_success(
+                f"Transaction added successfully with ID: {result.id}"
+            )
 
             output.display_message("Adding another transaction...")
             output.display_message("(Press Ctrl+C or Ctrl+D to exit.)")

@@ -60,13 +60,8 @@ def discover_installed_providers(name: str | None = None) -> None:
         provider_entry_points = provider_entry_points.select(name=name)
 
     for entry_point in provider_entry_points:
-        try:
-            provider_factory = entry_point.load()
-            register_provider(entry_point.name, provider_factory)
-        except Exception as e:
-            logger.error(
-                f"Failed to load provider from entry point '{entry_point.name}': {e}"
-            )
+        provider_factory = entry_point.load()
+        register_provider(entry_point.name, provider_factory)
 
     list_providers.cache_clear()
     list_providers_starting_with.cache_clear()

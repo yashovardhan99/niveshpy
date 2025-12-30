@@ -6,6 +6,7 @@ from pathlib import Path
 
 import casparser  # type: ignore
 
+from niveshpy.exceptions import InvalidInputError, OperationError
 from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.models.parser import ParserInfo
 from niveshpy.models.security import (
@@ -26,10 +27,14 @@ class CASParser:
         """Initialize the CAS Parser with a file path."""
         self.data = casparser.read_cas_pdf(file_path, password)
         if not isinstance(self.data, casparser.CASData):
-            raise ValueError("Only CAMS and Kfintech CAS statements are supported.")
+            raise InvalidInputError(
+                file_path, "Only CAMS and Kfintech CAS statements are supported."
+            )
 
         if self.data.cas_type != "DETAILED":
-            raise ValueError("Only DETAILED CAS statements are supported.")
+            raise InvalidInputError(
+                file_path, "Only DETAILED CAS statements are supported."
+            )
 
     def get_date_range(self) -> tuple[datetime.date, datetime.date]:
         """Get the date range of the CAS data."""
@@ -77,7 +82,7 @@ class CASParser:
         for folio in self.data.folios:
             account_id = accounts_map.get((folio.folio, folio.amc))
             if account_id is None:
-                raise ValueError(
+                raise OperationError(
                     f"Account for folio {folio.folio} and AMC {folio.amc} not found."
                 )
             for scheme in folio.schemes:

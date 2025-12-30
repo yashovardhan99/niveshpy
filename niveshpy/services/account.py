@@ -10,6 +10,7 @@ from niveshpy.core.query.prepare import (
     get_filters_from_queries,
 )
 from niveshpy.database import get_session
+from niveshpy.exceptions import InvalidInputError
 from niveshpy.models.account import Account, AccountCreate, AccountPublic
 from niveshpy.services.result import (
     InsertResult,
@@ -30,6 +31,11 @@ class AccountService:
         self, queries: tuple[str, ...], limit: int = 30, offset: int = 0
     ) -> Sequence[AccountPublic]:
         """List accounts, optionally filtered by a query string."""
+        if limit < 1:
+            raise InvalidInputError(limit, "Limit must be positive.")
+        if offset < 0:
+            raise InvalidInputError(offset, "Offset cannot be negative.")
+
         where_clause = get_filters_from_queries(
             queries, ast.Field.ACCOUNT, self._column_mappings
         )
@@ -45,7 +51,9 @@ class AccountService:
     ) -> InsertResult[Account]:
         """Add a new account."""
         if not name.strip() or not institution.strip():
-            raise ValueError("Account name and institution cannot be empty.")
+            raise InvalidInputError(
+                (name, institution), "Account name and institution cannot be empty."
+            )
         if source:
             properties = {"source": source}
         else:

@@ -11,6 +11,7 @@ from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import get_filters_from_queries
 from niveshpy.database import get_session
+from niveshpy.exceptions import InvalidInputError, ResourceNotFoundError
 from niveshpy.models.account import Account
 from niveshpy.models.security import Security
 from niveshpy.models.transaction import (
@@ -38,8 +39,9 @@ class TransactionService:
     ) -> Sequence[TransactionPublicWithRelations]:
         """List transactions matching the query."""
         if limit < 1:
-            logger.debug("Received non-positive limit: %d", limit)
-            raise ValueError("Limit must be positive.")
+            raise InvalidInputError(limit, "Limit must be positive.")
+        if offset < 0:
+            raise InvalidInputError(offset, "Offset cannot be negative.")
 
         where_clause = get_filters_from_queries(
             queries, ast.Field.SECURITY, TRANSACTION_COLUMN_MAPPING
@@ -81,9 +83,9 @@ class TransactionService:
             account = session.get(Account, account_id)
             security = session.get(Security, security_key)
         if account is None:
-            raise ValueError(f"Account with ID {account_id} does not exist.")
+            raise ResourceNotFoundError("Account", account_id)
         if security is None:
-            raise ValueError(f"Security with key {security_key} does not exist.")
+            raise ResourceNotFoundError("Security", security_key)
 
         transaction = Transaction.model_validate(
             TransactionCreate(

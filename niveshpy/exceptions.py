@@ -73,19 +73,21 @@ class QuerySyntaxError(ValidationError):
     """Exception raised for invalid query syntax."""
 
     def __init__(
-        self, input_value: str, message: str | None = None, *args: object
+        self, input_value: str, cause: str, message: str | None = None, *args: object
     ) -> None:
         """Initialize the QuerySyntaxError.
 
         Args:
             input_value: The input value with invalid syntax.
+            cause: Description of the syntax error cause.
             message: Optional custom error message.
             *args: Additional arguments to pass to the base Exception class.
         """
         if message is None:
-            message = f"Invalid query syntax: {input_value}"
+            message = f"Syntax error in query '{input_value}': {cause}"
         super().__init__(message, *args)
         self.input_value = input_value
+        self.cause = cause
 
 
 # Resource errors

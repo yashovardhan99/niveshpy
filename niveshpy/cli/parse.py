@@ -66,14 +66,10 @@ def parse(
     state = ctx.ensure_object(AppState)
     inquirer_style = get_style({}, style_override=state.no_color)
 
-    try:
-        with output.loading_spinner(f"Looking for parser {parser_key}..."):
-            if parser_registry.is_empty():
-                parser_registry.discover_installed_parsers(parser_key)
-            parser_factory = parser_registry.get_parser(parser_key)
-    except Exception as e:
-        logger.error(f"Error discovering and fetching parsers: {e}", exc_info=True)
-        ctx.exit(1)
+    with output.loading_spinner(f"Looking for parser {parser_key}..."):
+        if parser_registry.is_empty():
+            parser_registry.discover_installed_parsers(parser_key)
+        parser_factory = parser_registry.get_parser(parser_key)
 
     if parser_factory is None:
         logger.error(f"Parser with key '{parser_key}' not found.")
@@ -93,15 +89,11 @@ def parse(
             )
             password = output.ask_password()
 
-    try:
-        with output.loading_spinner(f"Loading parser {parser_key}..."):
-            parser = parser_factory.create_parser(
-                file_path,
-                password=password,
-            )
-    except Exception as e:
-        logger.error(f"Error instantiating parser: {e}", exc_info=True)
-        ctx.exit(1)
+    with output.loading_spinner(f"Loading parser {parser_key}..."):
+        parser = parser_factory.create_parser(
+            file_path,
+            password=password,
+        )
 
     if not state.no_input:
         output.display_message(
@@ -130,10 +122,6 @@ def parse(
             prog.start_task(task_map[stage])
             prog.update(task_map[stage], total=total, completed=current)
 
-    try:
-        with prog:
-            service = state.app.get_parsing_service(parser, update_progress)
-            service.parse_and_store_all()
-    except Exception as e:
-        logger.error(f"Error parsing file: {e}", exc_info=True)
-        ctx.exit(1)
+    with prog:
+        service = state.app.get_parsing_service(parser, update_progress)
+        service.parse_and_store_all()
