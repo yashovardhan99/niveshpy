@@ -21,7 +21,7 @@ from rich.table import Table
 from niveshpy.cli.utils import logging
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
-from niveshpy.exceptions import NiveshPyError, NiveshPySystemError, NiveshPyUserError
+from niveshpy.exceptions import NiveshPyError
 from niveshpy.models.output import BaseMessage, Message, ProgressUpdate, Warning
 
 _console = Console()  # Global console instance for utility functions
@@ -434,14 +434,13 @@ def handle_error(error: NiveshPyError) -> None:
     Args:
         error (NiveshPyError): The error to handle.
     """
-    if isinstance(error, NiveshPyUserError):
-        display_error(error.message)
-    elif isinstance(error, NiveshPySystemError):
-        logger.info("A system error occurred: %s", error)
-        display_error(error.message, tag="System Error:")
-    else:
-        logger.info("An unexpected error occurred: %s", error)
-        display_error("An unexpected error occurred. Check logs for details.")
+    logger.info(
+        "An error of type %s occurred: %s",
+        type(error).__name__,
+        error.message,
+        exc_info=True,
+    )
+    display_error(error.message)
 
 
 def handle_niveshpy_message(
