@@ -9,7 +9,6 @@ from niveshpy.cli.utils import flags, output
 from niveshpy.cli.utils.overrides import command, group
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
-from niveshpy.database import DatabaseError
 from niveshpy.models.account import AccountPublic
 from niveshpy.services.result import MergeAction, ResolutionStatus
 
@@ -48,9 +47,6 @@ def show(
             )
         except ValueError as e:
             logger.error(e, exc_info=True)
-            ctx.exit(1)
-        except DatabaseError as e:
-            logger.critical(e, exc_info=True)
             ctx.exit(1)
 
         if len(result) == 0:
@@ -164,9 +160,6 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
             except RuntimeError as e:
                 logger.error(e)
                 continue
-            except DatabaseError as e:
-                logger.critical(e, exc_info=True)
-                ctx.exit(1)
 
 
 @command()

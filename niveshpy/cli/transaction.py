@@ -12,7 +12,6 @@ from niveshpy.cli.utils import flags, inputs, output
 from niveshpy.cli.utils.overrides import command, group
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
-from niveshpy.database import DatabaseError
 from niveshpy.models.transaction import (
     TransactionDisplay,
     TransactionPublic,
@@ -57,9 +56,6 @@ def show(
             transactions = state.app.transaction.list_transactions(
                 queries=queries, limit=limit, offset=offset
             )
-        except DatabaseError as e:
-            logger.critical(e, exc_info=True)
-            ctx.exit(1)
         except ValueError as e:
             logger.error(e, exc_info=True)
             ctx.exit(1)
@@ -182,9 +178,6 @@ def add(
             output.display_success(
                 f"Transaction added successfully with ID: {result.id}"
             )
-        except DatabaseError as e:
-            logger.critical(e, exc_info=True)
-            ctx.exit(1)
         except ValueError as e:
             logger.error(e, exc_info=True)
             ctx.exit(1)
@@ -288,9 +281,6 @@ def add(
                 output.display_success(
                     f"Transaction added successfully with ID: {result.id}"
                 )
-            except DatabaseError as e:
-                logger.critical(e, exc_info=True)
-                ctx.exit(1)
             except ValueError as e:
                 logger.error(e, exc_info=True)
                 ctx.exit(1)

@@ -42,15 +42,3 @@ def initialize():
 def get_session() -> Session:
     """Obtain a new database session."""
     return Session(_engine)
-
-
-class DatabaseError(Exception):
-    """High-level exception for database operation failures.
-
-    This exception is intended to be raised by the niveshpy database layer
-    when an unrecoverable error occurs while connecting to or interacting
-    with the underlying SQLite database via SQLModel. It provides a single,
-    consistent error type for callers of :mod:`niveshpy.database`, instead of
-    exposing lower-level exceptions such as :class:`sqlite3.Error` or
-    SQLModel-specific errors.
-    """

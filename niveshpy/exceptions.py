@@ -28,7 +28,15 @@ class ResourceError(NiveshPyError):
 
 
 class DatabaseError(NiveshPyError):
-    """Exception raised for database-related errors."""
+    """Exception raised for database-related errors.
+
+    This exception is intended to be raised by the niveshpy database layer
+    when an unrecoverable error occurs while connecting to or interacting
+    with the underlying SQLite database via SQLModel. It provides a single,
+    consistent error type for callers of :mod:`niveshpy.database`, instead of
+    exposing lower-level exceptions such as :class:`sqlite3.Error` or
+    SQLModel-specific errors.
+    """
 
 
 class NetworkError(NiveshPyError):
