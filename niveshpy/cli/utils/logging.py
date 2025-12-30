@@ -45,6 +45,9 @@ def setup(debug: bool, console: Console) -> None:
 
     logging.setup(file_handler, console_handler)
 
+    if debug:
+        logging.logger.info("Logging to file: %s", log_path.as_posix())
+
 
 # def update(debug: bool) -> None:
 #     """Update logging level for CLI."""
