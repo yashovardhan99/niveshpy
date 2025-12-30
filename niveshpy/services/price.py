@@ -22,8 +22,8 @@ from niveshpy.database import get_session
 from niveshpy.exceptions import (
     InvalidSecurityError,
     NiveshPyError,
-    NiveshPySystemError,
     NiveshPyUserError,
+    OperationError,
     PriceNotFoundError,
 )
 from niveshpy.models.output import BaseMessage, ProgressUpdate, Warning
@@ -282,10 +282,13 @@ class PriceService:
                         len(futures),
                     )
                 except NiveshPyError as e:
+                    e.add_note(
+                        f"Error occurred while syncing prices for security {security.key}."
+                    )
                     raise e
                 except Exception as e:
-                    raise NiveshPySystemError(
-                        "An unexpected error occurred during price sync."
+                    raise OperationError(
+                        f"An unexpected error occurred during price sync for security {security.key}."
                     ) from e
 
     def _process_sync(
@@ -384,7 +387,7 @@ class PriceService:
                         f"Error fetching prices from provider {provider_info.name} for security {security.key}",
                         exc_info=True,
                     )
-                    raise NiveshPySystemError(
+                    raise OperationError(
                         f"An unexpected error occurred while fetching prices from provider {provider_info.name} for security {security.key}."
                     ) from e
 

@@ -12,7 +12,7 @@ import niveshpy.models.output
 from niveshpy.cli.utils import flags, output, overrides
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.app import AppState
-from niveshpy.exceptions import NiveshPySystemError, NiveshPyUserError
+from niveshpy.exceptions import NiveshPyUserError
 from niveshpy.models.price import (
     PriceDisplay,
     PricePublic,
@@ -192,14 +192,8 @@ def sync_prices(
         ):
             if isinstance(message, niveshpy.models.output.ProgressUpdate):
                 output.update_progress_bar(progress_bar, progress_tasks, message)
-            elif isinstance(message, niveshpy.models.output.BaseMessage):
-                output.handle_niveshpy_message(message, console=progress_bar.console)
             else:
-                raise NiveshPySystemError(
-                    "Unexpected message type received during price sync.",
-                    f"Received unknown message type: {type(message).__name__}.",
-                    message,
-                )
+                output.handle_niveshpy_message(message, console=progress_bar.console)
 
 
 prices.add_command(list_prices, name="list")

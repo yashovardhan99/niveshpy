@@ -3,12 +3,8 @@
 from dataclasses import dataclass
 
 
-class BaseMessage:
-    """Base model for messages."""
-
-
 @dataclass
-class Message(BaseMessage):
+class Message:
     """Model for a general message."""
 
     content: str
@@ -20,7 +16,7 @@ class Message(BaseMessage):
 
 
 @dataclass
-class Warning(BaseMessage):
+class Warning:
     """Model for a warning message.
 
     Use this to indicate non-critical issues that the user should be aware of
@@ -36,7 +32,7 @@ class Warning(BaseMessage):
 
 
 @dataclass
-class ProgressUpdate(BaseMessage):
+class ProgressUpdate:
     """Model for progress update information."""
 
     stage: str
@@ -50,3 +46,7 @@ class ProgressUpdate(BaseMessage):
 
     total: int | None
     """The total value for completion. None if unknown."""
+
+
+BaseMessage = Message | Warning | ProgressUpdate
+"""Union type for all output message models."""
