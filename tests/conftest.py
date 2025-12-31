@@ -1,6 +1,7 @@
 """Pytest fixtures for database setup and teardown."""
 
 import pytest
+from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 
 
@@ -8,6 +9,14 @@ from sqlmodel import Session, SQLModel, create_engine
 def engine():
     """Create an in-memory SQLite database engine for testing."""
     engine = create_engine("sqlite:///:memory:")
+
+    # Enable foreign key constraints for SQLite
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_conn, connection_record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     SQLModel.metadata.create_all(engine)
     return engine
 
