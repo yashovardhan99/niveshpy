@@ -66,31 +66,31 @@ Depending on the terminal, the CLI will show a list of all such keys along with 
                 self.data = json.loads(f.read())
         def get_date_range(self) -> tuple[datetime.date, datetime.date]:
             return self.data.start_date, self.data.end_date  # (1)
-        def get_accounts(self) -> list[AccountWrite]:
+        def get_accounts(self) -> list[AccountCreate]:
             return [
-                AccountWrite(acc.name, acc.org, {"source": "sample"})  # (2)
+                AccountCreate(name=acc.name, institution=acc.org, properties={"source": "sample"})  # (2)
                 for acc in self.data.accounts
             ]
-        def get_securities(self) -> Iterable[SecurityWrite]:
+        def get_securities(self) -> Iterable[SecurityCreate]:
             for acc in self.data.accounts:
                 for sec in acc.securities:
-                    yield SecurityWrite(
-                        sec.key,
-                        sec.name,
-                        SecurityType.OTHER,
-                        SecurityCategory.OTHER,
-                        metadata={"source": "sample", "isin": sec.isin},  # (3)
+                    yield SecurityCreate(
+                        key=sec.key,
+                        name=sec.name,
+                        type=SecurityType.OTHER,
+                        category=SecurityCategory.OTHER,
+                        properties={"source": "sample", "isin": sec.isin},  # (3)
                     )
         def get_transactions(
-            self, accounts: Iterable[AccountRead]
-        ) -> Iterable[TransactionWrite]:
+            self, accounts: Iterable[AccountPublic]
+        ) -> Iterable[TransactionCreate]:
             accounts_map = {(acc.name, acc.institution): acc.id for acc in accounts}
             for acc in self.data.accounts:
                 account_id = accounts_map.get((acc.name, acc.org))
                 for sec in acc.securities:
                     for transaction in sec.transactions:
                         txn_type = TransactionType(transaction.type.lower())
-                        txn = TransactionWrite(
+                        txn = TransactionCreate(
                             transaction_date=transaction.date,
                             type=txn_type,
                             description=transaction.description,
@@ -98,7 +98,7 @@ Depending on the terminal, the CLI will show a list of all such keys along with 
                             units=transaction.units,
                             security_key=sec.key,
                             account_id=account_id,
-                            metadata={"source": "sample"},
+                            properties={"source": "sample"},
                         )
                         yield txn
     class SampleParserFactory:

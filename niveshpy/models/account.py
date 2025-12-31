@@ -7,7 +7,14 @@ from sqlmodel import JSON, Column, Field, SQLModel, UniqueConstraint
 
 
 class AccountBase(SQLModel):
-    """Base model for investment accounts."""
+    """Base model for investment accounts.
+
+    Attributes:
+        name (str): Name of the account.
+        institution (str): Financial institution managing the account.
+        properties (dict[str, Any], optional): Additional properties of the account.
+            Defaults to an empty dictionary.
+    """
 
     name: str = Field(schema_extra={"json_schema_extra": {"order": 1}})
     institution: str = Field(
@@ -25,11 +32,26 @@ class AccountBase(SQLModel):
 
 
 class AccountCreate(AccountBase):
-    """Model for creating a new account."""
+    """Model for creating a new account.
+
+    Attributes:
+        name (str): Name of the account.
+        institution (str): Financial institution managing the account.
+        properties (dict[str, Any], optional): Additional properties of the account.
+            Defaults to an empty dictionary.
+    """
 
 
 class Account(AccountBase, table=True):
-    """Database model for investment accounts."""
+    """Database model for investment accounts.
+
+    Attributes:
+        id (int | None): Primary key ID of the account. None if not yet stored in DB.
+        name (str): Name of the account.
+        institution (str): Financial institution managing the account.
+        properties (dict[str, Any]): Additional properties of the account.
+        created_at (datetime): Timestamp when the account was created.
+    """
 
     __table_args__ = (
         UniqueConstraint("name", "institution", name="uix_name_institution"),
@@ -40,7 +62,15 @@ class Account(AccountBase, table=True):
 
 
 class AccountPublic(AccountBase):
-    """Public model for account data exposure."""
+    """Public model for account data exposure.
+
+    Attributes:
+        id (int): Primary key ID of the account.
+        name (str): Name of the account.
+        institution (str): Financial institution managing the account.
+        created_at (datetime): Timestamp when the account was created.
+        properties (dict[str, Any]): Additional properties of the account.
+    """
 
     id: int = Field(
         title="ID",

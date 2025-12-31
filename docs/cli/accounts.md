@@ -12,5 +12,3 @@ Accounts can refer to both physical and virtual accounts, such as your mutual fu
 ## Model Reference
 
 ::: niveshpy.models.account
-    options:
-        filters: ["!rich_format_map", "!rich_format"]

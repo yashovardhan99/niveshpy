@@ -27,5 +27,3 @@
 ## Model Reference
 
 ::: niveshpy.models.transaction
-    options:
-        filters: ["!rich_format_map", "!rich_format"]
