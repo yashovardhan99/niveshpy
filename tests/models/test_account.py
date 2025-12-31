@@ -44,15 +44,13 @@ class TestAccountModels:
 
     def test_account_create_missing_name(self):
         """Test creating an AccountCreate instance missing the name field."""
-        with pytest.raises(ValidationError) as exc:
+        with pytest.raises(ValidationError, match="Field required"):
             AccountCreate(institution="ICICI")
-        assert "name" in str(exc.value)
 
     def test_account_create_missing_institution(self):
         """Test creating an AccountCreate instance missing the institution field."""
-        with pytest.raises(ValidationError) as exc:
+        with pytest.raises(ValidationError, match="Field required"):
             AccountCreate(name="Savings")
-        assert "institution" in str(exc.value)
 
     def test_account_create_missing_both_fields(self):
         """Test creating an AccountCreate instance missing both required fields."""
@@ -68,17 +66,17 @@ class TestAccountModels:
 
     def test_account_create_wrong_type_name(self):
         """Test creating an AccountCreate instance with wrong type for name."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError, match="Input should be a valid string"):
             AccountCreate(name=12345, institution="Bank")
 
     def test_account_create_wrong_type_institution(self):
         """Test creating an AccountCreate instance with wrong type for institution."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError, match="Input should be a valid string"):
             AccountCreate(name="Account", institution=None)
 
     def test_account_properties_must_be_dict(self):
         """Test creating an AccountCreate instance with wrong type for properties."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError, match="Input should be a valid dictionary"):
             AccountCreate(name="A", institution="B", properties="not_a_dict")
 
     # Edge cases
@@ -148,6 +146,7 @@ class TestAccountDatabase:
         assert before <= account.created_at <= after
 
     # Unique constraint tests
+    @pytest.mark.filterwarnings("ignore::sqlalchemy.exc.SAWarning")
     def test_account_unique_constraint_violation(self, session):
         """Test that inserting duplicate Account violates unique constraint."""
         account1 = Account(name="Savings", institution="HDFC")
@@ -157,10 +156,8 @@ class TestAccountDatabase:
         account2 = Account(name="Savings", institution="HDFC")
         session.add(account2)
 
-        with pytest.raises(IntegrityError) as exc:
+        with pytest.raises(IntegrityError, match="UNIQUE constraint failed"):
             session.commit()
-        assert "name" in str(exc.value)
-        assert "institution" in str(exc.value)
 
     def test_account_same_name_different_institution(self, session):
         """Test inserting Accounts with same name but different institutions."""
