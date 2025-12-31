@@ -4,6 +4,7 @@ import re
 import sqlite3
 
 import platformdirs
+from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 
 from niveshpy.core import logging
@@ -26,17 +27,21 @@ def _iregexp(pattern: str, value: str) -> bool:
     return bool(re.search(pattern, value, re.IGNORECASE))
 
 
+# Enable foreign key constraints for SQLite
+@event.listens_for(_engine, "connect")
+def set_sqlite_pragma(dbapi_conn: sqlite3.Connection, _):
+    """Enable foreign key constraints and add custom functions for SQLite."""
+    logging.logger.debug("Setting SQLite PRAGMA and adding custom functions.")
+    dbapi_conn.create_function("iregexp", 2, _iregexp)
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
 def initialize():
     """Create database and tables if they do not exist."""
     logging.logger.info("Creating database and tables at path: %s", _db_path)
     SQLModel.metadata.create_all(_engine)
-    logging.logger.info("Database and tables created successfully.")
-
-    logging.logger.info("Adding custom SQLite functions.")
-    with _engine.connect() as conn:
-        if isinstance(conn.connection.dbapi_connection, sqlite3.Connection):
-            conn.connection.dbapi_connection.create_function("iregexp", 2, _iregexp)
-    logging.logger.info("Custom SQLite functions added successfully.")
 
 
 def get_session() -> Session:
