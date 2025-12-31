@@ -1,6 +1,5 @@
 """Service for parsing financial documents."""
 
-# import polars as pl
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date

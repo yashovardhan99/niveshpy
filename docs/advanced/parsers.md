@@ -116,9 +116,6 @@ Depending on the terminal, the CLI will show a list of all such keys along with 
         ) -> SampleParser:
             file_path = file_path.as_posix()
             return SampleParser(file_path)
-        @classmethod
-        def can_parse(cls, file_path: Path):
-            return file_path.match("*.json")
     ```
     
     1. Transactions for all provided security-account combinations in the given date-range will be overwritten. This is to ensure transactions remain accurate and current. Keep this in mind when returning these dates.

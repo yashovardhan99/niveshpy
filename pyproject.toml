@@ -7,9 +7,6 @@ name = "NiveshPy"
 description = "A simple python library for all your investment needs."
 dynamic = ["version"]
 dependencies = [
-    "polars[pyarrow]>=1.29.0,<2.0.0",
-    "scipy >= 1.13.1, < 2.0.0",
-    "numpy >= 2.0.2, < 3.0.0",
     "platformdirs >= 4.3.8, < 5.0.0",
     "casparser>=0.8.1",
     "click>=8.3.0",
@@ -37,7 +34,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: Financial and Insurance Industry",
@@ -50,13 +47,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-[project.optional-dependencies]
-pandas = ["pandas >= 2.2.2, < 3.0.0", "pyarrow >= 20.0.0, < 21.0.0"]
-all = ["niveshpy[pandas]"]
-
 [project.urls]
 Homepage = "http://github.com/yashovardhan99/niveshpy"
-# Documentation = "https://readthedocs.org"
+Documentation = "https://yashovardhan99.github.io/niveshpy/"
 Repository = "https://github.com/yashovardhan99/niveshpy.git"
 Issues = "http://github.com/yashovardhan99/niveshpy/issues"
 Changelog = "http://github.com/yashovardhan99/niveshpy/blob/master/CHANGELOG.md"
@@ -73,12 +66,9 @@ cas = "niveshpy.parsers.cas:CASParserFactory"
 amfi = "niveshpy.providers.amfi:AMFIProviderFactory"
 
 [dependency-groups]
-testing = [
-    "coverage>=7.13.1",
-    "pytest>=9.0.2",
-]
+testing = ["coverage>=7.13.1", "pytest>=9.0.2"]
 linting = ["ruff >= 0.11.9, < 0.12.0", "mypy >= 1.18.2, < 2.0.0"]
-stubs = ["pandas-stubs >= 2.2.2, < 3.0.0", "types-requests>=2.32.4.20250913"]
+stubs = ["types-requests>=2.32.4.20250913"]
 docs = [
     "mkdocs-material == 9.*",
     "mkdocstrings[python]",
@@ -90,7 +80,6 @@ dev = [
     { include-group = "linting" },
     { include-group = "stubs" },
     { include-group = "docs" },
-    "pandas >= 2.2.2, < 3.0.0",
 ]
 
 [tool.ruff.lint]

@@ -47,11 +47,3 @@ def setup(debug: bool, console: Console) -> None:
 
     if debug:
         logging.logger.info("Logging to file: %s", log_path.as_posix())
-
-
-# def update(debug: bool) -> None:
-#     """Update logging level for CLI."""
-#     logging.update(
-#         DEBUG if debug else INFO,
-#         INFO if debug else WARNING,
-#     )
