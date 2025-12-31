@@ -10,7 +10,12 @@ from sqlmodel import select
 
 from niveshpy.models.account import Account
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
-from niveshpy.models.transaction import Transaction, TransactionCreate, TransactionType
+from niveshpy.models.transaction import (
+    Transaction,
+    TransactionCreate,
+    TransactionDisplay,
+    TransactionType,
+)
 
 
 class TestTransactionModels:
@@ -776,3 +781,89 @@ class TestTransactionDatabase:
         assert len(retrieved_transactions) == 5
         assert all(t.security_key == "TEST" for t in retrieved_transactions)
         assert all(t.account_id == account.id for t in retrieved_transactions)
+
+
+class TestTransactionDisplay:
+    """Tests for TransactionDisplay model with field validators."""
+
+    def test_transaction_display_security_validator_with_object(self):
+        """Test that TransactionDisplay formats Security object to string."""
+        security = Security(
+            key="TEST123",
+            name="Test Mutual Fund",
+            type=SecurityType.MUTUAL_FUND,
+            category=SecurityCategory.EQUITY,
+        )
+
+        transaction = TransactionDisplay(
+            id=1,
+            transaction_date=date(2024, 1, 15),
+            type=TransactionType.PURCHASE,
+            description="Test",
+            amount=Decimal("1000.00"),
+            units=Decimal("10.000"),
+            security=security,  # Pass Security object
+            account="Test Account (Test Bank)",
+            security_key="TEST123",
+            account_id=1,
+            created=datetime.now(),
+        )
+
+        assert transaction.security == "Test Mutual Fund (TEST123)"
+
+    def test_transaction_display_security_validator_with_string(self):
+        """Test that TransactionDisplay keeps string security as-is."""
+        transaction = TransactionDisplay(
+            id=1,
+            transaction_date=date(2024, 1, 15),
+            type=TransactionType.PURCHASE,
+            description="Test",
+            amount=Decimal("1000.00"),
+            units=Decimal("10.000"),
+            security="Already Formatted Security",
+            account="Test Account",
+            security_key="TEST",
+            account_id=1,
+            created=datetime.now(),
+        )
+
+        assert transaction.security == "Already Formatted Security"
+
+    def test_transaction_display_account_validator_with_object(self):
+        """Test that TransactionDisplay formats Account object to string."""
+        account = Account(name="HDFC Savings", institution="HDFC Bank")
+        account.id = 1
+
+        transaction = TransactionDisplay(
+            id=1,
+            transaction_date=date(2024, 1, 15),
+            type=TransactionType.PURCHASE,
+            description="Test",
+            amount=Decimal("1000.00"),
+            units=Decimal("10.000"),
+            security="Test Security (TEST)",
+            account=account,  # Pass Account object
+            security_key="TEST",
+            account_id=1,
+            created=datetime.now(),
+        )
+
+        assert transaction.account == "HDFC Savings (HDFC Bank)"
+
+    def test_transaction_display_account_validator_with_string(self):
+        """Test that TransactionDisplay keeps string account as-is."""
+        transaction = TransactionDisplay(
+            id=1,
+            transaction_date=date(2024, 1, 15),
+            type=TransactionType.PURCHASE,
+            description="Test",
+            amount=Decimal("1000.00"),
+            units=Decimal("10.000"),
+            security="Test Security",
+            account="Already Formatted Account",
+            security_key="TEST",
+            account_id=1,
+            created=datetime.now(),
+        )
+
+        assert transaction.account == "Already Formatted Account"
