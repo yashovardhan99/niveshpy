@@ -12,5 +12,3 @@ A security is an investment instrument that you have purchased or sold. This can
 ## Model Reference
 
 ::: niveshpy.models.security
-    options:
-        filters: ["!rich_format_map", "!rich_format"]

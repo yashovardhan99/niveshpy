@@ -13,7 +13,18 @@ from niveshpy.models.security import Security
 
 
 class PriceBase(SQLModel):
-    """Base model for price data."""
+    """Base model for price data.
+
+    Attributes:
+        security_key (str): Foreign key to the associated security.
+        date (datetime.date): Date of the price data.
+        open (Decimal): Opening price.
+        high (Decimal): Highest price.
+        low (Decimal): Lowest price.
+        close (Decimal): Closing price.
+        properties (dict[str, Any], optional): Additional properties of the price data.
+            Defaults to an empty dictionary.
+    """
 
     security_key: str = Field(
         foreign_key="security.key",
@@ -58,11 +69,34 @@ class PriceBase(SQLModel):
 
 
 class PriceCreate(PriceBase):
-    """Model for creating price data."""
+    """Model for creating price data.
+
+    Attributes:
+        security_key (str): Foreign key to the associated security.
+        date (datetime.date): Date of the price data.
+        open (Decimal): Opening price.
+        high (Decimal): Highest price.
+        low (Decimal): Lowest price.
+        close (Decimal): Closing price.
+        properties (dict[str, Any], optional): Additional properties of the price data.
+            Defaults to an empty dictionary.
+    """
 
 
 class Price(PriceBase, table=True):
-    """Database model for price data."""
+    """Database model for price data.
+
+    Attributes:
+        security_key (str): Foreign key to the associated security.
+        security (Security): Related security object.
+        date (datetime.date): Date of the price data.
+        open (Decimal): Opening price.
+        high (Decimal): Highest price.
+        low (Decimal): Lowest price.
+        close (Decimal): Closing price.
+        properties (dict[str, Any]): Additional properties of the price data.
+        created (datetime.datetime): Timestamp when the price data was created.
+    """
 
     security: Security = Relationship()
     created: datetime.datetime = Field(
@@ -71,7 +105,18 @@ class Price(PriceBase, table=True):
 
 
 class PricePublic(PriceBase):
-    """Public model for price data exposure."""
+    """Public model for price data exposure.
+
+    Attributes:
+        security_key (str): Foreign key to the associated security.
+        date (datetime.date): Date of the price data.
+        open (Decimal): Opening price.
+        high (Decimal): Highest price.
+        low (Decimal): Lowest price.
+        close (Decimal): Closing price.
+        properties (dict[str, Any]): Additional properties of the price data.
+        created (datetime.datetime): Timestamp when the price data was created.
+    """
 
     created: datetime.datetime = Field(
         title="Created",
@@ -80,7 +125,19 @@ class PricePublic(PriceBase):
 
 
 class PricePublicWithRelations(PricePublic):
-    """Public model for price data with related security."""
+    """Public model for price data with related security.
+
+    Attributes:
+        security_key (str): Foreign key to the associated security.
+        security (Security): Related security object.
+        date (datetime.date): Date of the price data.
+        open (Decimal): Opening price.
+        high (Decimal): Highest price.
+        low (Decimal): Lowest price.
+        close (Decimal): Closing price.
+        properties (dict[str, Any]): Additional properties of the price data.
+        created (datetime.datetime): Timestamp when the price data was created.
+    """
 
     security: Security = Field(
         title="Security",
@@ -89,7 +146,18 @@ class PricePublicWithRelations(PricePublic):
 
 
 class PriceDisplay(PricePublic):
-    """Model for displaying price data with related info."""
+    """Model for displaying price data with related info.
+
+    Attributes:
+        security (str): Formatted security information.
+        date (datetime.date): Date of the price data.
+        open (Decimal): Opening price.
+        high (Decimal): Highest price.
+        low (Decimal): Lowest price.
+        close (Decimal): Closing price.
+        properties (dict[str, Any]): Additional properties of the price data.
+        created (datetime.datetime): Timestamp when the price data was created.
+    """
 
     security: str = PydanticField(
         json_schema_extra={"order": 0},

@@ -18,7 +18,17 @@ class TransactionType(StrEnum):
     """Enum for transaction types."""
 
     PURCHASE = auto()
+    """Transaction type representing purchases.
+
+    This type indicates any amount spent on acquiring securities or assets.
+    However, you may use it for other types of transactions as well.
+    """
     SALE = auto()
+    """Transaction type representing sales.
+
+    This type indicates any amount received from selling securities or assets.
+    However, you may use it for other types of transactions as well.
+    """
 
 
 type_format_map = {
@@ -28,7 +38,19 @@ type_format_map = {
 
 
 class TransactionBase(SQLModel):
-    """Base model for transactions."""
+    """Base model for transactions.
+
+    Attributes:
+        transaction_date (date): Date of the transaction.
+        type (TransactionType): Type of the transaction.
+        description (str): Description of the transaction.
+        amount (Decimal): Amount involved in the transaction.
+        units (Decimal): Number of units involved in the transaction.
+        security_key (str): Foreign key to the associated security.
+        account_id (int): Foreign key to the associated account.
+        properties (dict[str, Any], optional): Additional properties of the transaction.
+            Defaults to an empty dictionary.
+    """
 
     transaction_date: date = Field(
         schema_extra={"json_schema_extra": {"order": 1, "style": "cyan"}}
@@ -74,11 +96,38 @@ class TransactionBase(SQLModel):
 
 
 class TransactionCreate(TransactionBase):
-    """Model for creating transactions."""
+    """Model for creating transactions.
+
+    Attributes:
+        transaction_date (date): Date of the transaction.
+        type (TransactionType): Type of the transaction.
+        description (str): Description of the transaction.
+        amount (Decimal): Amount involved in the transaction.
+        units (Decimal): Number of units involved in the transaction.
+        security_key (str): Foreign key to the associated security.
+        account_id (int): Foreign key to the associated account.
+        properties (dict[str, Any], optional): Additional properties of the transaction.
+            Defaults to an empty dictionary.
+    """
 
 
 class Transaction(TransactionBase, table=True):
-    """Database model for transactions."""
+    """Database model for transactions.
+
+    Attributes:
+        id (int | None): Primary key ID of the transaction. None if not yet stored in DB.
+        transaction_date (date): Date of the transaction.
+        type (TransactionType): Type of the transaction.
+        description (str): Description of the transaction.
+        amount (Decimal): Amount involved in the transaction.
+        units (Decimal): Number of units involved in the transaction.
+        security_key (str): Foreign key to the associated security.
+        security (Security): Related security object.
+        account_id (int): Foreign key to the associated account.
+        account (Account): Related account object.
+        properties (dict[str, Any]): Additional properties of the transaction.
+        created (datetime): Timestamp when the transaction was created.
+    """
 
     id: int | None = Field(default=None, primary_key=True)
     security: Security = Relationship()
@@ -87,7 +136,20 @@ class Transaction(TransactionBase, table=True):
 
 
 class TransactionPublic(TransactionBase):
-    """Public model for transactions."""
+    """Public model for transactions.
+
+    Attributes:
+        id (int): Primary key ID of the transaction.
+        transaction_date (date): Date of the transaction.
+        type (TransactionType): Type of the transaction.
+        description (str): Description of the transaction.
+        amount (Decimal): Amount involved in the transaction.
+        units (Decimal): Number of units involved in the transaction.
+        security_key (str): Foreign key to the associated security.
+        account_id (int): Foreign key to the associated account.
+        properties (dict[str, Any]): Additional properties of the transaction.
+        created (datetime): Timestamp when the transaction was created.
+    """
 
     id: int = Field(
         schema_extra={
@@ -100,7 +162,20 @@ class TransactionPublic(TransactionBase):
 
 
 class TransactionDisplay(TransactionPublic):
-    """Model for displaying transaction with related info."""
+    """Model for displaying transaction with related info.
+
+    Attributes:
+        id (int): Primary key ID of the transaction.
+        transaction_date (date): Date of the transaction.
+        type (TransactionType): Type of the transaction.
+        description (str): Description of the transaction.
+        amount (Decimal): Amount involved in the transaction.
+        units (Decimal): Number of units involved in the transaction.
+        security (str): Formatted security information.
+        account (str): Formatted account information.
+        properties (dict[str, Any]): Additional properties of the transaction.
+        created (datetime): Timestamp when the transaction was created.
+    """
 
     security: str = PydanticField(
         json_schema_extra={"order": 6, "justify": "right"},
@@ -112,7 +187,14 @@ class TransactionDisplay(TransactionPublic):
     @field_validator("security", mode="before", json_schema_input_type=str | Security)
     @classmethod
     def validate_security(cls, value: str | Security) -> str:
-        """Validate and format the security field."""
+        """Validate and format the security field.
+
+        Args:
+            value (str | Security): The security value to format.
+
+        Returns:
+            str: Formatted security string.
+        """
         if isinstance(value, Security):
             return f"{value.name} ({value.key})"
         return value
@@ -120,14 +202,34 @@ class TransactionDisplay(TransactionPublic):
     @field_validator("account", mode="before", json_schema_input_type=str | Account)
     @classmethod
     def validate_account(cls, value: str | Account) -> str:
-        """Validate and format the account field."""
+        """Validate and format the account field.
+
+        Args:
+            value (str | Account): The account value to format.
+
+        Returns:
+            str: Formatted account string.
+        """
         if isinstance(value, Account):
             return f"{value.name} ({value.institution})"
         return value
 
 
 class TransactionPublicWithRelations(TransactionPublic):
-    """Public model for transactions with related account and security info."""
+    """Public model for transactions with related account and security info.
+
+    Attributes:
+        id (int): Primary key ID of the transaction.
+        transaction_date (date): Date of the transaction.
+        type (TransactionType): Type of the transaction.
+        description (str): Description of the transaction.
+        amount (Decimal): Amount involved in the transaction.
+        units (Decimal): Number of units involved in the transaction.
+        security (Security): Related security object.
+        account (Account): Related account object.
+        properties (dict[str, Any]): Additional properties of the transaction.
+        created (datetime): Timestamp when the transaction was created.
+    """
 
     security: Security = Field(schema_extra={"json_schema_extra": {"order": 6}})
     account: Account = Field(schema_extra={"json_schema_extra": {"order": 7}})
