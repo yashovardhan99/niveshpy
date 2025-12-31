@@ -4,11 +4,9 @@ import csv
 from collections.abc import Callable, Generator, MutableMapping, Sequence
 from contextlib import contextmanager
 from datetime import date, datetime
-from decimal import Decimal
 from enum import StrEnum, auto
 from io import StringIO
-from itertools import starmap, zip_longest
-from typing import Literal, TypeVar
+from typing import TypeVar
 
 import click
 import polars as pl
@@ -179,44 +177,6 @@ def _convert_models_to_rich_table(
     return table
 
 
-def _convert_polars_to_rich_table(df: pl.DataFrame, fmt_map: FormatMap | None) -> Table:
-    """Convert a Polars DataFrame to a Rich Table for pretty printing."""
-    table = Table(header_style="dim", box=box.SIMPLE)
-    for i, (col, dtype) in enumerate(df.schema.to_python().items()):
-        style = fmt_map[i] if fmt_map and i < len(fmt_map) else None
-        style = style if isinstance(style, str) else None
-        justify: Literal["left", "right"] = (
-            "right" if dtype in (int, float, Decimal) else "left"
-        )
-
-        table.add_column(col.upper(), justify=justify, style=style)
-
-    def mapper(data: object, fmt: str | None | Callable[[str], str]) -> str:
-        if isinstance(data, datetime):
-            data_str = _format_datetime(data)
-        elif isinstance(data, date):
-            data_str = data.strftime("%d %b %Y")
-        elif isinstance(data, list | dict):
-            data_str = _format_list_or_dict(data)
-        else:
-            data_str = str(data)
-
-        if fmt is None:
-            return data_str
-        elif callable(fmt):
-            return fmt(data_str)
-        else:
-            return data_str
-
-    for row in df.iter_rows():
-        if fmt_map is None:
-            table.add_row(*map(str, row))
-        else:
-            table.add_row(*starmap(mapper, zip_longest(row, fmt_map, fillvalue=None)))
-
-    return table
-
-
 def display_message(*objects: object, console: Console | None = None) -> None:
     """Display a general message to the console."""
     (console or _console).print(*objects)
@@ -301,55 +261,6 @@ def display_list(
                 _console.print(formatted_data)
         click.echo_via_pager(capture.get())
     else:
-        if fmt == OutputFormat.JSON:
-            _console.print_json(str(formatted_data))
-        else:
-            _console.print(formatted_data, soft_wrap=True)
-
-
-def display_dataframe(
-    df: pl.DataFrame,
-    fmt: OutputFormat,
-    fmt_map: FormatMap | None = None,
-    extra_message: str | None = None,
-) -> None:
-    """Display a Polars DataFrame to the console in the specified format using a pager (if in a terminal).
-
-    If the console is a terminal, the output is displayed using a pager for better readability.
-
-    If an extra message is provided, it is displayed before the DataFrame, provided the console is a terminal.
-
-    Args:
-        df (pl.DataFrame): The DataFrame to display.
-        fmt (OutputFormat): The desired output format (TABLE, CSV, JSON).
-        fmt_map (FormatMap | None): Optional formatting map for columns.
-        extra_message (str | None): An optional message to display before the DataFrame.
-    """
-    formatted_data: str | Table
-
-    if fmt == OutputFormat.CSV:
-        formatted_data = _format_as_csv(df)
-    elif fmt == OutputFormat.JSON:
-        formatted_data = df.write_json()
-    else:
-        formatted_data = (
-            _convert_polars_to_rich_table(df, fmt_map)
-            if _console.is_terminal
-            else _format_as_csv(df, separator="\t")
-        )
-
-    if _console.is_terminal:
-        with _console.capture() as capture:
-            if extra_message:
-                _console.print(extra_message)
-            if fmt == OutputFormat.JSON:
-                _console.print_json(str(formatted_data))
-            else:
-                _console.print(formatted_data)
-        click.echo_via_pager(capture.get())
-    else:
-        if extra_message:
-            _console.print(extra_message)
         if fmt == OutputFormat.JSON:
             _console.print_json(str(formatted_data))
         else:
