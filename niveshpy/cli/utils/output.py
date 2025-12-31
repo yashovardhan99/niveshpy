@@ -9,7 +9,6 @@ from io import StringIO
 from typing import TypeVar
 
 import click
-import polars as pl
 from pydantic import BaseModel, RootModel
 from pydantic.fields import FieldInfo
 from rich import box, progress
@@ -35,44 +34,6 @@ class OutputFormat(StrEnum):
     TABLE = auto()
     CSV = auto()
     JSON = auto()
-
-
-def _format_as_csv(df: pl.DataFrame, separator: str = ",") -> str:
-    """Convert a Polars DataFrame to CSV format, handling nested types appropriately."""
-    for col, dtype in df.collect_schema().items():
-        if dtype.is_nested():
-            if dtype == pl.Struct:
-                df = df.with_columns(pl.col(col).struct.json_encode().alias(col))
-            elif dtype == pl.List(pl.Struct({"key": pl.Utf8, "value": pl.Utf8})):
-                df = df.with_columns(
-                    pl.col(col)
-                    .list.eval(
-                        pl.concat_str(
-                            pl.element().struct.field("key"),
-                            pl.lit(":"),
-                            pl.element().struct.field("value"),
-                        )
-                    )
-                    .list.join(";")
-                    .alias(col)
-                )
-            elif dtype == pl.List(pl.Struct):
-                df = df.with_columns(
-                    pl.col(col)
-                    .list.eval(pl.element().struct.json_encode())
-                    .list.join(";")
-                    .alias(col)
-                )
-            elif dtype == pl.List:
-                df = df.with_columns(
-                    pl.col(col)
-                    .list.eval(pl.element().cast(pl.Utf8))
-                    .list.join(";")
-                    .alias(col)
-                )
-            else:
-                df = df.with_columns(pl.col(col).cast(pl.Utf8).alias(col))
-    return df.write_csv(separator=separator)
 
 
 def _format_datetime(dt: datetime) -> str:

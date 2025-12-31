@@ -99,15 +99,3 @@ class ParserFactory(Protocol):
             A ParserInfo object containing metadata about the parser.
         """
         ...
-
-    @classmethod
-    def can_parse(cls, file_path: Path) -> bool:
-        """Check if the parser can handle the given file based on its extension.
-
-        Args:
-            file_path: The path to the file to check.
-
-        Returns:
-            True if the parser can handle the file, False otherwise.
-        """
-        ...
