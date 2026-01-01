@@ -83,13 +83,6 @@ class AMFIProvider:
 
             price_data_list = data.get("data", [])
 
-            if not price_data_list:
-                exc = ResourceNotFoundError(
-                    "Security",
-                    security.key,
-                )
-                exc.add_note("AMFI returned no price data.")
-                raise exc
             for item in price_data_list:
                 price = decimal.Decimal(item["nav"])
                 yield PriceCreate(

@@ -474,15 +474,14 @@ class PriceService:
         with ThreadPoolExecutor() as executor:
             futures = []
             for security in securities_to_sync:
-                if security.key in provider_map:
-                    futures.append(
-                        executor.submit(
-                            self._process_sync,
-                            security,
-                            provider_map[security.key],
-                            force=force,
-                        )
+                futures.append(
+                    executor.submit(
+                        self._process_sync,
+                        security,
+                        provider_map[security.key],
+                        force=force,
                     )
+                )
 
             count = 0
             for i, future in enumerate(as_completed(futures)):
