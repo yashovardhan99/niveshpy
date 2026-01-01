@@ -232,6 +232,45 @@ class PriceService:
 
         return securities
 
+    def _build_provider_map(
+        self,
+        securities: Sequence[Security],
+        provider_instances: list[tuple[str, ProviderInfo, Provider]],
+    ) -> tuple[
+        dict[str, list[tuple[int, str, ProviderInfo, Provider]]], list[Security]
+    ]:
+        """Build provider priority map for each security.
+
+        Args:
+            securities: Sequence of securities to map providers for.
+            provider_instances: List of available provider instances.
+
+        Yields:
+            Warning messages for securities with no applicable providers.
+            ProgressUpdate messages during mapping.
+
+        Returns:
+            Tuple of (provider_map, securities_with_providers).
+        """
+        provider_map: dict[str, list[tuple[int, str, ProviderInfo, Provider]]] = {}
+        securities_with_providers: list[Security] = []
+
+        for security in securities:
+            applicable_providers: list[tuple[int, str, ProviderInfo, Provider]] = []
+            for key, provider_info, provider_instance in provider_instances:
+                priority = provider_instance.get_priority(security)
+                if priority is not None:
+                    heapq.heappush(
+                        applicable_providers,
+                        (priority, key, provider_info, provider_instance),
+                    )
+
+            if applicable_providers:
+                provider_map[security.key] = applicable_providers
+                securities_with_providers.append(security)
+
+        return provider_map, securities_with_providers
+
     def sync_prices(
         self, queries: tuple[str, ...], force: bool, provider_key: str | None
     ) -> Generator[BaseMessage, None, None]:
@@ -241,6 +280,12 @@ class PriceService:
             queries: Tuple of query strings to filter securities.
             force: Whether to force update even if prices are up-to-date.
             provider_key: Optional specific price provider to use.
+
+        Yields:
+            BaseMessage instances indicating progress and warnings.
+
+        Raises:
+            NiveshPyError: If any error occurs during the sync process.
         """
         provider_instances = yield from self._initialize_providers(provider_key)
         # Let's fetch all matching securities
@@ -256,7 +301,6 @@ class PriceService:
         )
 
         # Now, for each security, determine which provider to use.
-        provider_map: dict[str, list[tuple[int, str, ProviderInfo, Provider]]] = {}
         yield ProgressUpdate(
             "sync.setup.securities",
             "Setting up securities for sync",
@@ -264,36 +308,28 @@ class PriceService:
             len(securities),
         )
 
-        securities_setup, securities_process = itertools.tee(securities, 2)
+        provider_map, securities_to_sync = self._build_provider_map(
+            securities, provider_instances
+        )
 
-        for i, security in enumerate(securities_setup):
-            applicable_providers: list[tuple[int, str, ProviderInfo, Provider]] = []
-            for key, provider_info, provider_instance in provider_instances:
-                priority = provider_instance.get_priority(security)
-                if priority is not None:
-                    heapq.heappush(
-                        applicable_providers,
-                        (priority, key, provider_info, provider_instance),
-                    )
-
-            if applicable_providers:
-                provider_map[security.key] = applicable_providers
-            else:
+        # Yield warnings for securities without providers
+        for security in securities:
+            if security.key not in provider_map:
                 yield Warning(
                     f"No applicable price provider found for security {security.key}."
                 )
 
-            yield ProgressUpdate(
-                "sync.setup.securities",
-                "Setting up securities for sync",
-                i + 1,
-                len(securities),
-            )
+        yield ProgressUpdate(
+            "sync.setup.securities",
+            "Setting up securities for sync",
+            len(securities_to_sync),
+            len(securities),
+        )
 
         # Now, process syncing prices for each security using ThreadPoolExecutor
         with ThreadPoolExecutor() as executor:
             futures = []
-            for security in securities_process:
+            for security in securities_to_sync:
                 if security.key in provider_map:
                     futures.append(
                         executor.submit(
