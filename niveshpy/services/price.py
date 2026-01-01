@@ -167,24 +167,26 @@ class PriceService:
         if provider is None:
             raise ResourceNotFoundError("Price provider", provider_key)
 
-    def sync_prices(
-        self, queries: tuple[str, ...], force: bool, provider_key: str | None
-    ) -> Generator[BaseMessage, None, None]:
-        """Sync prices from installed providers.
+    def _initialize_providers(
+        self, provider_key: str | None
+    ) -> Generator[ProgressUpdate, None, list[tuple[str, ProviderInfo, Provider]]]:
+        """Discover and initialize provider instances.
 
         Args:
-            queries: Tuple of query strings to filter securities.
-            force: Whether to force update even if prices are up-to-date.
-            provider_key: Optional specific price provider to use.
+            provider_key: Optional specific provider to initialize.
+
+        Yields:
+            ProgressUpdate messages during initialization.
+
+        Returns:
+            List of tuples containing (provider_key, provider_info, provider_instance).
         """
-        # First, let's refresh the list of installed providers
         yield ProgressUpdate(
             "sync.setup.providers", "Looking for price providers", None, None
         )
         provider_registry.discover_installed_providers(provider_key)
         providers = provider_registry.list_providers()
 
-        # Instantiate provider instances
         yield ProgressUpdate(
             "sync.setup.providers", "Initializing providers", None, len(providers)
         )
@@ -202,6 +204,19 @@ class PriceService:
                 len(providers),
             )
 
+        return provider_instances
+
+    def sync_prices(
+        self, queries: tuple[str, ...], force: bool, provider_key: str | None
+    ) -> Generator[BaseMessage, None, None]:
+        """Sync prices from installed providers.
+
+        Args:
+            queries: Tuple of query strings to filter securities.
+            force: Whether to force update even if prices are up-to-date.
+            provider_key: Optional specific price provider to use.
+        """
+        provider_instances = yield from self._initialize_providers(provider_key)
         # Let's fetch all matching securities
         yield ProgressUpdate("sync.setup.securities", "Fetching securities", None, None)
 
