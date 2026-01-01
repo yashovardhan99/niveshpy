@@ -327,6 +327,94 @@ class PriceService:
 
             return total_count, max_date
 
+    def _fetch_prices_with_retry(
+        self,
+        provider_info: ProviderInfo,
+        provider_instance: Provider,
+        provider_key: str,
+        security: Security,
+        start_date: datetime.date,
+        end_date: datetime.date,
+    ) -> int | None:
+        """Fetch prices from a provider with retry logic.
+
+        Args:
+            provider_info: Provider information.
+            provider_instance: Provider instance.
+            provider_key: Key of the provider.
+            security: Security to fetch prices for.
+            start_date: Start date for price data.
+            end_date: End date for price data.
+
+        Returns:
+            Number of prices inserted, or None if no data was retrieved.
+
+        Raises:
+            ResourceNotFoundError: If provider reports resource not found.
+            NiveshPyError: For other provider errors.
+        """
+        for _ in range(self.RETRY_COUNT):
+            try:
+                price_data_iter = provider_instance.fetch_historical_prices(
+                    security, start_date, end_date
+                )
+
+                price_data_iter = map(
+                    self._add_metadata, price_data_iter, itertools.repeat(provider_key)
+                )
+
+                result, max_date = self._bulk_insert_prices_streaming(
+                    price_data_iter,
+                    security.key,
+                    start_date,
+                    end_date,
+                )
+
+                if max_date is None or max_date < start_date:
+                    # No data retrieved from this provider
+                    return None
+
+                # Only update metadata after successful save
+                security.properties["last_price_date"] = max_date.strftime("%Y-%m-%d")
+                security.properties["price_provider"] = provider_key
+
+                update_stmt = (
+                    update(Security)
+                    .where(Security.key == security.key)  # type: ignore
+                    .values(properties=security.properties)
+                )
+                with get_session() as session:
+                    session.exec(update_stmt)
+                    session.commit()
+
+                return result
+
+            except ResourceNotFoundError as e:
+                e.add_note(
+                    f"Provider {provider_info.name} reported resource not found for security {security.key}."
+                )
+                logger.info(
+                    "Resource not found from provider %s for security %s",
+                    provider_info.name,
+                    security.key,
+                    exc_info=True,
+                )
+                raise  # Propagate to try next provider
+            except NetworkError:
+                logger.info(
+                    f"Network error fetching prices from provider {provider_info.name} for security {security.key}",
+                    exc_info=True,
+                )
+                continue  # Retry with the same provider
+            except NiveshPyError:
+                raise
+            except Exception as e:
+                raise OperationError(
+                    f"An unexpected error occurred while fetching prices from provider {provider_info.name} for security {security.key}."
+                ) from e
+
+        return None  # All retries exhausted
+
     def sync_prices(
         self, queries: tuple[str, ...], force: bool, provider_key: str | None
     ) -> Generator[BaseMessage, None, None]:
@@ -446,69 +534,23 @@ class PriceService:
 
         while providers:
             _, key, provider_info, provider_instance = heapq.heappop(providers)
-            for _ in range(
-                self.RETRY_COUNT
-            ):  # Retry up to RETRY_COUNT times per provider
-                try:
-                    price_data_iter = provider_instance.fetch_historical_prices(
-                        security, start_date, end_date
-                    )
+            try:
+                result = self._fetch_prices_with_retry(
+                    provider_info,
+                    provider_instance,
+                    key,
+                    security,
+                    start_date,
+                    end_date,
+                )
 
-                    price_data_iter = map(
-                        self._add_metadata, price_data_iter, itertools.repeat(key)
-                    )
-
-                    result, max_date = self._bulk_insert_prices_streaming(
-                        price_data_iter,
-                        security.key,
-                        start_date,
-                        end_date,
-                    )
-
-                    if max_date is None or max_date < start_date:
-                        # No data retrieved from this provider
-                        break
-
-                    # Only update metadata after successful save
-                    security.properties["last_price_date"] = max_date.strftime(
-                        "%Y-%m-%d"
-                    )
-                    security.properties["price_provider"] = key
-
-                    update_stmt = (
-                        update(Security)
-                        .where(Security.key == security.key)  # type: ignore
-                        .values(properties=security.properties)
-                    )
-                    with get_session() as session:
-                        session.exec(update_stmt)
-                        session.commit()
-
+                if result is not None:
                     return result
+                # If None, try next provider
 
-                except ResourceNotFoundError as e:
-                    e.add_note(
-                        f"Provider {provider_info.name} reported resource not found for security {security.key}."
-                    )
-                    logger.info(
-                        "Resource not found from provider %s for security %s",
-                        provider_info.name,
-                        security.key,
-                        exc_info=True,
-                    )
-                    break  # Try next provider TODO: Add blacklist mechanism
-                except NetworkError:
-                    logger.info(
-                        f"Network error fetching prices from provider {provider_info.name} for security {security.key}",
-                        exc_info=True,
-                    )
-                    continue  # Retry with the same provider
-                except NiveshPyError:
-                    raise
-                except Exception as e:
-                    raise OperationError(
-                        f"An unexpected error occurred while fetching prices from provider {provider_info.name} for security {security.key}."
-                    ) from e
+            except ResourceNotFoundError:
+                # Try next provider
+                continue
 
         return None
 
