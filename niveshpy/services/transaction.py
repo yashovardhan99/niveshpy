@@ -166,12 +166,12 @@ class TransactionService:
         if transaction_id is not None:
             with get_session() as session:
                 exact_transaction = session.get(Transaction, transaction_id)
-            if exact_transaction:
-                return SearchResolution(
-                    status=ResolutionStatus.EXACT,
-                    exact=TransactionDisplay.model_validate(exact_transaction),
-                    queries=queries,
-                )
+                if exact_transaction:
+                    return SearchResolution(
+                        status=ResolutionStatus.EXACT,
+                        exact=TransactionDisplay.model_validate(exact_transaction),
+                        queries=queries,
+                    )
 
         if not allow_ambiguous:
             # If ambiguous results are not allowed, return NOT_FOUND
