@@ -119,10 +119,11 @@ class ParsingService:
         self,
         transactions: list[TransactionCreate],
         date_range: tuple[date, date],
+        account_ids: list[int],
     ) -> list[TransactionPublic]:
         """Bulk insert transactions into the database.
 
-        Delete existing transactions in the date range before inserting.
+        Delete existing transactions in the date range for specified accounts before inserting.
         """
         transaction_dicts = (
             RootModel[list[Transaction]].model_validate(transactions).model_dump()
@@ -132,6 +133,7 @@ class ParsingService:
                 delete(Transaction).where(
                     Transaction.transaction_date >= date_range[0],  # type: ignore[arg-type]
                     Transaction.transaction_date <= date_range[1],  # type: ignore[arg-type]
+                    Transaction.account_id.in_(account_ids),  # type: ignore[attr-defined]
                 )
             )
             results = session.scalars(
@@ -168,7 +170,8 @@ class ParsingService:
             map(self._add_metadata, self._parser.get_transactions(accounts))
         )
         self._report_progress("transactions", 0, len(transactions))
+        account_ids = [account.id for account in accounts]
         inserted = self._bulk_insert_transactions(
-            transactions, self._parser.get_date_range()
+            transactions, self._parser.get_date_range(), account_ids
         )
         self._report_progress("transactions", len(inserted), len(transactions))
