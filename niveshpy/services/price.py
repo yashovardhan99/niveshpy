@@ -4,7 +4,7 @@ import datetime
 import decimal
 import heapq
 import itertools
-from collections.abc import Generator, Sequence
+from collections.abc import Generator, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from pydantic import RootModel
@@ -271,6 +271,62 @@ class PriceService:
 
         return provider_map, securities_with_providers
 
+    def _bulk_insert_prices_streaming(
+        self,
+        prices: Iterable[PriceCreate],
+        security_key: str,
+        start_date: datetime.date,
+        end_date: datetime.date,
+        batch_size: int = 1000,
+    ) -> tuple[int, datetime.date | None]:
+        """Insert prices in batches while tracking max date.
+
+        Args:
+            session: Database session.
+            prices: Iterable of price data to insert.
+            security_key: Key of the security.
+            start_date: Start date for deletion range.
+            end_date: End date for deletion range.
+            batch_size: Number of prices to insert per batch.
+
+        Returns:
+            Tuple of (total_count, max_date).
+        """
+        with get_session() as session:
+            # Delete existing prices in the range first
+            delete_stmt = delete(Price).where(
+                Price.security_key == security_key,  # type: ignore
+                Price.date >= start_date,  # type: ignore
+                Price.date <= end_date,  # type: ignore
+            )
+            session.exec(delete_stmt)
+
+            total_count = 0
+            max_date: datetime.date | None = None
+            batch: list[dict] = []
+
+            for price_data in prices:
+                # Track max date
+                if max_date is None or price_data.date > max_date:
+                    max_date = price_data.date
+
+                batch.append(Price.model_validate(price_data).model_dump())
+
+                # Insert when batch is full
+                if len(batch) >= batch_size:
+                    session.exec(insert(Price), params=batch)
+                    total_count += len(batch)
+                    batch = []
+
+            # Insert remaining items
+            if batch:
+                session.exec(insert(Price), params=batch)
+                total_count += len(batch)
+
+            session.commit()
+
+            return total_count, max_date
+
     def sync_prices(
         self, queries: tuple[str, ...], force: bool, provider_key: str | None
     ) -> Generator[BaseMessage, None, None]:
@@ -388,9 +444,7 @@ class PriceService:
 
         end_date = today
 
-        result: int | None = None
-
-        while providers and (result is None or result == 0):
+        while providers:
             _, key, provider_info, provider_instance = heapq.heappop(providers)
             for _ in range(
                 self.RETRY_COUNT
@@ -400,37 +454,20 @@ class PriceService:
                         security, start_date, end_date
                     )
 
-                    data_checker, price_data_iter = itertools.tee(price_data_iter, 2)
+                    price_data_iter = map(
+                        self._add_metadata, price_data_iter, itertools.repeat(key)
+                    )
 
-                    max_date = max(
-                        (price_data.date for price_data in data_checker), default=None
+                    result, max_date = self._bulk_insert_prices_streaming(
+                        price_data_iter,
+                        security.key,
+                        start_date,
+                        end_date,
                     )
 
                     if max_date is None or max_date < start_date:
                         # No data retrieved from this provider
                         break
-
-                    price_data_iter = map(
-                        self._add_metadata, price_data_iter, itertools.repeat(key)
-                    )
-
-                    # Delete any previous prices in the date range and insert new prices
-
-                    with get_session() as session:
-                        delete_stmt = delete(Price).where(
-                            Price.security_key == security.key,  # type: ignore
-                            Price.date >= start_date,  # type: ignore
-                            Price.date <= end_date,  # type: ignore
-                        )
-                        session.exec(delete_stmt)
-
-                        prices = [
-                            Price.model_validate(price).model_dump()
-                            for price in price_data_iter
-                        ]
-
-                        session.exec(insert(Price), params=prices)
-                        session.commit()
 
                     # Only update metadata after successful save
                     security.properties["last_price_date"] = max_date.strftime(
@@ -438,9 +475,16 @@ class PriceService:
                     )
                     security.properties["price_provider"] = key
 
-                    # Successfully fetched prices
-                    result = len(prices)
-                    break
+                    update_stmt = (
+                        update(Security)
+                        .where(Security.key == security.key)  # type: ignore
+                        .values(properties=security.properties)
+                    )
+                    with get_session() as session:
+                        session.exec(update_stmt)
+                        session.commit()
+
+                    return result
 
                 except ResourceNotFoundError as e:
                     e.add_note(
@@ -466,17 +510,7 @@ class PriceService:
                         f"An unexpected error occurred while fetching prices from provider {provider_info.name} for security {security.key}."
                     ) from e
 
-        # Also update the security metadata in the database
-        update_stmt = (
-            update(Security)
-            .where(Security.key == security.key)  # type: ignore
-            .values(properties=security.properties)
-        )
-        with get_session() as session:
-            session.exec(update_stmt)
-            session.commit()
-
-        return result
+        return None
 
     def _add_metadata(self, price_data: PriceCreate, source: str) -> PriceCreate:
         """Add source metadata to price data."""
