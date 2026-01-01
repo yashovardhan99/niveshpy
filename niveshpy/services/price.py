@@ -206,6 +206,32 @@ class PriceService:
 
         return provider_instances
 
+    def _fetch_securities(self, queries: tuple[str, ...]) -> Sequence[Security]:
+        """Fetch securities matching the given queries.
+
+        Args:
+            queries: Tuple of query strings to filter securities.
+
+        Returns:
+            Sequence of matching securities.
+
+        Raises:
+            ResourceNotFoundError: If no securities match the queries.
+        """
+        where_clause = get_filters_from_queries(
+            queries, ast.Field.SECURITY, SECURITY_COLUMN_MAPPING
+        )
+
+        with get_session() as session:
+            securities = session.exec(select(Security).where(*where_clause)).all()
+
+        if len(securities) == 0:
+            raise ResourceNotFoundError(
+                "Securities", queries, "No securities found matching the given queries."
+            )
+
+        return securities
+
     def sync_prices(
         self, queries: tuple[str, ...], force: bool, provider_key: str | None
     ) -> Generator[BaseMessage, None, None]:
@@ -220,12 +246,7 @@ class PriceService:
         # Let's fetch all matching securities
         yield ProgressUpdate("sync.setup.securities", "Fetching securities", None, None)
 
-        where_clause = get_filters_from_queries(
-            queries, ast.Field.SECURITY, SECURITY_COLUMN_MAPPING
-        )
-
-        with get_session() as session:
-            securities = session.exec(select(Security).where(*where_clause)).all()
+        securities = self._fetch_securities(queries)
 
         yield ProgressUpdate(
             "sync.setup.securities",
@@ -233,11 +254,6 @@ class PriceService:
             None,
             len(securities),
         )
-
-        if len(securities) == 0:
-            raise ResourceNotFoundError(
-                "Securities", queries, "No securities found matching the given queries."
-            )
 
         # Now, for each security, determine which provider to use.
         provider_map: dict[str, list[tuple[int, str, ProviderInfo, Provider]]] = {}
