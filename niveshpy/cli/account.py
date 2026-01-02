@@ -5,20 +5,17 @@ import InquirerPy
 import InquirerPy.inquirer
 import InquirerPy.validator
 
-from niveshpy.cli.utils import flags, output
-from niveshpy.cli.utils.overrides import command, group
+from niveshpy.cli.utils import essentials, flags, output
+from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.models.account import AccountPublic
 from niveshpy.services.result import MergeAction, ResolutionStatus
 
 
-@group(invoke_without_command=True)
-@click.pass_context
-def accounts(ctx: click.Context) -> None:
-    """Manage accounts."""
-    if ctx.invoked_subcommand is None:
-        ctx.forward(show)
+@essentials.group()
+def cli() -> None:
+    """Wrapper group for account-related commands."""
 
 
 @command("list")
@@ -26,7 +23,6 @@ def accounts(ctx: click.Context) -> None:
 @flags.limit("accounts", default=30)
 @flags.offset("accounts", default=0)
 @flags.output("format")
-@flags.common_options
 @click.pass_context
 def show(
     ctx: click.Context,
@@ -70,7 +66,6 @@ def show(
 @click.argument("name", metavar="[<name>]", default="")
 @click.argument("institution", metavar="[<institution>]", default="")
 @flags.no_input()
-@flags.common_options
 @click.pass_context
 def add(ctx: click.Context, name: str, institution: str) -> None:
     """Add a new account.
@@ -150,7 +145,6 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
 @flags.no_input()
 @flags.force()
 @flags.dry_run()
-@flags.common_options
 @click.pass_context
 def delete(
     ctx: click.Context, queries: tuple[str, ...], limit: int, force: bool, dry_run: bool
@@ -265,6 +259,6 @@ def delete(
             logger.debug("Resolution object: %s", resolution)
 
 
-accounts.add_command(show)
-accounts.add_command(add)
-accounts.add_command(delete)
+cli.add_command(show)
+cli.add_command(add)
+cli.add_command(delete)

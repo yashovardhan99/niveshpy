@@ -7,8 +7,8 @@ from InquirerPy import get_style, inquirer
 from InquirerPy.base.control import Choice
 from InquirerPy.validator import EmptyInputValidator
 
-from niveshpy.cli.utils import flags, output
-from niveshpy.cli.utils.overrides import command, group
+from niveshpy.cli.utils import essentials, flags, output
+from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.models.security import (
@@ -19,13 +19,9 @@ from niveshpy.models.security import (
 from niveshpy.services.result import MergeAction, ResolutionStatus
 
 
-@group(invoke_without_command=True)
-@flags.common_options
-@click.pass_context
-def securities(ctx: click.Context) -> None:
-    """Work with securities."""
-    if ctx.invoked_subcommand is None:
-        ctx.forward(show)
+@essentials.group()
+def cli() -> None:
+    """Wrapper group for security-related commands."""
 
 
 @command("list")
@@ -33,7 +29,6 @@ def securities(ctx: click.Context) -> None:
 @flags.limit("securities", default=30)
 @flags.offset("securities", default=0)
 @flags.output("format")
-@flags.common_options
 @click.pass_context
 def show(
     ctx: click.Context,
@@ -88,7 +83,6 @@ def show(
     metavar="[<type>]",
 )
 @flags.no_input()
-@flags.common_options
 @click.pass_context
 def add(
     ctx: click.Context,
@@ -212,7 +206,6 @@ def add(
 @flags.no_input()
 @flags.force()
 @flags.dry_run()
-@flags.common_options
 @click.pass_context
 def delete(
     ctx: click.Context, queries: tuple[str, ...], limit: int, force: bool, dry_run: bool
@@ -329,6 +322,6 @@ def delete(
             logger.debug("Resolution object: %s", resolution)
 
 
-securities.add_command(show)
-securities.add_command(add)
-securities.add_command(delete, name="delete")
+cli.add_command(show)
+cli.add_command(add)
+cli.add_command(delete, name="delete")

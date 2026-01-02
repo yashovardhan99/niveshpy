@@ -8,8 +8,8 @@ import click
 from InquirerPy import get_style, inquirer, validator
 from InquirerPy.base import control
 
-from niveshpy.cli.utils import flags, inputs, output
-from niveshpy.cli.utils.overrides import command, group
+from niveshpy.cli.utils import essentials, flags, inputs, output
+from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.models.transaction import (
@@ -21,13 +21,9 @@ from niveshpy.models.transaction import (
 from niveshpy.services.result import ResolutionStatus
 
 
-@group(invoke_without_command=True)
-@flags.common_options
-@click.pass_context
-def transactions(ctx: click.Context) -> None:
-    """List, add, or delete transactions."""
-    if ctx.invoked_subcommand is None:
-        ctx.forward(show)
+@essentials.group()
+def cli() -> None:
+    """Wrapper group for transaction-related commands."""
 
 
 @command("list")
@@ -35,7 +31,6 @@ def transactions(ctx: click.Context) -> None:
 @flags.limit("accounts", default=30)
 @flags.offset("accounts", default=0)
 @flags.output("format")
-@flags.common_options
 @click.pass_context
 def show(
     ctx: click.Context,
@@ -108,7 +103,6 @@ def show(
 @click.argument("units", type=decimal.Decimal, metavar="[<units>]", required=False)
 @click.argument("account_id", type=int, metavar="[<account_id>]", required=False)
 @click.argument("security_key", type=str, metavar="[<security_key>]", required=False)
-@flags.common_options
 @flags.no_input()
 @click.pass_context
 def add(
@@ -280,7 +274,6 @@ def add(
 @flags.no_input()
 @flags.force()
 @flags.dry_run()
-@flags.common_options
 @click.pass_context
 def delete(
     ctx: click.Context, queries: tuple[str, ...], limit: int, force: bool, dry_run: bool
@@ -403,6 +396,6 @@ def delete(
             logger.debug("Resolution object: %s", resolution)
 
 
-transactions.add_command(show)
-transactions.add_command(add)
-transactions.add_command(delete)
+cli.add_command(show)
+cli.add_command(add)
+cli.add_command(delete)
