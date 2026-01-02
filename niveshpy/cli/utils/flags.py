@@ -128,11 +128,3 @@ def output(name: str = "output") -> Callable[[FC], FC]:
         ),
     ]
     return functools.partial(functools.reduce, lambda x, opt: opt(x), options)
-
-
-def common_options(f: Callable[..., Any]) -> Callable[..., Any]:
-    """Apply common options to a Click command."""
-    options = [
-        click.version_option(None, "--version", "-v", prog_name="NiveshPy"),
-    ]
-    return functools.reduce(lambda x, opt: opt(x), options, f)

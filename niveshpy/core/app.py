@@ -15,7 +15,7 @@ from niveshpy.services.transaction import TransactionService
 class Application:
     """Main application class to hold state for the CLI."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the application with its services."""
         initialize_database()
         self._security: SecurityService | None = None

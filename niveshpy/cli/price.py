@@ -9,7 +9,7 @@ import rich
 import rich.progress
 
 import niveshpy.models.output
-from niveshpy.cli.utils import flags, output, overrides
+from niveshpy.cli.utils import essentials, flags, output, overrides
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.app import AppState
 from niveshpy.exceptions import InvalidInputError
@@ -42,23 +42,13 @@ class ProviderType(click.ParamType):
         ]
 
 
-@overrides.group(invoke_without_command=True)
-@click.pass_context
-@flags.common_options
-def prices(ctx: click.Context):
-    """Commands for updating and fetching price data.
-
-    Price data for securities are stored at a daily granularity.
-
-    External price providers can be installed to fetch price data automatically.
-    """
-    if ctx.invoked_subcommand is None:
-        ctx.forward(list_prices)
+@essentials.group()
+def cli():
+    """Wrapper group for price-related commands."""
 
 
 @overrides.command("list")
 @click.pass_context
-@flags.common_options
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
 @flags.limit("securities", default=30)
 @flags.offset("securities", default=0)
@@ -117,7 +107,6 @@ def list_prices(
 
 @overrides.command("update")
 @click.pass_context
-@flags.common_options
 @click.argument("key", required=True, metavar="[<security_key>]")
 @click.argument(
     "date", required=True, metavar="[<date>]", type=click.DateTime(formats=["%Y-%m-%d"])
@@ -152,7 +141,6 @@ def update_prices(
 
 @overrides.command("sync")
 @click.pass_context
-@flags.common_options
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
 @click.option(
     "--force",
@@ -197,6 +185,6 @@ def sync_prices(
                 output.handle_niveshpy_message(message, console=progress_bar.console)
 
 
-prices.add_command(list_prices, name="list")
-prices.add_command(update_prices, name="update")
-prices.add_command(sync_prices, name="sync")
+cli.add_command(list_prices, name="list")
+cli.add_command(update_prices, name="update")
+cli.add_command(sync_prices, name="sync")

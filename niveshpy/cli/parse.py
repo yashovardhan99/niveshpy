@@ -35,7 +35,6 @@ class ParserType(click.ParamType):
 
 
 @overrides.command("parse")
-@flags.common_options
 @flags.no_input()
 @click.pass_context
 @click.argument("parser_key", type=ParserType(), metavar="<parser>")
