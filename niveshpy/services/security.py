@@ -60,9 +60,11 @@ class SecurityService:
             raise InvalidInputError(
                 (key, name), "Security key and name cannot be empty."
             )
-        if stype not in SecurityType:
+        # Check if stype is a valid SecurityType enum member
+        if not isinstance(stype, SecurityType):
             raise InvalidInputError(stype, f"Invalid security type: {stype}")
-        if category not in SecurityCategory:
+        # Check if category is a valid SecurityCategory enum member
+        if not isinstance(category, SecurityCategory):
             raise InvalidInputError(category, f"Invalid security category: {category}")
         if source:
             properties = {"source": source}
