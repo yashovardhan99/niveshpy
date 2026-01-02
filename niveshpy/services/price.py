@@ -158,7 +158,7 @@ class PriceService:
             provider_key: The key of the price provider to validate.
 
         Raises:
-            NiveshPyUserError: If the provider is not found.
+            ResourceNotFoundError: If the provider is not found.
         """
         # Add logic to check if provider is installed.
         provider_registry.discover_installed_providers(name=provider_key)
