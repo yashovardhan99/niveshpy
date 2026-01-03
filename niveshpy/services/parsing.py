@@ -1,7 +1,6 @@
 """Service for parsing financial documents."""
 
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Sequence
 from datetime import date
 from typing import TypeVar
 
@@ -53,15 +52,8 @@ class ParsingService:
                 - current: current item count
                 - total: total items (or -1 if unknown)
         """
-        with ThreadPoolExecutor() as executor:
-            # Parse accounts and securities in parallel
-            accounts_future = executor.submit(self._parse_accounts)
-            securities_future = executor.submit(self._parse_securities)
-
-            accounts = accounts_future.result()
-            securities = securities_future.result()
-
-        # Parse transactions after accounts and securities are done
+        accounts = self._parse_accounts()
+        securities = self._parse_securities()
         self._parse_transactions(accounts, securities)
 
     _T = TypeVar("_T", SecurityCreate, AccountCreate, TransactionCreate)
@@ -76,7 +68,8 @@ class ParsingService:
         self, accounts: list[AccountCreate]
     ) -> list[AccountPublic]:
         """Bulk insert accounts into the database."""
-        # TODO: Implement bulk insert logic
+        if len(accounts) == 0:
+            return []
         account_dicts = RootModel[list[Account]].model_validate(accounts).model_dump()
         with get_session() as session:
             stm = sqlite_upsert(Account)
@@ -94,7 +87,8 @@ class ParsingService:
         self, securities: list[SecurityCreate]
     ) -> list[Security]:
         """Bulk insert securities into the database."""
-        # TODO: Implement bulk insert logic
+        if len(securities) == 0:
+            return []
         security_dicts = (
             RootModel[list[Security]].model_validate(securities).model_dump()
         )
@@ -136,9 +130,13 @@ class ParsingService:
                     Transaction.account_id.in_(account_ids),  # type: ignore[attr-defined]
                 )
             )
-            results = session.scalars(
-                insert(Transaction).returning(Transaction),
-                transaction_dicts,
+            results: Sequence[Transaction] = (
+                session.scalars(
+                    insert(Transaction).returning(Transaction),
+                    transaction_dicts,
+                ).all()
+                if len(transaction_dicts) > 0
+                else []
             )
             session.commit()
             return RootModel[list[TransactionPublic]].model_validate(results).root
