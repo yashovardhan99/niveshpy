@@ -2,7 +2,7 @@
 
 ::: mkdocs-click
     :module: niveshpy.cli.transaction
-    :command: transactions
+    :command: cli
     :prog_name: niveshpy transactions
     :depth: 1
     :list_subcommands: true

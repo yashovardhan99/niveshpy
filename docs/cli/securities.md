@@ -4,7 +4,7 @@ A security is an investment instrument that you have purchased or sold. This can
 
 ::: mkdocs-click
     :module: niveshpy.cli.security
-    :command: securities
+    :command: cli
     :prog_name: niveshpy securities
     :depth: 1
     :list_subcommands: true

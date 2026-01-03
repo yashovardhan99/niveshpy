@@ -2,7 +2,7 @@
 
 ::: mkdocs-click
     :module: niveshpy.cli.price
-    :command: prices
+    :command: cli
     :prog_name: niveshpy prices
     :depth: 1
     :list_subcommands: true
@@ -73,3 +73,7 @@ NiveshPy comes bundled with a few useful providers. However, you can use your ow
 ### Custom Providers
 
 To learn how to create your own custom provider, check [our guide](../advanced/providers.md#custom-providers)
+
+## Model Reference
+
+::: niveshpy.models.price
