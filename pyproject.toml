@@ -7,15 +7,15 @@ name = "NiveshPy"
 description = "A simple python library for all your investment needs."
 dynamic = ["version"]
 dependencies = [
-    "platformdirs >= 4.3.8, < 5.0.0",
-    "casparser>=0.8.1",
-    "click>=8.3.0",
-    "inquirerpy>=0.3.4",
-    "rich>=13.9.4",
-    "requests>=2.32.5",
-    "sqlmodel>=0.0.30",
-    "pydantic>=2.11.10",
-    "sqlalchemy>=2.0.45",
+    "casparser>=0.8.1,<0.9.0",
+    "click>=8.3.1, < 9.0.0",
+    "inquirerpy>=0.3.4, < 1.0.0",
+    "platformdirs >= 4.5.1, < 5.0.0",
+    "pydantic>=2.12.5, < 3.0.0",
+    "requests>=2.32.5, < 3.0.0",
+    "rich>=13.9.4, < 15.0.0",         # cas parser doesn't support rich 14 yet
+    "sqlalchemy>=2.0.45, < 3.0.0",
+    "sqlmodel>=0.0.31, < 1.0.0",
 ]
 requires-python = ">=3.11"
 authors = [
@@ -66,14 +66,14 @@ cas = "niveshpy.parsers.cas:CASParserFactory"
 amfi = "niveshpy.providers.amfi:AMFIProviderFactory"
 
 [dependency-groups]
-testing = ["coverage>=7.13.1", "pytest>=9.0.2"]
-linting = ["ruff >= 0.11.9, < 0.12.0", "mypy >= 1.18.2, < 2.0.0"]
-stubs = ["types-requests>=2.32.4.20250913"]
+testing = ["coverage>=7.13.1, < 8.0.0", "pytest>=9.0.2, < 10.0.0"]
+linting = ["ruff >= 0.14.10, < 1.0.0", "mypy >= 1.19.1, < 2.0.0"]
+stubs = ["types-requests>=2.32.4.20250913, < 3.0.0"]
 docs = [
-    "mkdocs-material == 9.*",
-    "mkdocstrings[python]",
-    "mkdocs-macros-plugin == 1.*",
-    "mkdocs-click>=0.9.0",
+    "mkdocs-click>=0.9.0, < 1.0.0",
+    "mkdocs-macros-plugin >= 1.5.0, < 2.0.0",
+    "mkdocs-material >= 9.7.1, < 10.0.0",
+    "mkdocstrings[python] >= 0.30.1, < 1.0.0",
 ]
 dev = [
     { include-group = "testing" },
@@ -137,3 +137,6 @@ source = "vcs"
 
 [tool.hatch.version.raw-options]
 version_scheme = "no-guess-dev"
+
+[tool.uv]
+add-bounds = "major"
