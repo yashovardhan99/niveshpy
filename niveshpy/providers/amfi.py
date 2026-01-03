@@ -8,6 +8,7 @@ import requests
 
 from niveshpy.exceptions import (
     NetworkError,
+    OperationError,
     ResourceNotFoundError,
 )
 from niveshpy.models.price import PriceCreate
@@ -84,10 +85,20 @@ class AMFIProvider:
             price_data_list = data.get("data", [])
 
             for item in price_data_list:
-                price = decimal.Decimal(item["nav"])
+                try:
+                    price = decimal.Decimal(item["nav"])
+                    date_ = datetime.datetime.strptime(item["date"], "%d-%m-%Y").date()
+                except decimal.InvalidOperation as e:
+                    raise OperationError(
+                        "Failed to parse price data from AMFI response."
+                    ) from e
+                except ValueError as e:
+                    raise OperationError(
+                        "Failed to parse date from AMFI response."
+                    ) from e
                 yield PriceCreate(
                     security_key=security.key,
-                    date=datetime.datetime.strptime(item["date"], "%d-%m-%Y").date(),
+                    date=date_,
                     open=price,
                     high=price,
                     low=price,
@@ -100,6 +111,8 @@ class AMFIProvider:
             raise NetworkError(
                 "HTTP error occurred while fetching data from AMFI."
             ) from e
+        except requests.JSONDecodeError as e:
+            raise NetworkError("Failed to decode JSON response from AMFI.") from e
 
     def fetch_latest_price(self, security: Security) -> PriceCreate:
         """Fetch the latest price for a security.
