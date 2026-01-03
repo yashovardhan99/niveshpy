@@ -1,12 +1,13 @@
 """Tests for SecurityService."""
 
+from collections.abc import Sequence
 from unittest.mock import patch
 
 import pytest
 
-from niveshpy.exceptions import InvalidInputError
+from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
-from niveshpy.services.result import InsertResult, MergeAction, ResolutionStatus
+from niveshpy.services.result import InsertResult, MergeAction
 from niveshpy.services.security import SecurityService
 
 
@@ -411,176 +412,147 @@ class TestResolveSecurityKey:
     """Tests for resolve_security_key method."""
 
     def test_resolve_empty_queries_ambiguous_allowed(
-        self, security_service, sample_securities
+        self, security_service: SecurityService, sample_securities: list[Security]
     ):
         """Test resolving with empty queries when ambiguous is allowed."""
-        resolution = security_service.resolve_security_key(
+        securities: Sequence[Security] = security_service.resolve_security_key(
             queries=(), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.AMBIGUOUS
-        assert resolution.exact is None
-        assert resolution.candidates is not None
-        assert len(resolution.candidates) == 5
-        assert resolution.queries == ()
+        assert len(securities) == 5
 
     def test_resolve_empty_queries_ambiguous_not_allowed(
-        self, security_service, sample_securities
+        self, security_service: SecurityService, sample_securities: list[Security]
     ):
         """Test resolving with empty queries when ambiguous is not allowed."""
-        resolution = security_service.resolve_security_key(
-            queries=(), limit=10, allow_ambiguous=False
-        )
-
-        assert resolution.status == ResolutionStatus.NOT_FOUND
-        assert resolution.exact is None
-        assert resolution.candidates is None
-        assert resolution.queries == ()
+        with pytest.raises(InvalidInputError, match="No queries provided"):
+            security_service.resolve_security_key(
+                queries=(), limit=10, allow_ambiguous=False
+            )
 
     def test_resolve_empty_queries_respects_limit(
-        self, security_service, sample_securities
+        self, security_service: SecurityService, sample_securities: list[Security]
     ):
         """Test that empty queries resolution respects limit."""
-        resolution = security_service.resolve_security_key(
+        securities: Sequence[Security] = security_service.resolve_security_key(
             queries=(), limit=3, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.AMBIGUOUS
-        assert len(resolution.candidates) == 3
+        assert len(securities) == 3
 
-    def test_resolve_exact_match_by_key(self, security_service, sample_securities):
+    def test_resolve_exact_match_by_key(
+        self, security_service: SecurityService, sample_securities: list[Security]
+    ):
         """Test resolving by exact security key."""
-        resolution = security_service.resolve_security_key(
+        securities: Sequence[Security] = security_service.resolve_security_key(
             queries=("123456",), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.EXACT
-        assert resolution.exact is not None
-        assert resolution.exact.key == "123456"
-        assert resolution.exact.name == "HDFC Equity Fund"
-        assert resolution.candidates is None
+        assert len(securities) == 1
+        assert securities[0].key == "123456"
+        assert securities[0].name == "HDFC Equity Fund"
 
     def test_resolve_exact_match_by_key_with_whitespace(
-        self, security_service, sample_securities
+        self, security_service: SecurityService, sample_securities: list[Security]
     ):
         """Test resolving by key with surrounding whitespace."""
-        resolution = security_service.resolve_security_key(
+        securities: Sequence[Security] = security_service.resolve_security_key(
             queries=("  RELI  ",), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.EXACT
-        assert resolution.exact.key == "RELI"
+        assert len(securities) == 1
+        assert securities[0].key == "RELI"
 
     def test_resolve_nonexistent_key_ambiguous_not_allowed(
-        self, security_service, sample_securities
+        self, security_service: SecurityService, sample_securities: list[Security]
     ):
         """Test resolving non-existent key when ambiguous not allowed."""
-        resolution = security_service.resolve_security_key(
-            queries=("NONEXIST",), limit=10, allow_ambiguous=False
-        )
-
-        assert resolution.status == ResolutionStatus.NOT_FOUND
-        assert resolution.exact is None
-        assert resolution.candidates is None
+        with pytest.raises(AmbiguousResourceError, match="security"):
+            security_service.resolve_security_key(
+                queries=("NONEXIST",), limit=10, allow_ambiguous=False
+            )
 
     def test_resolve_nonexistent_key_ambiguous_allowed(
-        self, security_service, sample_securities
+        self, security_service: SecurityService, sample_securities: list[Security]
     ):
         """Test resolving non-existent key when ambiguous allowed falls back to text search."""
-        resolution = security_service.resolve_security_key(
+        securities: Sequence[Security] = security_service.resolve_security_key(
             queries=("NONEXIST",), limit=10, allow_ambiguous=True
         )
 
         # Should fall back to text search and find nothing
-        assert resolution.status == ResolutionStatus.NOT_FOUND
+        assert len(securities) == 0
 
-    def test_resolve_text_search_no_matches(self, security_service, sample_securities):
+    def test_resolve_text_search_no_matches(
+        self, security_service: SecurityService, sample_securities: list[Security]
+    ):
         """Test text search with no matches."""
-        resolution = security_service.resolve_security_key(
+        securities: Sequence[Security] = security_service.resolve_security_key(
             queries=("NonExistentFund",), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.NOT_FOUND
-        assert resolution.exact is None
-        assert resolution.candidates is None
+        assert len(securities) == 0
 
     def test_resolve_text_search_single_match(
-        self, security_service, sample_securities
+        self, security_service: SecurityService, sample_securities: list[Security]
     ):
         """Test text search with exactly one match."""
-        resolution = security_service.resolve_security_key(
+        securities: Sequence[Security] = security_service.resolve_security_key(
             queries=("Reliance",), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.EXACT
-        assert resolution.exact is not None
-        assert resolution.exact.name == "Reliance Industries"
-        assert resolution.candidates is None
+        assert len(securities) == 1
+        assert securities[0].name == "Reliance Industries"
 
     def test_resolve_text_search_multiple_matches(
-        self, security_service, sample_securities
+        self, security_service: SecurityService, sample_securities: list[Security]
     ):
         """Test text search with multiple matches."""
-        resolution = security_service.resolve_security_key(
+        securities: Sequence[Security] = security_service.resolve_security_key(
             queries=("Fund",), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.AMBIGUOUS
-        assert resolution.exact is None
-        assert resolution.candidates is not None
-        assert len(resolution.candidates) == 2
-        assert all("Fund" in sec.name for sec in resolution.candidates)
+        assert len(securities) == 2
+        assert all("Fund" in sec.name for sec in securities)
 
     def test_resolve_text_search_multiple_matches_ambiguous_not_allowed(
-        self, security_service, sample_securities
+        self, security_service: SecurityService, sample_securities: list[Security]
     ):
         """Test text search with multiple matches when ambiguous not allowed."""
-        resolution = security_service.resolve_security_key(
-            queries=("Fund",), limit=10, allow_ambiguous=False
-        )
-
-        assert resolution.status == ResolutionStatus.NOT_FOUND
-        assert resolution.exact is None
-        assert resolution.candidates is None
+        with pytest.raises(AmbiguousResourceError, match="security"):
+            security_service.resolve_security_key(
+                queries=("Fund",), limit=10, allow_ambiguous=False
+            )
 
     def test_resolve_text_search_respects_limit(
-        self, security_service, sample_securities
+        self, security_service: SecurityService, sample_securities: list[Security]
     ):
         """Test that text search respects limit parameter."""
-        resolution = security_service.resolve_security_key(
+        securities: Sequence[Security] = security_service.resolve_security_key(
             queries=("Fund",), limit=1, allow_ambiguous=True
         )
 
-        # Should find multiple funds but limit to 1
-        # With limit=1 and exactly 1 result, it should return EXACT
-        assert resolution.status in (ResolutionStatus.EXACT, ResolutionStatus.AMBIGUOUS)
+        assert len(securities) == 1
 
-    def test_resolve_preserves_queries_tuple(self, security_service, sample_securities):
-        """Test that resolution preserves the queries tuple."""
-        queries = ("HDFC", "Equity")
-        resolution = security_service.resolve_security_key(
-            queries=queries, limit=10, allow_ambiguous=True
-        )
-
-        assert resolution.queries == queries
-
-    def test_resolve_empty_database(self, security_service):
+    def test_resolve_empty_database(self, security_service: SecurityService):
         """Test resolving in empty database."""
-        resolution = security_service.resolve_security_key(
+        securities: Sequence[Security] = security_service.resolve_security_key(
             queries=("test",), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.NOT_FOUND
+        assert len(securities) == 0
 
-    def test_resolve_returns_security(self, security_service, sample_securities):
+    def test_resolve_returns_security(
+        self, security_service: SecurityService, sample_securities: list[Security]
+    ):
         """Test that resolution returns Security instances."""
-        resolution = security_service.resolve_security_key(
+        securities: Sequence[Security] = security_service.resolve_security_key(
             queries=("123456",), limit=10, allow_ambiguous=True
         )
 
-        assert isinstance(resolution.exact, Security)
-        assert hasattr(resolution.exact, "key")
-        assert hasattr(resolution.exact, "created")
+        assert isinstance(securities[0], Security)
+        assert hasattr(securities[0], "key")
+        assert hasattr(securities[0], "created")
 
 
 class TestDeleteSecurity:
