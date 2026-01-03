@@ -1,9 +1,9 @@
 """Module for parsing user queries into structured filters."""
 
+import decimal
 import itertools
 from collections.abc import Iterable, Sequence
 from datetime import date, timedelta
-from decimal import Decimal
 
 from niveshpy.core.query import ast
 from niveshpy.core.query import tokens as Tokens
@@ -55,7 +55,7 @@ class QueryParser:
         return "".join(strings)
 
     @staticmethod
-    def convert_to_number(tokens: Iterable[Tokens.Token]) -> Decimal:
+    def convert_to_number(tokens: Iterable[Tokens.Token]) -> decimal.Decimal:
         """Convert a sequence of tokens to a Decimal number."""
         match tokens:
             case [
@@ -64,20 +64,20 @@ class QueryParser:
                 Tokens.Dot(),
                 Tokens.Int(value=frac_value),
             ]:  # Negative fractional number
-                return Decimal(f"-{int_value}.{frac_value}")
+                return decimal.Decimal(f"-{int_value}.{frac_value}")
             case [
                 Tokens.Int(value=int_value),
                 Tokens.Dot(),
                 Tokens.Int(value=frac_value),
             ]:  # Positive fractional number
-                return Decimal(f"{int_value}.{frac_value}")
+                return decimal.Decimal(f"{int_value}.{frac_value}")
             case [
                 Tokens.Dash(),
                 Tokens.Int(value=int_value),
             ]:  # Negative integer
-                return Decimal(f"-{int_value}")
+                return decimal.Decimal(f"-{int_value}")
             case [Tokens.Int(value=int_value)]:  # Positive integer
-                return Decimal(int_value)
+                return decimal.Decimal(int_value)
             case _:
                 raise QuerySyntaxError(
                     str(tokens),
@@ -207,14 +207,28 @@ class QueryParser:
                                 str(tokens),
                                 "Both start and end amount cannot be empty in a range expression.",
                             )
-                        start_value = self.convert_to_number(tokens[:sep_index])
-                        end_value = self.convert_to_number(tokens[sep_index + 1 :])
-                        if start_value > end_value:
+                        start_value = (
+                            self.convert_to_number(tokens[:sep_index])
+                            if sep_index > 0
+                            else decimal.Decimal(decimal.MIN_EMIN)
+                        )
+                        end_value = (
+                            self.convert_to_number(tokens[sep_index + 1 :])
+                            if sep_index < len(tokens) - 1
+                            else decimal.Decimal(decimal.MAX_EMAX)
+                        )
+                        if start_value == decimal.Decimal(decimal.MIN_EMIN):
+                            operator = ast.Operator.LESS_THAN_EQ
+                            value = end_value
+                        elif end_value == decimal.Decimal(decimal.MAX_EMAX):
+                            operator = ast.Operator.GREATER_THAN_EQ
+                            value = start_value
+                        elif start_value > end_value:
                             raise QuerySyntaxError(
                                 str(tokens),
                                 "Invalid amount range: start amount is greater than end amount.",
                             )
-                        if start_value == end_value:
+                        elif start_value == end_value:
                             operator = ast.Operator.EQUALS
                             value = start_value
                         else:
