@@ -212,8 +212,8 @@ def get_fields_from_queries(
         stripped_queries = map(str.strip, queries)
         lexers = map(QueryLexer, stripped_queries)
         parsers = map(QueryParser, lexers)
-        filters: Iterable[FilterNode] = itertools.chain.from_iterable(
-            map(QueryParser.parse, parsers)
+        filters: list[FilterNode] = list(
+            itertools.chain.from_iterable(map(QueryParser.parse, parsers))
         )
     except QuerySyntaxError as e:
         e.add_note(f"Error was reported on input: {e.input_value}")
