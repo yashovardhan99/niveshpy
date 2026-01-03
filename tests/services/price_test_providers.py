@@ -53,18 +53,6 @@ class ConfigurableProvider:
             return None
         return self.priority_value
 
-    def fetch_latest_price(self, security):
-        """Return a dummy latest price."""
-        return PriceCreate(
-            security_key=security.key,
-            date=datetime.date(2025, 12, 31),
-            open=Decimal("100.00"),
-            high=Decimal("105.00"),
-            low=Decimal("98.00"),
-            close=Decimal("103.00"),
-            properties={},
-        )
-
     def fetch_historical_prices(self, security, start_date, end_date):
         """Return prices based on configured behavior."""
         self.call_count += 1
@@ -107,9 +95,6 @@ class ConfigurableProvider:
         days_to_generate = min((end_date - start_date).days + 1, self.price_count)
 
         for _ in range(days_to_generate):
-            if current_date > end_date:
-                break
-
             prices.append(
                 PriceCreate(
                     security_key=security.key,

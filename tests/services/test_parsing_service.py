@@ -105,44 +105,6 @@ def parsing_service_with_callback(mock_parser, session, progress_callback):
         yield ParsingService(parser=mock_parser, progress_callback=progress_callback)
 
 
-@pytest.fixture
-def sample_accounts_db(session):
-    """Create sample accounts in database for testing."""
-    accounts = [
-        Account(name="Test Account 1", institution="Test Bank"),
-        Account(name="Test Account 2", institution="Test Bank"),
-    ]
-    session.add_all(accounts)
-    session.commit()
-    for account in accounts:
-        session.refresh(account)
-    return accounts
-
-
-@pytest.fixture
-def sample_securities_db(session):
-    """Create sample securities in database for testing."""
-    securities = [
-        Security(
-            key="SEC001",
-            name="Test Security 1",
-            type=SecurityType.MUTUAL_FUND,
-            category=SecurityCategory.EQUITY,
-        ),
-        Security(
-            key="SEC002",
-            name="Test Security 2",
-            type=SecurityType.STOCK,
-            category=SecurityCategory.EQUITY,
-        ),
-    ]
-    session.add_all(securities)
-    session.commit()
-    for security in securities:
-        session.refresh(security)
-    return securities
-
-
 class TestParsingService:
     """Tests for ParsingService public API."""
 
