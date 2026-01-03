@@ -1,7 +1,6 @@
 """Service for parsing financial documents."""
 
 from collections.abc import Callable, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import TypeVar
 
@@ -53,15 +52,8 @@ class ParsingService:
                 - current: current item count
                 - total: total items (or -1 if unknown)
         """
-        with ThreadPoolExecutor() as executor:
-            # Parse accounts and securities in parallel
-            accounts_future = executor.submit(self._parse_accounts)
-            securities_future = executor.submit(self._parse_securities)
-
-            accounts = accounts_future.result()
-            securities = securities_future.result()
-
-        # Parse transactions after accounts and securities are done
+        accounts = self._parse_accounts()
+        securities = self._parse_securities()
         self._parse_transactions(accounts, securities)
 
     _T = TypeVar("_T", SecurityCreate, AccountCreate, TransactionCreate)
