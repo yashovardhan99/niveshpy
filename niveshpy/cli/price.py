@@ -5,6 +5,7 @@ import decimal
 from collections.abc import MutableMapping
 
 import click
+import click.shell_completion
 import rich
 import rich.progress
 

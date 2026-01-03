@@ -11,6 +11,7 @@ from niveshpy.cli.utils import essentials, flags, output
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
+from niveshpy.exceptions import InvalidInputError
 from niveshpy.models.security import (
     Security,
     SecurityCategory,
@@ -110,10 +111,10 @@ def add(
     if state.no_input:
         # Non-interactive mode: all arguments must be provided
         if not (default_key and default_name and default_category and default_type):
-            output.display_error(
-                "When running in non-interactive mode, all arguments for adding a security must be provided."
+            raise InvalidInputError(
+                (default_key, default_name, default_category, default_type),
+                "When running in non-interactive mode, all arguments for adding a security must be provided.",
             )
-            ctx.exit(1)
 
         result = state.app.security.add_security(
             default_key.strip(),
