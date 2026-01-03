@@ -38,12 +38,17 @@ class CASParser:
 
     def get_date_range(self) -> tuple[datetime.date, datetime.date]:
         """Get the date range of the CAS data."""
-        start_date = datetime.datetime.strptime(
-            self.data.statement_period.from_, "%d-%b-%Y"
-        ).date()
-        end_date = datetime.datetime.strptime(
-            self.data.statement_period.to, "%d-%b-%Y"
-        ).date()
+        try:
+            start_date = datetime.datetime.strptime(
+                self.data.statement_period.from_, "%d-%b-%Y"
+            ).date()
+            end_date = datetime.datetime.strptime(
+                self.data.statement_period.to, "%d-%b-%Y"
+            ).date()
+        except ValueError as ve:
+            raise OperationError(
+                "Failed to parse statement period dates from CAS data."
+            ) from ve
         return start_date, end_date
 
     def get_accounts(self) -> list[AccountCreate]:
