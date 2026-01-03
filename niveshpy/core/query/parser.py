@@ -87,6 +87,15 @@ class QueryParser:
     @staticmethod
     def convert_to_date(tokens: Iterable[Tokens.Token], start: bool = True) -> date:
         """Convert a sequence of tokens to a date."""
+
+        def _date(year: int, month: int = 1, day: int = 1) -> date:
+            """Helper to create a date and handle invalid dates."""
+            try:
+                return date(year=year, month=month, day=day)
+            except ValueError as ve:
+                date_string = f"{year}-{month}-{day}"
+                raise QuerySyntaxError(date_string, "Invalid date") from ve
+
         match tokens:
             case [
                 Tokens.Int(value=year),
@@ -95,27 +104,27 @@ class QueryParser:
                 Tokens.Dash(),
                 Tokens.Int(value=day),
             ]:
-                return date(year=int(year), month=int(month), day=int(day))
+                return _date(year=int(year), month=int(month), day=int(day))
             case [
                 Tokens.Int(value=year),
                 Tokens.Dash(),
                 Tokens.Int(value=month),
             ] if start:
-                return date(year=int(year), month=int(month), day=1)
+                return _date(year=int(year), month=int(month), day=1)
             case [
                 Tokens.Int(value=year),
                 Tokens.Dash(),
                 Tokens.Int(value=month),
             ] if not start:
                 if int(month) == 12:
-                    return date(year=int(year) + 1, month=1, day=1) - timedelta(days=1)
-                return date(year=int(year), month=int(month) + 1, day=1) - timedelta(
+                    return _date(year=int(year) + 1, month=1, day=1) - timedelta(days=1)
+                return _date(year=int(year), month=int(month) + 1, day=1) - timedelta(
                     days=1
                 )
             case [Tokens.Int(value=year)] if start:
-                return date(year=int(year), month=1, day=1)
+                return _date(year=int(year), month=1, day=1)
             case [Tokens.Int(value=year)] if not start:
-                return date(year=int(year) + 1, month=1, day=1) - timedelta(days=1)
+                return _date(year=int(year) + 1, month=1, day=1) - timedelta(days=1)
             case _:
                 raise QuerySyntaxError(
                     str(tokens), "Invalid token sequence for date conversion."
