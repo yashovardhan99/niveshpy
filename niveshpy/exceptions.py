@@ -116,3 +116,29 @@ class ResourceNotFoundError(ResourceError):
         super().__init__(message, *args)
         self.resource_type = resource_type
         self.identifier = identifier
+
+
+class AmbiguousResourceError(ResourceError):
+    """Exception raised when results are ambiguous."""
+
+    def __init__(
+        self,
+        resource_type: str,
+        query: str,
+        message: str | None = None,
+        *args: object,
+    ) -> None:
+        """Initialize the AmbiguousResourceError.
+
+        Args:
+            resource_type: The type of the resource (e.g., "User", "File").
+            query: The query used to look for the resource.
+            message: Optional custom error message.
+            *args: Additional arguments to pass to the base
+            Exception class.
+        """
+        if message is None:
+            message = f"Ambiguous results for {resource_type} with query '{query}'."
+        super().__init__(message, *args)
+        self.resource_type = resource_type
+        self.query = query
