@@ -417,9 +417,7 @@ class TestGetFieldsFromQueries:
 
         with pytest.raises(QuerySyntaxError) as exc_info:
             # The function needs to iterate to trigger the exception
-            fields = get_fields_from_queries(queries)
-            # Force evaluation by converting to list (in case it returns an iterator)
-            list(fields)
+            get_fields_from_queries(queries)
 
         # Verify exception was raised with proper error information
         assert "Invalid token sequence" in str(exc_info.value)
