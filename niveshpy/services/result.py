@@ -1,19 +1,10 @@
 """Holders for service results."""
 
-from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import StrEnum, auto
+from enum import StrEnum
 from typing import Generic, TypeVar
 
 T = TypeVar("T")
-
-
-@dataclass
-class ListResult(Generic[T]):
-    """Class representing a list result with total count and results."""
-
-    data: T
-    total: int
 
 
 class MergeAction(StrEnum):
@@ -30,21 +21,3 @@ class InsertResult(Generic[T]):
 
     action: MergeAction
     data: T
-
-
-class ResolutionStatus(StrEnum):
-    """Enum for resolution status."""
-
-    EXACT = auto()
-    AMBIGUOUS = auto()
-    NOT_FOUND = auto()
-
-
-@dataclass(frozen=True)
-class SearchResolution(Generic[T]):
-    """Class representing the resolution of a search request."""
-
-    status: ResolutionStatus
-    exact: T | None = None
-    candidates: Sequence[T] | None = None
-    queries: tuple[str, ...] = ()
