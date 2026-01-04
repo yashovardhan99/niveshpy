@@ -7,10 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Unit testing for core components.
+- Python 3.14 support.
+
 ### Changed
 
 - Migrate to using sqlmodel/sqlalchemy with sqlite database.
 - Standardize exceptions into a proper hierarchy.
+- Simplified synchronization of prices.
+- Performance improvements for top command (`niveshpy -h`)
+- Updated documentation to reflect recent changes.
+- Updated dependencies.
+- Simplified deletion workflow.
+
+### Fixed
+
+- Bulk updates deleting all transactions irrespective of accounts.
+- Concurrency issues in bulk updates.
+- Unified error handling with clear messages.
+- Range operator not supporting one-sided open ranges in amount queries.
+- Security losing existing properties on update.
 
 ## [1.0.0a1] - 2025-11-09
 
