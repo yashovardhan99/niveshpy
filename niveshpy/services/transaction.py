@@ -11,7 +11,11 @@ from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import get_filters_from_queries
 from niveshpy.database import get_session
-from niveshpy.exceptions import InvalidInputError, ResourceNotFoundError
+from niveshpy.exceptions import (
+    AmbiguousResourceError,
+    InvalidInputError,
+    ResourceNotFoundError,
+)
 from niveshpy.models.account import Account
 from niveshpy.models.security import Security
 from niveshpy.models.transaction import (
@@ -21,10 +25,6 @@ from niveshpy.models.transaction import (
     TransactionDisplay,
     TransactionPublicWithRelations,
     TransactionType,
-)
-from niveshpy.services.result import (
-    ResolutionStatus,
-    SearchResolution,
 )
 
 
@@ -129,73 +129,50 @@ class TransactionService:
 
     def resolve_transaction(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
-    ) -> SearchResolution[TransactionDisplay]:
+    ) -> Sequence[TransactionDisplay]:
         """Resolve a query to a Transaction object if it exists.
 
-        Logic:
-        - If the queries are empty:
-            - If `allow_ambiguous` is False, return NOT_FOUND.
-            - Else return AMBIGUOUS with no candidates.
-        - If the queries match exactly one account id, return EXACT with that account.
-        - Else If `allow_ambiguous` is false, return NOT_FOUND.
-        - Else perform a text search:
-            - 0 matches: return NOT_FOUND
-            - 1 match: return EXACT with that account
-            - >1 matches: return AMBIGUOUS with the list of candidates
-        """
-        if not queries:
-            if not allow_ambiguous:
-                return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
+        Args:
+            queries (tuple[str, ...]): The search queries.
+            limit (int): The maximum number of candidates to return if ambiguous.
+            allow_ambiguous (bool): Whether to allow ambiguous results.
 
-            # Return top `limit` transactions as candidates
-            transactions = self.list_transactions(queries, limit=limit)
-            return SearchResolution(
-                status=ResolutionStatus.AMBIGUOUS,
-                candidates=list(
-                    RootModel[Sequence[TransactionDisplay]]
-                    .model_validate(transactions)
-                    .root
-                ),
-                queries=queries,
+        Returns:
+            Sequence[TransactionDisplay]: The resolved transaction(s).
+
+        Raises:
+            InvalidInputError: If no queries are provided and ambiguous results are not allowed.
+            AmbiguousResourceError: If a direct match is not found and ambiguous results are not allowed
+        """
+        if not queries and not allow_ambiguous:
+            raise InvalidInputError(
+                queries,
+                "No queries provided. Ambiguous results are not allowed.",
             )
 
-        # First, try to find an exact match by id
+        # Try to interpret the first query as a transaction ID
         transaction_id = (
-            int(queries[0].strip()) if queries[0].strip().isdigit() else None
+            int(queries[0].strip())
+            if len(queries) == 1 and queries[0].strip().isdigit()
+            else None
         )
+        # If we have a potential transaction ID, try to fetch it
         if transaction_id is not None:
             with get_session() as session:
                 exact_transaction = session.get(Transaction, transaction_id)
-                if exact_transaction:
-                    return SearchResolution(
-                        status=ResolutionStatus.EXACT,
-                        exact=TransactionDisplay.model_validate(exact_transaction),
-                        queries=queries,
-                    )
+                if exact_transaction is not None:
+                    return [TransactionDisplay.model_validate(exact_transaction)]
 
+        # No exact match found by ID
+        # If ambiguous results are not allowed, raise error
         if not allow_ambiguous:
-            # If ambiguous results are not allowed, return NOT_FOUND
-            return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
+            raise AmbiguousResourceError("Transaction", " ".join(queries))
 
         # Perform a text search for candidates
-        res = self.list_transactions(queries, limit=limit)
-        if not res:
-            return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
-        elif len(res) == 1:
-            return SearchResolution(
-                status=ResolutionStatus.EXACT,
-                exact=TransactionDisplay.model_validate(res[0]),
-                queries=queries,
-            )
-        else:
-            return SearchResolution(
-                status=ResolutionStatus.AMBIGUOUS,
-                candidates=RootModel[Sequence[TransactionDisplay]]
-                .model_validate(res)
-                .root,
-                queries=queries,
-            )
-            # If we reach here, it means we have ambiguous results
+        return [
+            TransactionDisplay.model_validate(t)
+            for t in self.list_transactions(queries, limit=limit)
+        ]
 
     def delete_transaction(self, transaction_id: int) -> bool:
         """Delete a transaction by its ID."""

@@ -3,22 +3,23 @@
 import datetime
 import decimal
 import textwrap
+from collections.abc import Sequence
 
 import click
 from InquirerPy import get_style, inquirer, validator
-from InquirerPy.base import control
+from InquirerPy.base.control import Choice
 
 from niveshpy.cli.utils import essentials, flags, inputs, output
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
+from niveshpy.exceptions import InvalidInputError, ResourceNotFoundError
 from niveshpy.models.transaction import (
     TransactionDisplay,
     TransactionPublic,
     TransactionPublicWithRelations,
     TransactionType,
 )
-from niveshpy.services.result import ResolutionStatus
 
 
 @essentials.group()
@@ -292,59 +293,32 @@ def delete(
     state = ctx.ensure_object(AppState)
 
     if state.no_input and not force:
-        output.display_error(
-            "When running in non-interactive mode, --force must be provided to confirm deletion."
+        raise InvalidInputError(
+            state,
+            "When running in non-interactive mode, --force must be provided to confirm deletion.",
         )
-        ctx.exit(1)
 
     inquirer_style = get_style({}, style_override=state.no_color)
 
-    resolution = state.app.transaction.resolve_transaction(
-        queries, limit, allow_ambiguous=not state.no_input
+    candidates: Sequence[TransactionDisplay] = (
+        state.app.transaction.resolve_transaction(
+            queries, limit, allow_ambiguous=not state.no_input
+        )
     )
 
-    if resolution.status == ResolutionStatus.NOT_FOUND:
-        output.display_error(
-            "No transactions found matching the provided query. If running in non-interactive mode, ensure the query matches a transaction ID exactly."
-        )
-        ctx.exit(1)
-    elif resolution.status == ResolutionStatus.EXACT:
-        transaction = resolution.exact
-        if transaction is None:
-            logger.error(
-                "Transaction resolution failed unexpectedly. Please report this bug."
-            )
-            logger.debug("Resolution object: %s", resolution)
-            ctx.exit(1)
+    transaction: TransactionDisplay
 
-        if dry_run or not force:
-            output.display_message(
-                "The following transaction will be deleted:", transaction
-            )
-            if (
-                not dry_run
-                and not inquirer.confirm(
-                    "Are you sure you want to delete this transaction?",
-                    default=False,
-                    style=inquirer_style,
-                ).execute()
-            ):
-                logger.info("Transaction deletion aborted by user.")
-                ctx.abort()
-
-    elif resolution.status == ResolutionStatus.AMBIGUOUS:
-        if state.no_input or not resolution.candidates:
-            output.display_error(
-                "The provided query is ambiguous and may match multiple securities. Please refine your query."
-            )
-            ctx.exit(1)
-
-        choices = [
-            control.Choice(
+    if not candidates:
+        raise ResourceNotFoundError("transaction", " ".join(queries))
+    elif len(candidates) == 1:
+        transaction = candidates[0]
+    else:
+        choices: list[Choice] = [
+            Choice(
                 txn.id,
                 name=f"{txn.id}: [{txn.transaction_date}] {txn.type} of {txn.security} (Account: {txn.account}) - {txn.description} for {txn.amount} ({txn.units} units)",
             )
-            for txn in resolution.candidates
+            for txn in candidates
         ]
         transaction_id = inquirer.fuzzy(
             message="Multiple transactions found. Select one to delete:",
@@ -354,29 +328,23 @@ def delete(
         ).execute()
 
         transaction = state.app.transaction.resolve_transaction(
-            (str(transaction_id),), 1, False
-        ).exact
-        if transaction is None:
-            logger.error(
-                "Selected transaction could not be found. It may have been deleted already."
-            )
-            logger.debug("Resolution object: %s", resolution)
-            ctx.exit(1)
+            (str(transaction_id),), limit=1, allow_ambiguous=False
+        )[0]
 
-        if not force:
-            output.display_message(
-                "You have selected the following transaction:", transaction
-            )
-            if (
-                not dry_run
-                and not inquirer.confirm(
-                    "Are you sure you want to delete this transaction?",
-                    default=False,
-                    style=inquirer_style,
-                ).execute()
-            ):
-                logger.info("Transaction deletion aborted by user.")
-                ctx.abort()
+    if dry_run or not force:
+        output.display_message(
+            "You have selected the following transaction:", transaction
+        )
+        if (
+            not dry_run
+            and not inquirer.confirm(
+                "Are you sure you want to delete this transaction?",
+                default=False,
+                style=inquirer_style,
+            ).execute()
+        ):
+            logger.info("Transaction deletion aborted by user.")
+            ctx.abort()
 
     if dry_run:
         output.display_message("Dry Run: No changes were made.")
@@ -389,11 +357,8 @@ def delete(
                 f"Transaction with ID {transaction.id} was deleted successfully.",
             )
         else:
-            logger.error(
-                "Failed to delete transaction %s. It may have already been deleted.",
-                transaction.id,
-            )
-            logger.debug("Resolution object: %s", resolution)
+            msg = f"Transaction with ID {transaction.id} could not be deleted."
+            raise InvalidInputError(state, msg)
 
 
 cli.add_command(show)

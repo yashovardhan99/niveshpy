@@ -10,13 +10,11 @@ from niveshpy.core.query.prepare import (
     get_filters_from_queries,
 )
 from niveshpy.database import get_session
-from niveshpy.exceptions import InvalidInputError
+from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
 from niveshpy.models.account import Account, AccountCreate, AccountPublic
 from niveshpy.services.result import (
     InsertResult,
     MergeAction,
-    ResolutionStatus,
-    SearchResolution,
 )
 
 
@@ -30,7 +28,19 @@ class AccountService:
     def list_accounts(
         self, queries: tuple[str, ...], limit: int = 30, offset: int = 0
     ) -> Sequence[AccountPublic]:
-        """List accounts, optionally filtered by a query string."""
+        """List accounts, optionally filtered by a query string.
+
+        Args:
+            queries (tuple[str, ...]): Query strings to filter accounts.
+            limit (int): Maximum number of accounts to return.
+            offset (int): Number of accounts to skip from the start.
+
+        Returns:
+            Sequence[AccountPublic]: List of accounts matching the query.
+
+        Raises:
+            InvalidInputError: If limit is less than 1 or offset is negative.
+        """
         if limit < 1:
             raise InvalidInputError(limit, "Limit must be positive.")
         if offset < 0:
@@ -82,69 +92,49 @@ class AccountService:
 
     def resolve_account_id(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
-    ) -> SearchResolution[AccountPublic]:
+    ) -> Sequence[AccountPublic]:
         """Resolve an account id to an Account object if it exists.
 
-        Logic:
-        - If the queries are empty:
-            - If `allow_ambiguous` is False, return NOT_FOUND.
-            - Else return AMBIGUOUS with no candidates.
-        - If the queries match exactly one account id, return EXACT with that account.
-        - Else If `allow_ambiguous` is false, return NOT_FOUND.
-        - Else perform a text search:
-            - 0 matches: return NOT_FOUND
-            - 1 match: return EXACT with that account
-            - >1 matches: return AMBIGUOUS with the list of candidates
-        """
-        if not queries:
-            if not allow_ambiguous:
-                return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
+        Args:
+            queries (tuple): Tuple of query strings.
+            limit (int): Maximum number of candidates to return.
+            allow_ambiguous (bool): Whether to allow ambiguous results.
 
-            # Return top `limit` accounts as candidates
-            query = select(Account).limit(limit)
-            with get_session() as session:
-                accounts = list(
-                    map(AccountPublic.model_validate, session.exec(query).all())
-                )
-            return SearchResolution(
-                status=ResolutionStatus.AMBIGUOUS,
-                candidates=accounts,
-                queries=queries,
+        Returns:
+            Sequence[AccountPublic]: The resolved account(s).
+
+        Raises:
+            InvalidInputError: If no queries are provided and ambiguous results are not allowed.
+            AmbiguousResourceError: If a direct match is not found and ambiguous results are not allowed.
+        """
+        # If no queries and ambiguous results not allowed, raise error
+        if not queries and not allow_ambiguous:
+            raise InvalidInputError(
+                queries,
+                "No queries provided to resolve account ID. Ambiguous results are not allowed.",
             )
 
-        # First, try to find an exact match by id
-        account_id = int(queries[0].strip()) if queries[0].strip().isdigit() else None
+        # Try to interpret query as account ID
+        account_id = (
+            int(queries[0].strip())
+            if len(queries) == 1  # If there is exactly one query
+            and queries[0].strip().isdigit()  # And it is a digit
+            else None
+        )
+        # If we have a valid account ID
         if account_id is not None:
             with get_session() as session:
                 exact_account = session.get(Account, account_id)
-            if exact_account:
-                return SearchResolution(
-                    status=ResolutionStatus.EXACT,
-                    exact=AccountPublic.model_validate(exact_account),
-                    queries=queries,
-                )
+                if exact_account is not None:
+                    return [AccountPublic.model_validate(exact_account)]
 
+        # No exact match found by ID
+        # If ambiguous results are not allowed, raise error
         if not allow_ambiguous:
-            # If ambiguous results are not allowed, return NOT_FOUND
-            return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
+            raise AmbiguousResourceError("account", " ".join(queries))
 
         # Perform a text search for candidates
-        accounts = list(self.list_accounts(queries, limit=limit))
-        if not accounts:
-            return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
-        elif len(accounts) == 1:
-            return SearchResolution(
-                status=ResolutionStatus.EXACT,
-                exact=accounts[0],
-                queries=queries,
-            )
-        else:
-            return SearchResolution(
-                status=ResolutionStatus.AMBIGUOUS,
-                candidates=accounts,
-                queries=queries,
-            )
-            # If we reach here, it means we have ambiguous results
+        return self.list_accounts(queries, limit=limit)
 
     def delete_account(self, account_id: int) -> bool:
         """Delete an account."""

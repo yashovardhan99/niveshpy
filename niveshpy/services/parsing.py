@@ -6,7 +6,7 @@ from typing import TypeVar
 
 from pydantic import RootModel
 from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
-from sqlmodel import delete, insert
+from sqlmodel import col, delete, insert
 
 from niveshpy.database import get_session
 from niveshpy.models.account import (
@@ -35,7 +35,7 @@ class ParsingService:
         progress_callback: Callable[[str, int, int], None] | None = None,
     ):
         """Initialize the ParsingService."""
-        self._parser = parser
+        self._parser: Parser = parser
         self._progress_callback = progress_callback
 
     def _report_progress(self, stage: str, current: int, total: int) -> None:
@@ -125,9 +125,9 @@ class ParsingService:
         with get_session() as session:
             session.exec(
                 delete(Transaction).where(
-                    Transaction.transaction_date >= date_range[0],  # type: ignore[arg-type]
-                    Transaction.transaction_date <= date_range[1],  # type: ignore[arg-type]
-                    Transaction.account_id.in_(account_ids),  # type: ignore[attr-defined]
+                    col(Transaction.transaction_date) >= date_range[0],
+                    col(Transaction.transaction_date) <= date_range[1],
+                    col(Transaction.account_id).in_(account_ids),
                 )
             )
             results: Sequence[Transaction] = (
@@ -144,7 +144,9 @@ class ParsingService:
     def _parse_accounts(self) -> list[AccountPublic]:
         """Parse and store accounts using the parser."""
         self._report_progress("accounts", 0, -1)
-        accounts = list(map(self._add_metadata, self._parser.get_accounts()))
+        accounts = [
+            self._add_metadata(account) for account in self._parser.get_accounts()
+        ]
         self._report_progress("accounts", 0, len(accounts))
         inserted_accounts = self._bulk_insert_accounts(accounts)
         self._report_progress("accounts", len(inserted_accounts), len(accounts))

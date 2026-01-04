@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from pydantic import RootModel
 from sqlalchemy.orm import aliased
-from sqlmodel import delete, func, insert, select, update
+from sqlmodel import col, delete, func, insert, select, update
 
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.logging import logger
@@ -71,7 +71,9 @@ class PriceService:
                 # If no date filter, return only the latest price per security
                 row_num = (
                     func.row_number()
-                    .over(partition_by=Price.security_key, order_by=Price.date.desc())  # type: ignore[attr-defined]
+                    .over(
+                        partition_by=Price.security_key, order_by=col(Price.date).desc()
+                    )
                     .label("row_num")
                 )
                 cte = (
@@ -294,9 +296,9 @@ class PriceService:
         with get_session() as session:
             # Delete existing prices in the range first
             delete_stmt = delete(Price).where(
-                Price.security_key == security_key,  # type: ignore
-                Price.date >= start_date,  # type: ignore
-                Price.date <= end_date,  # type: ignore
+                col(Price.security_key) == security_key,
+                col(Price.date) >= start_date,
+                col(Price.date) <= end_date,
             )
             session.exec(delete_stmt)
 
@@ -531,7 +533,7 @@ class PriceService:
             with get_session() as session:
                 update_stmt = (
                     update(Security)
-                    .where(Security.key == security.key)  # type: ignore
+                    .where(col(Security.key) == security.key)
                     .values(properties=security.properties)
                 )
                 session.exec(update_stmt)

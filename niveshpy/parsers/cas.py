@@ -4,7 +4,7 @@ import datetime
 from collections.abc import Iterable
 from pathlib import Path
 
-import casparser  # type: ignore
+import casparser
 
 from niveshpy.exceptions import InvalidInputError, OperationError
 from niveshpy.models.account import AccountCreate, AccountPublic

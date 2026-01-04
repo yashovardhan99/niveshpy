@@ -8,7 +8,7 @@ from niveshpy.core import logging
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import get_filters_from_queries
 from niveshpy.database import get_session
-from niveshpy.exceptions import InvalidInputError
+from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
 from niveshpy.models.security import (
     SECURITY_COLUMN_MAPPING,
     Security,
@@ -19,8 +19,6 @@ from niveshpy.models.security import (
 from niveshpy.services.result import (
     InsertResult,
     MergeAction,
-    ResolutionStatus,
-    SearchResolution,
 )
 
 
@@ -121,59 +119,42 @@ class SecurityService:
 
     def resolve_security_key(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
-    ) -> SearchResolution[Security]:
+    ) -> Sequence[Security]:
         """Resolve a security key to a Security object if it exists.
 
-        Logic:
-        - If the queries are empty:
-            - If `allow_ambiguous` is False, return NOT_FOUND.
-            - Else return AMBIGUOUS with no candidates.
-        - If the queries match exactly one security key, return EXACT with that security.
-        - Else If `allow_ambiguous` is false, return NOT_FOUND.
-        - Else perform a text search:
-            - 0 matches: return NOT_FOUND
-            - 1 match: return EXACT with that security
-            - >1 matches: return AMBIGUOUS with the list of candidates
-        """
-        if not queries:
-            if not allow_ambiguous:
-                return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
+        Args:
+            queries (tuple): Tuple of query strings.
+            limit (int): Maximum number of candidates to return.
+            allow_ambiguous (bool): Whether to allow ambiguous results.
 
-            securities = self.list_securities(queries, limit=limit)
-            return SearchResolution(
-                status=ResolutionStatus.AMBIGUOUS,
-                candidates=securities,
-                queries=queries,
+        Returns:
+            Sequence[Security]: The resolved security(s).
+
+        Raises:
+            InvalidInputError: If no queries are provided and ambiguous results are not allowed.
+            AmbiguousResourceError: If a direct match is not found and ambiguous results are not allowed
+        """
+        # If no queries and ambiguous results not allowed, raise error
+        if not queries and not allow_ambiguous:
+            raise InvalidInputError(
+                queries,
+                "No queries provided to resolve security key. Ambiguous results are not allowed.",
             )
 
         # First, try to find an exact match by key
-        with get_session() as session:
-            exact_security = session.get(Security, queries[0].strip())
-        if exact_security is not None:
-            return SearchResolution(
-                status=ResolutionStatus.EXACT,
-                exact=exact_security,
-                queries=queries,
-            )
+        security_key = queries[0].strip() if len(queries) == 1 else None
 
+        # If we have a possible security key
+        if security_key is not None:
+            with get_session() as session:
+                exact_security = session.get(Security, security_key)
+                if exact_security is not None:
+                    return [exact_security]
+
+        # No exact match found by key
+        # If ambiguous results are not allowed, raise error
         if not allow_ambiguous:
-            # If ambiguous results are not allowed, return NOT_FOUND
-            return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
+            raise AmbiguousResourceError("security", " ".join(queries))
 
         # Perform a text search for candidates
-        securities = self.list_securities(queries, limit=limit)
-        if not securities:
-            return SearchResolution(ResolutionStatus.NOT_FOUND, queries=queries)
-        elif len(securities) == 1:
-            return SearchResolution(
-                status=ResolutionStatus.EXACT,
-                exact=securities[0],
-                queries=queries,
-            )
-        else:
-            return SearchResolution(
-                status=ResolutionStatus.AMBIGUOUS,
-                candidates=securities,
-                queries=queries,
-            )
-            # If we reach here, it means we have ambiguous results
+        return self.list_securities(queries, limit=limit)
