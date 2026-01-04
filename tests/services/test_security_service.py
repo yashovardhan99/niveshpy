@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from unittest.mock import patch
 
 import pytest
+from sqlmodel import Session
 
 from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
@@ -207,10 +208,12 @@ class TestAddSecurity:
         assert result.action == MergeAction.INSERT
         assert result.data.properties == {"source": "AMFI"}
 
-    def test_add_security_duplicate_key_updates(self, security_service, session):
-        """Test that adding duplicate key updates existing security."""
+    def test_add_security_duplicate_key_updates(
+        self, security_service: SecurityService, session: Session
+    ):
+        """Test that adding a security with duplicate key updates existing one."""
         # Add first security
-        result1 = security_service.add_security(
+        result1: InsertResult[Security] = security_service.add_security(
             key="DUP123",
             name="Original Name",
             stype=SecurityType.MUTUAL_FUND,
@@ -221,7 +224,7 @@ class TestAddSecurity:
         assert result1.action == MergeAction.INSERT
 
         # Add with same key but different details
-        result2 = security_service.add_security(
+        result2: InsertResult[Security] = security_service.add_security(
             key="DUP123",
             name="Updated Name",
             stype=SecurityType.STOCK,

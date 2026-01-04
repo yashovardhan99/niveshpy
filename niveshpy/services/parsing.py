@@ -5,8 +5,11 @@ from datetime import date
 from typing import TypeVar
 
 from pydantic import RootModel
+from sqlalchemy import (
+    tuple_,  # TODO: Replace with tuple_ from sqlmodel once https://github.com/fastapi/sqlmodel/pull/1639 is merged
+)
 from sqlalchemy.dialects.sqlite import insert as sqlite_upsert
-from sqlmodel import col, delete, insert
+from sqlmodel import col, delete, insert, select
 
 from niveshpy.database import get_session
 from niveshpy.models.account import (
@@ -72,16 +75,22 @@ class ParsingService:
             return []
         account_dicts = RootModel[list[Account]].model_validate(accounts).model_dump()
         with get_session() as session:
-            stm = sqlite_upsert(Account)
-            res = session.scalars(
-                stm.on_conflict_do_update(
+            session.exec(
+                sqlite_upsert(Account).on_conflict_do_nothing(
                     index_elements=["name", "institution"],
-                    set_={"properties": stm.excluded.properties},
-                ).returning(Account),
-                account_dicts,
+                ),
+                params=account_dicts,
             )
             session.commit()
-            return RootModel[list[AccountPublic]].model_validate(res.all()).root
+            search_keys: list[tuple[str, str]] = [
+                (account.name, account.institution) for account in accounts
+            ]
+            res = session.scalars(
+                select(Account).where(
+                    tuple_(col(Account.name), col(Account.institution)).in_(search_keys)
+                )
+            )
+            return [AccountPublic.model_validate(acc) for acc in res.all()]
 
     def _bulk_insert_securities(
         self, securities: list[SecurityCreate]
@@ -93,21 +102,17 @@ class ParsingService:
             RootModel[list[Security]].model_validate(securities).model_dump()
         )
         with get_session() as session:
-            stm = sqlite_upsert(Security)
-            res = session.scalars(
-                stm.on_conflict_do_update(
-                    index_elements=["key"],
-                    set_={
-                        "name": stm.excluded.name,
-                        "type": stm.excluded.type,
-                        "category": stm.excluded.category,
-                        "properties": stm.excluded.properties,
-                    },
-                ).returning(Security),
-                security_dicts,
+            session.exec(
+                sqlite_upsert(Security).on_conflict_do_nothing(index_elements=["key"]),
+                params=security_dicts,
             )
             session.commit()
-            return RootModel[list[Security]].model_validate(res.all()).root
+            res = session.scalars(
+                select(Security).where(
+                    col(Security.key).in_([sec.key for sec in securities])
+                )
+            )
+            return [Security.model_validate(sec) for sec in res.all()]
 
     def _bulk_insert_transactions(
         self,
@@ -148,18 +153,18 @@ class ParsingService:
             self._add_metadata(account) for account in self._parser.get_accounts()
         ]
         self._report_progress("accounts", 0, len(accounts))
-        inserted_accounts = self._bulk_insert_accounts(accounts)
-        self._report_progress("accounts", len(inserted_accounts), len(accounts))
-        return inserted_accounts
+        refreshed_accounts = self._bulk_insert_accounts(accounts)
+        self._report_progress("accounts", len(refreshed_accounts), len(accounts))
+        return refreshed_accounts
 
     def _parse_securities(self) -> list[Security]:
         """Parse and store securities using the parser."""
         self._report_progress("securities", 0, -1)
         securities = list(map(self._add_metadata, self._parser.get_securities()))
         self._report_progress("securities", 0, len(securities))
-        inserted = self._bulk_insert_securities(securities)
-        self._report_progress("securities", len(inserted), len(securities))
-        return inserted
+        refreshed_securities = self._bulk_insert_securities(securities)
+        self._report_progress("securities", len(refreshed_securities), len(securities))
+        return refreshed_securities
 
     def _parse_transactions(
         self, accounts: list[AccountPublic], securities: list[Security]
