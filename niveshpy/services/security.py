@@ -88,7 +88,10 @@ class SecurityService:
                 existing.name = security.name
                 existing.type = security.type
                 existing.category = security.category
-                existing.properties = security.properties
+                if source:
+                    props = existing.properties.copy()
+                    props.update(security.properties)
+                    existing.properties = props
                 db_security = existing
             else:
                 db_security = Security.model_validate(security)
