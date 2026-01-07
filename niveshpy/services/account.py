@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from sqlmodel import select
+from sqlmodel import col, select
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
@@ -52,7 +52,11 @@ class AccountService:
 
         with get_session() as session:
             accounts = session.exec(
-                select(Account).where(*where_clause).offset(offset).limit(limit)
+                select(Account)
+                .where(*where_clause)
+                .offset(offset)
+                .limit(limit)
+                .order_by(col(Account.id))
             ).all()
             return list(map(AccountPublic.model_validate, accounts))
 
