@@ -86,7 +86,7 @@ class TestListSecurities:
         securities = security_service.list_securities(queries=(), limit=30, offset=2)
 
         assert len(securities) == 3
-        assert securities[0].key == "RELI"
+        assert securities[0].key == "GOLD"
 
     def test_list_securities_with_limit_and_offset(
         self, security_service, sample_securities

@@ -5,7 +5,7 @@ import decimal
 from collections.abc import Sequence
 
 from pydantic import RootModel
-from sqlmodel import select
+from sqlmodel import col, select
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
@@ -54,6 +54,7 @@ class TransactionService:
                 .where(*where_clause)
                 .offset(offset)
                 .limit(limit)
+                .order_by(col(Transaction.transaction_date).desc(), col(Transaction.id))
             ).all()
             return (
                 RootModel[Sequence[TransactionPublicWithRelations]]

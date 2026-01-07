@@ -42,7 +42,11 @@ class SecurityService:
         )
         with get_session() as session:
             return session.exec(
-                select(Security).where(*where_clause).offset(offset).limit(limit)
+                select(Security)
+                .where(*where_clause)
+                .offset(offset)
+                .limit(limit)
+                .order_by(Security.key)
             ).all()
 
     def add_security(

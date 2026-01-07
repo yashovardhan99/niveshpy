@@ -83,9 +83,18 @@ class PriceService:
                     .cte("cte_1")
                 )
                 aliased_price = aliased(Price, cte)
-                query = select(aliased_price).where(cte.c.row_num == 1)
+                query = (
+                    select(aliased_price)
+                    .where(cte.c.row_num == 1)
+                    .order_by(col(aliased_price.security_key))
+                )
             else:
-                query = select(Price).join(Security).where(*where_clause)
+                query = (
+                    select(Price)
+                    .join(Security)
+                    .where(*where_clause)
+                    .order_by(col(Price.security_key), col(Price.date).desc())
+                )
             prices = session.exec(query.offset(offset).limit(limit)).all()
             return (
                 RootModel[Sequence[PricePublicWithRelations]]
