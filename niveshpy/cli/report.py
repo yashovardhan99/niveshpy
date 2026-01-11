@@ -1,11 +1,15 @@
 """CLI commands for reports."""
 
+import datetime
 import decimal
 
 import click
 
 from niveshpy.cli.utils import essentials, flags, output
 from niveshpy.models.report import Holding, HoldingDisplay, HoldingExport
+
+DAYS_FOR_OLD = 15
+"""Number of days after which holdings are considered old."""
 
 
 @essentials.group()
@@ -43,43 +47,60 @@ def holdings(
 
         holdings = get_holdings(queries, limit, offset)
 
-    extra_message = (
-        f"Showing first {limit:,} holdings."
-        if len(holdings) == limit and offset == 0
-        else (
-            f"Showing holdings {offset + 1:,} to {offset + len(holdings):,}."
-            if offset > 0
-            else None
+    if len(holdings) == 0:
+        msg = (
+            "No holdings found.\n"
+            "Make sure you have added transactions for your securities"
+            " and try syncing prices using 'niveshpy prices sync'."
         )
-    )
-
-    if format == output.OutputFormat.TABLE:
-        items: list[HoldingDisplay | output.TotalRow] = [
-            HoldingDisplay.from_holding(h) for h in holdings
-        ]
-
-        if total:
-            overall_total = output.TotalRow(
-                sum((h.amount for h in holdings), decimal.Decimal("0")),
-            )
-            items.append(overall_total)
-        output.display_list(
-            cls=HoldingDisplay,
-            items=items,
-            fmt=format,
-            extra_message=extra_message,
-        )
-    elif format == output.OutputFormat.CSV:
-        output.display_list(
-            cls=HoldingExport,
-            items=[HoldingExport.from_holding(h) for h in holdings],
-            fmt=format,
-            extra_message=extra_message,
-        )
+        output.display_warning(msg)
     else:
-        output.display_list(
-            cls=Holding,
-            items=holdings,
-            fmt=format,
-            extra_message=extra_message,
+        extra_message = (
+            f"Showing first {limit:,} holdings."
+            if len(holdings) == limit and offset == 0
+            else (
+                f"Showing holdings {offset + 1:,} to {offset + len(holdings):,}."
+                if offset > 0
+                else None
+            )
         )
+
+        if any(
+            h.date < (datetime.date.today() - datetime.timedelta(days=DAYS_FOR_OLD))
+            for h in holdings
+        ) and ("date:" not in " ".join(queries).lower()):
+            output.display_warning(
+                "Some holdings have not been updated recently. "
+                "Consider syncing latest prices using 'niveshpy prices sync'."
+            )
+
+        if format == output.OutputFormat.TABLE:
+            items: list[HoldingDisplay | output.TotalRow] = [
+                HoldingDisplay.from_holding(h) for h in holdings
+            ]
+
+            if total:
+                overall_total = output.TotalRow(
+                    sum((h.amount for h in holdings), decimal.Decimal("0")),
+                )
+                items.append(overall_total)
+            output.display_list(
+                cls=HoldingDisplay,
+                items=items,
+                fmt=format,
+                extra_message=extra_message,
+            )
+        elif format == output.OutputFormat.CSV:
+            output.display_list(
+                cls=HoldingExport,
+                items=[HoldingExport.from_holding(h) for h in holdings],
+                fmt=format,
+                extra_message=extra_message,
+            )
+        else:
+            output.display_list(
+                cls=Holding,
+                items=holdings,
+                fmt=format,
+                extra_message=extra_message,
+            )
