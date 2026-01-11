@@ -182,7 +182,12 @@ def get_filters_from_queries(
         e.add_note(f"Error was reported on input: {e.input_value}")
         raise QuerySyntaxError(" ".join(queries), cause=e.cause) from e
 
+    # Regex expressions for text search
+    text_expressions: list[ColumnElement[bool]] = []
+
+    # All expressions
     expressions: list[ColumnElement[bool]] = []
+
     for filter in filters:
         cols = column_mappings.get(filter.field, [])
 
@@ -200,7 +205,13 @@ def get_filters_from_queries(
             col_expressions.append(
                 prepare_expression(filter, column(col) if isinstance(col, str) else col)
             )
-        expressions.append(or_(*col_expressions))
+        if filter.operator in {ast.Operator.REGEX_MATCH, ast.Operator.NOT_REGEX_MATCH}:
+            text_expressions.extend(col_expressions)
+        else:
+            expressions.append(or_(*col_expressions))
+
+    if text_expressions:
+        expressions.append(or_(*text_expressions))
 
     return expressions
 

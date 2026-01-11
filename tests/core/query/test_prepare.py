@@ -429,6 +429,56 @@ class TestGetFiltersFromQueries:
         # Only DESCRIPTION filter (from "grocery") should be included
         assert len(expressions) == 1
 
+    def test_text_filters_combined_into_single_expression(self, column_map):
+        """Test that multiple text filters (REGEX_MATCH) are combined into single OR expression."""
+        queries = ("grocery", "restaurant")
+
+        expressions = get_filters_from_queries(queries, Field.DESCRIPTION, column_map)
+
+        # Both text searches should be combined into one OR expression
+        assert len(expressions) == 1
+
+    def test_text_and_non_text_filters_separate(self, column_map):
+        """Test that text filters and non-text filters are separated."""
+        queries = ("grocery", "amt:100")
+
+        expressions = get_filters_from_queries(queries, Field.DESCRIPTION, column_map)
+
+        # Should have 2 expressions: one for text search, one for amount
+        assert len(expressions) == 2
+
+    def test_multiple_text_filters_across_fields(self, column_map):
+        """Test that text filters across different fields are combined."""
+        queries = ("grocery", "acct:savings")
+
+        expressions = get_filters_from_queries(queries, Field.DESCRIPTION, column_map)
+
+        # Text searches (both resolve to REGEX_MATCH) should be combined into one expression
+        # grocery (DESCRIPTION field) and savings (ACCOUNT field)
+        assert len(expressions) == 1
+
+    def test_text_filter_with_multiple_columns(self):
+        """Test that text filter applied to field with multiple columns creates OR'd expressions."""
+        queries = ("test",)
+        # Map DESCRIPTION to multiple columns
+        column_map = {
+            Field.DESCRIPTION: ["desc1", "desc2", "desc3"],
+        }
+
+        expressions = get_filters_from_queries(queries, Field.DESCRIPTION, column_map)
+
+        # All column matches should be OR'd into single expression
+        assert len(expressions) == 1
+
+    def test_mixed_text_and_comparison_operators(self, column_map):
+        """Test mixing text searches with comparison operators."""
+        queries = ("grocery", "amt:>100", "amt:<500")
+
+        expressions = get_filters_from_queries(queries, Field.DESCRIPTION, column_map)
+
+        # Text search (1) + two comparison operators (2) = 3 expressions
+        assert len(expressions) == 3
+
 
 class TestGetFieldsFromQueries:
     """Tests for get_fields_from_queries function."""
