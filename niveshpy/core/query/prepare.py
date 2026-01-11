@@ -2,7 +2,7 @@
 
 import itertools
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Container, Iterable
 from dataclasses import replace
 
 from sqlmodel import column, func
@@ -156,6 +156,7 @@ def get_filters_from_queries(
     queries: tuple[str, ...],
     default_field: Field,
     column_mappings: dict[Field, list],
+    include_fields: Container[Field] | None = None,
 ) -> list[ColumnElement[bool]]:
     """Convert query strings into a combined SQLAlchemy filter expression.
 
@@ -163,6 +164,8 @@ def get_filters_from_queries(
         queries (tuple): Tuple of query strings.
         default_field (Field): The default field to use for filters.
         column_mappings (dict): Mapping of Fields to database column names.
+        include_fields (Container[Field], optional): Set of Fields to include. \
+        If provided, only filters with fields in this set will be included.
 
     Returns:
         list: The list of SQLAlchemy filter expressions.
@@ -182,6 +185,11 @@ def get_filters_from_queries(
     expressions: list[ColumnElement[bool]] = []
     for filter in filters:
         cols = column_mappings.get(filter.field, [])
+
+        if include_fields is not None and filter.field not in include_fields:
+            # Skip this filter as its field is not in the included fields
+            continue
+
         if not cols:
             raise QuerySyntaxError(
                 " ".join(queries), f"Field {filter.field} not mapped to any column."

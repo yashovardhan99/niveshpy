@@ -359,6 +359,76 @@ class TestGetFiltersFromQueries:
         # The exception message should contain error information
         assert "Invalid token" in str(exc_info.value)
 
+    def test_include_fields_none_includes_all(self, column_map):
+        """Test that include_fields=None includes all fields (default behavior)."""
+        queries = ("amt:100", "date:2024-01-01")
+
+        expressions = get_filters_from_queries(
+            queries, Field.DESCRIPTION, column_map, include_fields=None
+        )
+
+        # Both filters should be included
+        assert len(expressions) == 2
+
+    def test_include_fields_includes_matching_fields(self, column_map):
+        """Test that include_fields only includes specified fields."""
+        queries = ("amt:100", "date:2024-01-01", "desc:grocery")
+
+        expressions = get_filters_from_queries(
+            queries, Field.DESCRIPTION, column_map, include_fields={Field.AMOUNT}
+        )
+
+        # Only AMOUNT filter should be included
+        assert len(expressions) == 1
+
+    def test_include_fields_excludes_non_matching_fields(self, column_map):
+        """Test that filters for fields not in include_fields are excluded."""
+        queries = ("amt:100", "date:2024-01-01")
+
+        expressions = get_filters_from_queries(
+            queries,
+            Field.DESCRIPTION,
+            column_map,
+            include_fields={Field.DESCRIPTION, Field.AMOUNT},
+        )
+
+        # DATE filter should be excluded
+        assert len(expressions) == 1
+
+    def test_include_fields_empty_returns_no_expressions(self, column_map):
+        """Test that empty include_fields returns no expressions."""
+        queries = ("amt:100", "date:2024-01-01")
+
+        expressions = get_filters_from_queries(
+            queries, Field.DESCRIPTION, column_map, include_fields=set()
+        )
+
+        # No filters should be included
+        assert len(expressions) == 0
+
+    def test_include_fields_with_multiple_same_field(self, column_map):
+        """Test that include_fields works when multiple filters for same field exist."""
+        queries = ("amt:100", "amt:200", "date:2024-01-01")
+
+        expressions = get_filters_from_queries(
+            queries, Field.DESCRIPTION, column_map, include_fields={Field.AMOUNT}
+        )
+
+        # Combined AMOUNT IN filter should be included, DATE excluded
+        assert len(expressions) == 1
+
+    def test_include_fields_with_default_field(self, column_map):
+        """Test that include_fields works with default field resolution."""
+        queries = ("grocery", "amt:100")
+
+        # DEFAULT field resolves to DESCRIPTION
+        expressions = get_filters_from_queries(
+            queries, Field.DESCRIPTION, column_map, include_fields={Field.DESCRIPTION}
+        )
+
+        # Only DESCRIPTION filter (from "grocery") should be included
+        assert len(expressions) == 1
+
 
 class TestGetFieldsFromQueries:
     """Tests for get_fields_from_queries function."""
