@@ -2,6 +2,7 @@
 
 import datetime
 import decimal
+from typing import Literal
 
 import click
 
@@ -104,3 +105,57 @@ def holdings(
                 fmt=format,
                 extra_message=extra_message,
             )
+
+
+@click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
+@flags.output("format")
+@click.option(
+    "--type",
+    "group_by",
+    flag_value="type",
+    help="Group allocation by security type.",
+)
+@click.option(
+    "--category",
+    "group_by",
+    flag_value="category",
+    help="Group allocation by security category.",
+)
+@click.option(
+    "--both",
+    "group_by",
+    flag_value="both",
+    default=True,
+    hidden=True,
+)
+@essentials.command(parent=cli)
+def allocation(
+    queries: tuple[str, ...],
+    format: output.OutputFormat,
+    group_by: Literal["both", "type", "category"],
+):
+    """Generate asset allocation report.
+
+    By default, generates a report of current asset allocation
+    grouped by security type and category.
+
+    Optionally, provide text <queries> to filter securities, accounts, and dates.
+    """
+    # Generate report
+    with output.loading_spinner("Generating allocation report..."):
+        from niveshpy.services.report import get_allocation
+
+        allocations = get_allocation(queries, group_by=group_by)
+    if len(allocations) == 0:
+        msg = (
+            "No allocations found.\n"
+            "Make sure you have added transactions for your securities"
+            " and try syncing prices using 'niveshpy prices sync'."
+        )
+        output.display_warning(msg)
+    else:
+        output.display_list(
+            cls=type(allocations[0]),
+            items=allocations,
+            fmt=format,
+        )

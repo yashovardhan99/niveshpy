@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - New holdings report.
+- New asset allocation report.
 
 ## [1.0.0a2] - 2026-01-08
 
