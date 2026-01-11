@@ -58,8 +58,8 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
                 func.max(Transaction.transaction_date).label("last_transaction_date"),
                 func.sum(Transaction.units).label("total_units"),
             )
-            .join(Security, Security.key == Transaction.security_key)
-            .join(Account, Account.id == Transaction.account_id)
+            .join(Security, col(Security.key) == col(Transaction.security_key))
+            .join(Account, col(Account.id) == col(Transaction.account_id))
             .where(*where_clauses)
             .group_by(col(Transaction.account_id), col(Transaction.security_key))
             .having(func.sum(Transaction.units) >= decimal.Decimal("0.001"))
@@ -88,18 +88,14 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
         # Finally, join holdings with latest prices to get the desired output
         stm: SelectOfScalar[tuple] = (
             select(
-                *[
-                    Security,
-                    Account,
-                    holding_units.c.total_units,
-                    (holding_units.c.total_units * latest_prices.c.close).label(
-                        "holding_value"
-                    ),
-                    func.max(
-                        holding_units.c.last_transaction_date, latest_prices.c.date
-                    ).label("as_of_date"),
-                ]
-            )
+                Security,
+                Account,
+                holding_units.c.total_units,
+                (holding_units.c.total_units * latest_prices.c.close).label(
+                    "holding_value"
+                ),
+                func.max(holding_units.c.last_transaction_date, latest_prices.c.date),
+            )  # type: ignore[no-matching-overload, call-overload]
             .join(holding_units, col(Security.key) == holding_units.c.security_key)
             .join(Account, col(Account.id) == holding_units.c.account_id)
             .join(latest_prices, col(Security.key) == latest_prices.c.security_key)
