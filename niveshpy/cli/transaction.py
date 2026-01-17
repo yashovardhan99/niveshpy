@@ -16,8 +16,11 @@ from niveshpy.core.logging import logger
 from niveshpy.exceptions import InvalidInputError, ResourceNotFoundError
 from niveshpy.models.transaction import (
     TransactionDisplay,
+    TransactionDisplayWithCost,
     TransactionPublic,
+    TransactionPublicWithCost,
     TransactionPublicWithRelations,
+    TransactionPublicWithRelationsAndCost,
     TransactionType,
 )
 
@@ -32,6 +35,12 @@ def cli() -> None:
 @flags.limit("accounts", default=30)
 @flags.offset("accounts", default=0)
 @flags.output("format")
+@click.option(
+    "--cost",
+    is_flag=True,
+    default=False,
+    help="Show cost basis information. Calculating cost basis may take longer.",
+)
 @click.pass_context
 def show(
     ctx: click.Context,
@@ -39,6 +48,7 @@ def show(
     limit: int,
     offset: int,
     format: output.OutputFormat,
+    cost: bool,
 ) -> None:
     """List all transactions.
 
@@ -49,7 +59,7 @@ def show(
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading transactions..."):
         transactions = state.app.transaction.list_transactions(
-            queries=queries, limit=limit, offset=offset
+            queries=queries, limit=limit, offset=offset, cost=cost
         )
 
     if len(transactions) == 0:
@@ -58,15 +68,26 @@ def show(
         )
         output.display_warning(msg)
     else:
-        fmt_cls = (
-            TransactionPublicWithRelations
-            if format == output.OutputFormat.JSON
-            else (
-                TransactionPublic
-                if format == output.OutputFormat.CSV
-                else TransactionDisplay
+        if cost:
+            fmt_cls = (
+                TransactionPublicWithRelationsAndCost
+                if format == output.OutputFormat.JSON
+                else (
+                    TransactionPublicWithCost
+                    if format == output.OutputFormat.CSV
+                    else TransactionDisplayWithCost
+                )
             )
-        )
+        else:
+            fmt_cls = (
+                TransactionPublicWithRelations
+                if format == output.OutputFormat.JSON
+                else (
+                    TransactionPublic
+                    if format == output.OutputFormat.CSV
+                    else TransactionDisplay
+                )
+            )
 
         transformed_transactions = [
             fmt_cls.model_validate(transaction) for transaction in transactions
