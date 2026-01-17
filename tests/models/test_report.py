@@ -9,6 +9,10 @@ from pydantic import ValidationError
 from niveshpy.exceptions import OperationError
 from niveshpy.models.account import Account
 from niveshpy.models.report import (
+    Allocation,
+    AllocationBase,
+    AllocationByCategory,
+    AllocationByType,
     Holding,
     HoldingBase,
     HoldingDisplay,
@@ -435,4 +439,255 @@ class TestHoldingExportModel:
                 date=datetime.date(2024, 1, 15),
                 units=Decimal("100"),
                 amount=Decimal("1000"),
+            )
+
+
+class TestAllocationBaseModel:
+    """Tests for AllocationBase model."""
+
+    # Happy path tests
+
+    def test_allocation_base_with_required_fields(self):
+        """Test creating AllocationBase with all required fields."""
+        allocation = AllocationBase(
+            date=datetime.date(2024, 1, 15),
+            amount=Decimal("10500.75"),
+            allocation=Decimal("0.3500"),
+        )
+        assert allocation.date == datetime.date(2024, 1, 15)
+        assert allocation.amount == Decimal("10500.75")
+        assert allocation.allocation == Decimal("0.3500")
+
+    def test_allocation_base_with_zero_values(self):
+        """Test creating AllocationBase with zero amount and allocation."""
+        allocation = AllocationBase(
+            date=datetime.date(2024, 1, 15),
+            amount=Decimal("0"),
+            allocation=Decimal("0"),
+        )
+        assert allocation.amount == Decimal("0")
+        assert allocation.allocation == Decimal("0")
+
+    def test_allocation_base_with_full_allocation(self):
+        """Test creating AllocationBase with 100% allocation."""
+        allocation = AllocationBase(
+            date=datetime.date(2024, 1, 15),
+            amount=Decimal("50000.00"),
+            allocation=Decimal("1.0000"),
+        )
+        assert allocation.allocation == Decimal("1.0000")
+
+    # Field validation tests
+
+    def test_allocation_base_missing_date(self):
+        """Test that missing date raises ValidationError."""
+        with pytest.raises(ValidationError, match="Field required"):
+            AllocationBase(
+                amount=Decimal("10500.75"),
+                allocation=Decimal("0.3500"),
+            )
+
+    def test_allocation_base_missing_amount(self):
+        """Test that missing amount raises ValidationError."""
+        with pytest.raises(ValidationError, match="Field required"):
+            AllocationBase(
+                date=datetime.date(2024, 1, 15),
+                allocation=Decimal("0.3500"),
+            )
+
+    def test_allocation_base_missing_allocation(self):
+        """Test that missing allocation raises ValidationError."""
+        with pytest.raises(ValidationError, match="Field required"):
+            AllocationBase(
+                date=datetime.date(2024, 1, 15),
+                amount=Decimal("10500.75"),
+            )
+
+    # Type validation tests
+
+    def test_allocation_base_date_string_parsed(self):
+        """Test that date string in ISO format is parsed to date."""
+        allocation = AllocationBase(
+            date="2024-01-15",  # type: ignore[arg-type]
+            amount=Decimal("10500.75"),
+            allocation=Decimal("0.3500"),
+        )
+        assert allocation.date == datetime.date(2024, 1, 15)
+
+    def test_allocation_base_amount_string_coerced(self):
+        """Test that amount string is coerced to Decimal."""
+        allocation = AllocationBase(
+            date=datetime.date(2024, 1, 15),
+            amount="10500.75",  # type: ignore[arg-type]
+            allocation=Decimal("0.3500"),
+        )
+        assert allocation.amount == Decimal("10500.75")
+
+
+class TestAllocationByTypeModel:
+    """Tests for AllocationByType model."""
+
+    # Happy path tests
+
+    def test_allocation_by_type_with_required_fields(self):
+        """Test creating AllocationByType with all required fields."""
+        allocation = AllocationByType(
+            security_type=SecurityType.MUTUAL_FUND,
+            date=datetime.date(2024, 1, 15),
+            amount=Decimal("10500.75"),
+            allocation=Decimal("0.3500"),
+        )
+        assert allocation.security_type == SecurityType.MUTUAL_FUND
+        assert allocation.date == datetime.date(2024, 1, 15)
+        assert allocation.amount == Decimal("10500.75")
+        assert allocation.allocation == Decimal("0.3500")
+
+    def test_allocation_by_type_all_security_types(self):
+        """Test creating AllocationByType with all security types."""
+        for sec_type in SecurityType:
+            allocation = AllocationByType(
+                security_type=sec_type,
+                date=datetime.date(2024, 1, 15),
+                amount=Decimal("1000.00"),
+                allocation=Decimal("0.2000"),
+            )
+            assert allocation.security_type == sec_type
+
+    # Field validation tests
+
+    def test_allocation_by_type_missing_security_type(self):
+        """Test that missing security_type raises ValidationError."""
+        with pytest.raises(ValidationError, match="Field required"):
+            AllocationByType(
+                date=datetime.date(2024, 1, 15),
+                amount=Decimal("10500.75"),
+                allocation=Decimal("0.3500"),
+            )
+
+    # Type validation tests
+
+    def test_allocation_by_type_invalid_security_type(self):
+        """Test that invalid security type raises ValidationError."""
+        with pytest.raises(ValidationError):
+            AllocationByType(
+                security_type="invalid_type",  # type: ignore[arg-type]
+                date=datetime.date(2024, 1, 15),
+                amount=Decimal("10500.75"),
+                allocation=Decimal("0.3500"),
+            )
+
+
+class TestAllocationByCategoryModel:
+    """Tests for AllocationByCategory model."""
+
+    # Happy path tests
+
+    def test_allocation_by_category_with_required_fields(self):
+        """Test creating AllocationByCategory with all required fields."""
+        allocation = AllocationByCategory(
+            security_category=SecurityCategory.EQUITY,
+            date=datetime.date(2024, 1, 15),
+            amount=Decimal("10500.75"),
+            allocation=Decimal("0.3500"),
+        )
+        assert allocation.security_category == SecurityCategory.EQUITY
+        assert allocation.date == datetime.date(2024, 1, 15)
+        assert allocation.amount == Decimal("10500.75")
+        assert allocation.allocation == Decimal("0.3500")
+
+    def test_allocation_by_category_all_categories(self):
+        """Test creating AllocationByCategory with all security categories."""
+        for category in SecurityCategory:
+            allocation = AllocationByCategory(
+                security_category=category,
+                date=datetime.date(2024, 1, 15),
+                amount=Decimal("1000.00"),
+                allocation=Decimal("0.2000"),
+            )
+            assert allocation.security_category == category
+
+    # Field validation tests
+
+    def test_allocation_by_category_missing_security_category(self):
+        """Test that missing security_category raises ValidationError."""
+        with pytest.raises(ValidationError, match="Field required"):
+            AllocationByCategory(
+                date=datetime.date(2024, 1, 15),
+                amount=Decimal("10500.75"),
+                allocation=Decimal("0.3500"),
+            )
+
+    # Type validation tests
+
+    def test_allocation_by_category_invalid_category(self):
+        """Test that invalid security category raises ValidationError."""
+        with pytest.raises(ValidationError):
+            AllocationByCategory(
+                security_category="invalid_category",  # type: ignore[arg-type]
+                date=datetime.date(2024, 1, 15),
+                amount=Decimal("10500.75"),
+                allocation=Decimal("0.3500"),
+            )
+
+
+class TestAllocationModel:
+    """Tests for Allocation model."""
+
+    # Happy path tests
+
+    def test_allocation_with_required_fields(self):
+        """Test creating Allocation with all required fields."""
+        allocation = Allocation(
+            security_type=SecurityType.MUTUAL_FUND,
+            security_category=SecurityCategory.EQUITY,
+            date=datetime.date(2024, 1, 15),
+            amount=Decimal("10500.75"),
+            allocation=Decimal("0.3500"),
+        )
+        assert allocation.security_type == SecurityType.MUTUAL_FUND
+        assert allocation.security_category == SecurityCategory.EQUITY
+        assert allocation.date == datetime.date(2024, 1, 15)
+        assert allocation.amount == Decimal("10500.75")
+        assert allocation.allocation == Decimal("0.3500")
+
+    def test_allocation_all_combinations(self):
+        """Test creating Allocation with various type/category combinations."""
+        # Test a few common combinations
+        combos = [
+            (SecurityType.MUTUAL_FUND, SecurityCategory.EQUITY),
+            (SecurityType.MUTUAL_FUND, SecurityCategory.DEBT),
+            (SecurityType.STOCK, SecurityCategory.EQUITY),
+            (SecurityType.BOND, SecurityCategory.DEBT),
+        ]
+        for sec_type, sec_category in combos:
+            allocation = Allocation(
+                security_type=sec_type,
+                security_category=sec_category,
+                date=datetime.date(2024, 1, 15),
+                amount=Decimal("1000.00"),
+                allocation=Decimal("0.2000"),
+            )
+            assert allocation.security_type == sec_type
+            assert allocation.security_category == sec_category
+
+    # Field validation tests
+
+    def test_allocation_missing_security_type(self):
+        """Test that missing security_type raises ValidationError."""
+        with pytest.raises(ValidationError, match="Field required"):
+            Allocation(
+                security_category=SecurityCategory.EQUITY,
+                date=datetime.date(2024, 1, 15),
+                amount=Decimal("10500.75"),
+                allocation=Decimal("0.3500"),
+            )
+
+    def test_allocation_missing_security_category(self):
+        """Test that missing security_category raises ValidationError."""
+        with pytest.raises(ValidationError, match="Field required"):
+            Allocation(
+                security_type=SecurityType.MUTUAL_FUND,
+                date=datetime.date(2024, 1, 15),
+                amount=Decimal("10500.75"),
+                allocation=Decimal("0.3500"),
             )
