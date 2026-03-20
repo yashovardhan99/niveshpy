@@ -53,6 +53,25 @@ class HoldingBase(BaseModel):
             "no_wrap": True,
         },
     )
+    invested: decimal.Decimal | None = Field(
+        default=None,
+        json_schema_extra={
+            "justify": "right",
+            "order": 6,
+            "max_width": 20,
+            "no_wrap": True,
+        },
+    )
+    gains: decimal.Decimal | None = Field(
+        default=None,
+        json_schema_extra={
+            "style": "bold green",
+            "justify": "right",
+            "order": 7,
+            "max_width": 20,
+            "no_wrap": True,
+        },
+    )
 
 
 class Holding(HoldingBase):
@@ -79,6 +98,8 @@ class HoldingDisplay(HoldingBase):
             date=holding.date,
             units=holding.units,
             amount=holding.amount,
+            invested=holding.invested,
+            gains=holding.gains,
         )
 
 
@@ -99,6 +120,8 @@ class HoldingExport(HoldingBase):
             date=holding.date,
             units=holding.units,
             amount=holding.amount,
+            invested=holding.invested,
+            gains=holding.gains,
         )
 
 

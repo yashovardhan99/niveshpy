@@ -25,6 +25,7 @@ from niveshpy.models.report import (
 )
 from niveshpy.models.security import Security
 from niveshpy.models.transaction import Transaction
+from niveshpy.services.helpers import compute_invested_amount
 
 
 def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Holding]:
@@ -106,18 +107,51 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
             .join(latest_prices, col(Security.key) == latest_prices.c.security_key)
             .order_by(Account.id, Security.key)
         )
-        holdings = [
-            Holding(
-                account=account,
-                security=security,
-                date=as_of_date,
-                units=total_units.quantize(decimal.Decimal("0.001")),
-                amount=holding_value.quantize(decimal.Decimal("0.01")),
+        holding_rows = list(session.exec(stm.offset(offset).limit(limit)))
+
+        # Compute invested amounts using FIFO on all transactions for held positions
+        # Use only security/account filters (not date) since FIFO needs full history
+        invested_amounts: dict[tuple[str, int], decimal.Decimal] = {}
+        if holding_rows:
+            cost_where_clauses: list[ColumnElement[bool]] = get_filters_from_queries(
+                queries,
+                ast.Field.SECURITY,
+                HOLDING_COLUMN_MAPPINGS_TXN,
+                include_fields={ast.Field.SECURITY, ast.Field.ACCOUNT},
             )
-            for security, account, total_units, holding_value, as_of_date in session.exec(
-                stm.offset(offset).limit(limit)
+            cost_transactions = session.exec(
+                select(Transaction)
+                .join(Security)
+                .join(Account)
+                .where(*cost_where_clauses)
+                .order_by(
+                    col(Transaction.transaction_date).asc(),
+                    col(Transaction.id).asc(),
+                )
+            ).all()
+            invested_amounts = compute_invested_amount(cost_transactions)
+
+        holdings = []
+        for security, account, total_units, holding_value, as_of_date in holding_rows:
+            key = (security.key, account.id)
+            invested = invested_amounts.get(key)
+            current_value = holding_value.quantize(decimal.Decimal("0.01"))
+            gains = (
+                (current_value - invested).quantize(decimal.Decimal("0.01"))
+                if invested is not None
+                else None
             )
-        ]
+            holdings.append(
+                Holding(
+                    account=account,
+                    security=security,
+                    date=as_of_date,
+                    units=total_units.quantize(decimal.Decimal("0.001")),
+                    amount=current_value,
+                    invested=invested,
+                    gains=gains,
+                )
+            )
 
     return holdings
 

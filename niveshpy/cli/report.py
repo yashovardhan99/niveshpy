@@ -7,10 +7,18 @@ from typing import Literal
 import click
 
 from niveshpy.cli.utils import essentials, flags, output
+from niveshpy.cli.utils.overrides import NiveshPyCommand
+from niveshpy.core.query import tokens
+from niveshpy.core.query.tokenizer import QueryLexer
 from niveshpy.models.report import Holding, HoldingDisplay, HoldingExport
 
 DAYS_FOR_OLD = 15
 """Number of days after which holdings are considered old."""
+
+
+def _has_date_query(queries: tuple[str, ...]) -> bool:
+    """Check if any query in the tuple contains a date field."""
+    return any(token == tokens.Keyword.Date for q in queries for token in QueryLexer(q))
 
 
 @essentials.group()
@@ -28,7 +36,7 @@ def cli():
     help="Show overall total row in the report output.",
     default=True,
 )
-@essentials.command(parent=cli)
+@essentials.command(parent=cli, cls=NiveshPyCommand)
 def holdings(
     queries: tuple[str, ...],
     limit: int,
@@ -47,6 +55,14 @@ def holdings(
         from niveshpy.services.report import get_holdings
 
         holdings = get_holdings(queries, limit, offset)
+
+    # Warn if date filter is used — invested amounts don't respect date filters
+    if _has_date_query(queries):
+        output.display_warning(
+            "Date filters apply to current value and units but not to invested "
+            "amounts or gains, which always use the full transaction history. "
+            "This will result in incorrect gains being reported."
+        )
 
     if len(holdings) == 0:
         msg = (
@@ -69,7 +85,7 @@ def holdings(
         if any(
             h.date < (datetime.date.today() - datetime.timedelta(days=DAYS_FOR_OLD))
             for h in holdings
-        ) and ("date:" not in " ".join(queries).lower()):
+        ) and (not _has_date_query(queries)):
             output.display_warning(
                 "Some holdings have not been updated recently. "
                 "Consider syncing latest prices using 'niveshpy prices sync'."
@@ -81,8 +97,15 @@ def holdings(
             ]
 
             if total:
+                total_gains = sum(
+                    (h.gains for h in holdings if h.gains is not None),
+                    decimal.Decimal("0"),
+                )
+                has_gains = any(h.gains is not None for h in holdings)
                 overall_total = output.TotalRow(
-                    sum((h.amount for h in holdings), decimal.Decimal("0")),
+                    total_gains
+                    if has_gains
+                    else sum((h.amount for h in holdings), decimal.Decimal("0")),
                 )
                 items.append(overall_total)
             output.display_list(
@@ -128,7 +151,7 @@ def holdings(
     default=True,
     hidden=True,
 )
-@essentials.command(parent=cli)
+@essentials.command(parent=cli, cls=NiveshPyCommand)
 def allocation(
     queries: tuple[str, ...],
     format: output.OutputFormat,

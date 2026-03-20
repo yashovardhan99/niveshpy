@@ -15,7 +15,12 @@ from niveshpy.exceptions import (
 )
 from niveshpy.models.account import Account
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
-from niveshpy.models.transaction import Transaction, TransactionDisplay, TransactionType
+from niveshpy.models.transaction import (
+    Transaction,
+    TransactionDisplay,
+    TransactionPublicWithRelationsAndCost,
+    TransactionType,
+)
 from niveshpy.services.transaction import TransactionService
 
 
@@ -242,6 +247,123 @@ class TestListTransactions:
 
         assert len(transactions) > 0
         # Check that security and account are populated
+        assert transactions[0].security.key is not None
+        assert transactions[0].account.id is not None
+
+
+@pytest.fixture
+def cost_basis_transactions(
+    session: Session,
+    sample_accounts: Sequence[Account],
+    sample_securities: Sequence[Security],
+) -> Sequence[Transaction]:
+    """Create transactions with proper buy-before-sell ordering for cost basis tests."""
+    transactions = [
+        Transaction(
+            transaction_date=datetime.date(2024, 1, 15),
+            type=TransactionType.PURCHASE,
+            description="Purchase HDFC Fund",
+            amount=Decimal("10000.00"),
+            units=Decimal("100.000"),
+            account_id=sample_accounts[0].id,
+            security_key=sample_securities[0].key,
+        ),
+        Transaction(
+            transaction_date=datetime.date(2024, 2, 20),
+            type=TransactionType.PURCHASE,
+            description="Purchase HDFC Fund again",
+            amount=Decimal("15000.00"),
+            units=Decimal("150.000"),
+            account_id=sample_accounts[0].id,
+            security_key=sample_securities[0].key,
+        ),
+        Transaction(
+            transaction_date=datetime.date(2024, 3, 10),
+            type=TransactionType.SALE,
+            description="Sell HDFC Fund",
+            amount=Decimal("12000.00"),
+            units=Decimal("-120.000"),
+            account_id=sample_accounts[0].id,
+            security_key=sample_securities[0].key,
+        ),
+    ]
+    session.add_all(transactions)
+    session.commit()
+    for transaction in transactions:
+        session.refresh(transaction)
+    return transactions
+
+
+class TestListTransactionsWithCost:
+    """Tests for list_transactions with cost=True."""
+
+    def test_list_with_cost_returns_cost_models(
+        self, transaction_service, cost_basis_transactions
+    ):
+        """Test that cost=True returns TransactionPublicWithRelationsAndCost."""
+        transactions = transaction_service.list_transactions(
+            queries=(), limit=30, offset=0, cost=True
+        )
+
+        assert len(transactions) == 3
+        assert all(
+            isinstance(t, TransactionPublicWithRelationsAndCost) for t in transactions
+        )
+
+    def test_purchase_transactions_have_no_cost(
+        self, transaction_service, cost_basis_transactions
+    ):
+        """Test that purchase transactions have cost=None."""
+        transactions = transaction_service.list_transactions(
+            queries=(), limit=30, offset=0, cost=True
+        )
+
+        purchases = [t for t in transactions if t.type == TransactionType.PURCHASE]
+        assert len(purchases) == 2
+        assert all(t.cost is None for t in purchases)
+
+    def test_sale_transaction_has_fifo_cost(
+        self, transaction_service, cost_basis_transactions
+    ):
+        """Test that sale transaction has FIFO-computed cost basis."""
+        transactions = transaction_service.list_transactions(
+            queries=(), limit=30, offset=0, cost=True
+        )
+
+        sales = [t for t in transactions if t.type == TransactionType.SALE]
+        assert len(sales) == 1
+        # FIFO: 100 units from lot 1 (10000) + 20 from lot 2 (15000 * 20/150 = 2000)
+        assert sales[0].cost == Decimal("12000.00")
+
+    def test_cost_with_query_filter(self, transaction_service, cost_basis_transactions):
+        """Test cost computation works with query filters."""
+        transactions = transaction_service.list_transactions(
+            queries=("HDFC",), limit=30, offset=0, cost=True
+        )
+
+        assert len(transactions) == 3
+        assert all(
+            isinstance(t, TransactionPublicWithRelationsAndCost) for t in transactions
+        )
+
+    def test_cost_with_limit(self, transaction_service, cost_basis_transactions):
+        """Test cost computation works with limit."""
+        transactions = transaction_service.list_transactions(
+            queries=(), limit=1, offset=0, cost=True
+        )
+
+        assert len(transactions) == 1
+        assert isinstance(transactions[0], TransactionPublicWithRelationsAndCost)
+
+    def test_cost_preserves_relations(
+        self, transaction_service, cost_basis_transactions
+    ):
+        """Test that cost=True results still include security and account relations."""
+        transactions = transaction_service.list_transactions(
+            queries=(), limit=30, offset=0, cost=True
+        )
+
+        assert len(transactions) > 0
         assert transactions[0].security.key is not None
         assert transactions[0].account.id is not None
 

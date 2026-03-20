@@ -130,7 +130,9 @@ def _convert_models_to_rich_table(
         )
 
     def mapper(data: object, fmt: Callable[[str], str] | None) -> str:
-        if isinstance(data, datetime):
+        if data is None:
+            data_str = ""
+        elif isinstance(data, datetime):
             data_str = _format_datetime(data)
         elif isinstance(data, date):
             data_str = data.strftime("%d %b %Y")

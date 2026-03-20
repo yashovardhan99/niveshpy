@@ -4,7 +4,6 @@ import datetime
 import decimal
 from collections.abc import Sequence
 
-from pydantic import RootModel
 from sqlmodel import col, select
 
 from niveshpy.core.logging import logger
@@ -23,9 +22,12 @@ from niveshpy.models.transaction import (
     Transaction,
     TransactionCreate,
     TransactionDisplay,
+    TransactionPublicWithCost,
     TransactionPublicWithRelations,
+    TransactionPublicWithRelationsAndCost,
     TransactionType,
 )
+from niveshpy.services import helpers
 
 
 class TransactionService:
@@ -36,12 +38,32 @@ class TransactionService:
         queries: tuple[str, ...],
         limit: int = 30,
         offset: int = 0,
+        cost: bool = False,
     ) -> Sequence[TransactionPublicWithRelations]:
         """List transactions matching the query."""
         if limit < 1:
             raise InvalidInputError(limit, "Limit must be positive.")
         if offset < 0:
             raise InvalidInputError(offset, "Offset cannot be negative.")
+
+        if cost:
+            where_clauses_all = get_filters_from_queries(
+                queries,
+                ast.Field.SECURITY,
+                TRANSACTION_COLUMN_MAPPING,
+                include_fields=[ast.Field.SECURITY, ast.Field.ACCOUNT],
+            )
+            with get_session() as session:
+                transactions_all = session.exec(
+                    select(Transaction)
+                    .join(Security)
+                    .join(Account)
+                    .where(*where_clauses_all)
+                    .order_by(
+                        col(Transaction.transaction_date).asc(), col(Transaction.id)
+                    )
+                ).all()
+                transactions_with_cost = helpers.compute_cost_basis(transactions_all)
 
         where_clause = get_filters_from_queries(
             queries, ast.Field.SECURITY, TRANSACTION_COLUMN_MAPPING
@@ -56,11 +78,28 @@ class TransactionService:
                 .limit(limit)
                 .order_by(col(Transaction.transaction_date).desc(), col(Transaction.id))
             ).all()
-            return (
-                RootModel[Sequence[TransactionPublicWithRelations]]
-                .model_validate(transactions)
-                .root
-            )
+            if cost:
+                id_to_cost_transaction: dict[int, TransactionPublicWithCost] = {
+                    t.id: t for t in transactions_with_cost if t.id is not None
+                }
+                result: list[TransactionPublicWithRelations] = [
+                    TransactionPublicWithRelationsAndCost.model_validate(
+                        {
+                            **TransactionPublicWithRelations.model_validate(
+                                txn
+                            ).model_dump(),
+                            "cost": id_to_cost_transaction[txn.id].cost,
+                        }
+                    )
+                    for txn in transactions
+                    if txn.id is not None
+                ]
+            else:
+                result = [
+                    TransactionPublicWithRelations.model_validate(txn)
+                    for txn in transactions
+                ]
+        return result
 
     def add_transaction(
         self,

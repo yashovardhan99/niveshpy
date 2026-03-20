@@ -78,16 +78,16 @@ class TransactionBase(SQLModel):
     )
     security_key: str = Field(
         foreign_key="security.key",
-        schema_extra={"json_schema_extra": {"hidden": True, "order": 6}},
+        schema_extra={"json_schema_extra": {"hidden": True, "order": 7}},
     )
     account_id: int = Field(
         foreign_key="account.id",
-        schema_extra={"json_schema_extra": {"hidden": True, "order": 7}},
+        schema_extra={"json_schema_extra": {"hidden": True, "order": 8}},
     )
     properties: dict[str, Any] = Field(
         default_factory=dict,
         sa_column=Column(JSON),
-        schema_extra={"json_schema_extra": {"style": "dim", "order": 8}},
+        schema_extra={"json_schema_extra": {"style": "dim", "order": 9}},
     )
 
     def __init_subclass__(cls, **kwargs):
@@ -157,7 +157,7 @@ class TransactionPublic(TransactionBase):
         },
     )
     created: datetime = Field(
-        schema_extra={"json_schema_extra": {"style": "dim", "order": 9}},
+        schema_extra={"json_schema_extra": {"style": "dim", "order": 10}},
     )
 
 
@@ -178,10 +178,10 @@ class TransactionDisplay(TransactionPublic):
     """
 
     security: str = PydanticField(
-        json_schema_extra={"order": 6, "justify": "right"},
+        json_schema_extra={"order": 7, "justify": "right"},
     )
     account: str = PydanticField(
-        json_schema_extra={"order": 7, "justify": "right", "style": "dim"},
+        json_schema_extra={"order": 8, "justify": "right", "style": "dim"},
     )
 
     @field_validator("security", mode="before", json_schema_input_type=str | Security)
@@ -231,8 +231,76 @@ class TransactionPublicWithRelations(TransactionPublic):
         created (datetime): Timestamp when the transaction was created.
     """
 
-    security: Security = Field(schema_extra={"json_schema_extra": {"order": 6}})
-    account: Account = Field(schema_extra={"json_schema_extra": {"order": 7}})
+    security: Security = Field(schema_extra={"json_schema_extra": {"order": 7}})
+    account: Account = Field(schema_extra={"json_schema_extra": {"order": 8}})
+
+
+class TransactionPublicWithCost(TransactionPublic):
+    """Public model for transactions with cost basis information.
+
+    Attributes:
+        id (int): Primary key ID of the transaction.
+        transaction_date (date): Date of the transaction.
+        type (TransactionType): Type of the transaction.
+        description (str): Description of the transaction.
+        amount (Decimal): Amount involved in the transaction.
+        units (Decimal): Number of units involved in the transaction.
+        security_key (str): Foreign key to the associated security.
+        account_id (int): Foreign key to the associated account.
+        properties (dict[str, Any]): Additional properties of the transaction.
+        created (datetime): Timestamp when the transaction was created.
+        cost (Decimal | None): Cost basis of the transaction.
+    """
+
+    cost: Decimal | None = Field(schema_extra={"json_schema_extra": {"order": 6}})
+
+
+class TransactionDisplayWithCost(TransactionDisplay):
+    """Model for displaying transaction with related info and cost basis.
+
+    Attributes:
+        id (int): Primary key ID of the transaction.
+        transaction_date (date): Date of the transaction.
+        type (TransactionType): Type of the transaction.
+        description (str): Description of the transaction.
+        amount (Decimal): Amount involved in the transaction.
+        units (Decimal): Number of units involved in the transaction.
+        security (str): Formatted security information.
+        account (str): Formatted account information.
+        properties (dict[str, Any]): Additional properties of the transaction.
+        created (datetime): Timestamp when the transaction was created.
+        cost (Decimal | None): Cost basis of the transaction.
+    """
+
+    cost: Decimal | None = Field(
+        schema_extra={
+            "json_schema_extra": {
+                "order": 6,
+                "style": "bold magenta",
+                "justify": "right",
+            }
+        },
+    )
+
+
+class TransactionPublicWithRelationsAndCost(TransactionPublicWithRelations):
+    """Public model for transactions with related account and security info and cost basis.
+
+    Attributes:
+        id (int): Primary key ID of the transaction.
+        transaction_date (date): Date of the transaction.
+        type (TransactionType): Type of the transaction.
+        description (str): Description of the transaction.
+        amount (Decimal): Amount involved in the transaction.
+        units (Decimal): Number of units involved in the transaction.
+        security (Security): Related security object.
+        account (Account): Related account object.
+        properties (dict[str, Any]): Additional properties of the transaction.
+        created (datetime): Timestamp when the transaction was created.
+        cost (Decimal | None): Cost basis of the transaction.
+    """
+
+    cost: Decimal | None = Field(schema_extra={"json_schema_extra": {"order": 6}})
 
 
 TRANSACTION_COLUMN_MAPPING: dict[ast.Field, list] = {
