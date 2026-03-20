@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from sqlmodel import Session
 
-from niveshpy.exceptions import InvalidInputError
+from niveshpy.exceptions import InvalidInputError, OperationError
 from niveshpy.models.account import Account
 from niveshpy.models.price import Price
 from niveshpy.models.report import (
@@ -595,6 +595,120 @@ class TestGetHoldings:
         assert holdings[0].units == Decimal("80.000")
         # 80 * 108.123456 = 8649.87648, rounded to 8649.88
         assert holdings[0].amount == Decimal("8649.88")
+
+    def test_get_holdings_invested_amounts(
+        self,
+        session,
+        sample_accounts,
+        sample_securities,
+        sample_transactions,
+        sample_prices,
+    ):
+        """Test that holdings include correct invested amounts using FIFO."""
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            holdings = get_holdings(queries=(), limit=30, offset=0)
+
+        # HDFC: Buy 100 @ 10000, Sell 20 → remaining 80 units, invested = 10000 * 80/100 = 8000
+        hdfc = next(h for h in holdings if h.security.key == "123456")
+        assert hdfc.invested == Decimal("8000.00")
+
+        # ICICI: Buy 50 @ 5000, no sales → invested = 5000
+        icici = next(h for h in holdings if h.security.key == "234567")
+        assert icici.invested == Decimal("5000.00")
+
+        # Reliance: Buy 25 @ 25000, no sales → invested = 25000
+        reli = next(h for h in holdings if h.security.key == "RELI")
+        assert reli.invested == Decimal("25000.00")
+
+    def test_get_holdings_gains(
+        self,
+        session,
+        sample_accounts,
+        sample_securities,
+        sample_transactions,
+        sample_prices,
+    ):
+        """Test that holdings have correct gains (amount - invested)."""
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            holdings = get_holdings(queries=(), limit=30, offset=0)
+
+        # HDFC: amount=8800, invested=8000, gains=800
+        hdfc = next(h for h in holdings if h.security.key == "123456")
+        assert hdfc.gains == Decimal("800.00")
+
+        # ICICI: amount=5050, invested=5000, gains=50
+        icici = next(h for h in holdings if h.security.key == "234567")
+        assert icici.gains == Decimal("50.00")
+
+        # Reliance: amount=25500, invested=25000, gains=500
+        reli = next(h for h in holdings if h.security.key == "RELI")
+        assert reli.gains == Decimal("500.00")
+
+    def test_get_holdings_gains_consistency(
+        self,
+        session,
+        sample_accounts,
+        sample_securities,
+        sample_transactions,
+        sample_prices,
+    ):
+        """Test that gains equals amount minus invested for all holdings."""
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            holdings = get_holdings(queries=(), limit=30, offset=0)
+
+        for h in holdings:
+            assert h.invested is not None
+            assert h.gains is not None
+            assert h.gains == (h.amount - h.invested).quantize(Decimal("0.01"))
+
+    def test_get_holdings_raises_when_no_purchase_history(
+        self,
+        session,
+        sample_accounts,
+        sample_securities,
+        sample_prices,
+    ):
+        """Test that get_holdings raises OperationError when purchase history is incomplete."""
+        # Create a sale without a prior purchase
+        txn = Transaction(
+            transaction_date=datetime.date(2024, 1, 15),
+            type=TransactionType.SALE,
+            description="Mystery sale",
+            amount=Decimal("5000.00"),
+            units=Decimal("-50.000"),
+            account_id=sample_accounts[0].id,
+            security_key=sample_securities[0].key,
+        )
+        session.add(txn)
+        session.commit()
+        # Also add a purchase so there's a holding
+        txn2 = Transaction(
+            transaction_date=datetime.date(2024, 2, 1),
+            type=TransactionType.PURCHASE,
+            description="Buy fund",
+            amount=Decimal("10000.00"),
+            units=Decimal("100.000"),
+            account_id=sample_accounts[0].id,
+            security_key=sample_securities[0].key,
+        )
+        session.add(txn2)
+        session.commit()
+
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            with pytest.raises(OperationError, match="Insufficient purchase history"):
+                get_holdings(queries=(), limit=30, offset=0)
 
 
 class TestGetAllocation:

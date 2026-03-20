@@ -1,4 +1,4 @@
-"""Tests for compute_cost_basis in helpers module."""
+"""Tests for helpers module."""
 
 import datetime
 from decimal import Decimal
@@ -11,7 +11,7 @@ from niveshpy.models.transaction import (
     TransactionPublicWithCost,
     TransactionType,
 )
-from niveshpy.services.helpers import compute_cost_basis
+from niveshpy.services.helpers import compute_cost_basis, compute_invested_amount
 
 
 def _make_txn(
@@ -399,3 +399,145 @@ class TestComputeCostBasisOutputFormat:
         ]
         result = compute_cost_basis(txns)
         assert len(result) == len(txns)
+
+
+class TestComputeInvestedAmountBasic:
+    """Tests for basic compute_invested_amount functionality."""
+
+    def test_empty_list(self):
+        """Empty transaction list should return empty result."""
+        result = compute_invested_amount([])
+        assert result == {}
+
+    def test_single_purchase(self):
+        """Single purchase returns full amount as invested."""
+        txns = [_buy(1, "100", "10000")]
+        result = compute_invested_amount(txns)
+        assert result[("SEC1", 1)] == Decimal("10000.00")
+
+    def test_multiple_purchases_same_security(self):
+        """Multiple purchases sum up to total invested."""
+        txns = [
+            _buy(1, "100", "10000"),
+            _buy(2, "50", "6000"),
+        ]
+        result = compute_invested_amount(txns)
+        assert result[("SEC1", 1)] == Decimal("16000.00")
+
+    def test_buy_then_sell_all_returns_empty(self):
+        """Selling all units means no remaining investment."""
+        txns = [
+            _buy(1, "100", "10000"),
+            _sell(2, "100", "12000"),
+        ]
+        result = compute_invested_amount(txns)
+        # Key should not be in result (0 remaining)
+        assert ("SEC1", 1) not in result or result[("SEC1", 1)] == Decimal("0.00")
+
+    def test_buy_then_partial_sell(self):
+        """Partial sell reduces invested proportionally via FIFO."""
+        txns = [
+            _buy(1, "100", "10000"),
+            _sell(2, "40", "5000"),
+        ]
+        result = compute_invested_amount(txns)
+        # 60 remaining from 100-unit lot: 10000 * 60/100 = 6000
+        assert result[("SEC1", 1)] == Decimal("6000.00")
+
+
+class TestComputeInvestedAmountFIFO:
+    """Tests for FIFO behavior in compute_invested_amount."""
+
+    def test_sell_spanning_two_lots(self):
+        """Sell consumes first lot entirely, then part of second."""
+        txns = [
+            _buy(1, "50", "5000"),
+            _buy(2, "100", "12000"),
+            _sell(3, "80", "10000"),
+        ]
+        result = compute_invested_amount(txns)
+        # Remaining: 70 units from lot 2, cost = 12000 * 70/100 = 8400
+        assert result[("SEC1", 1)] == Decimal("8400.00")
+
+    def test_interleaved_buy_sell(self):
+        """Alternating buys and sells track correctly."""
+        txns = [
+            _buy(1, "100", "10000", date=datetime.date(2024, 1, 1)),
+            _sell(2, "50", "6000", date=datetime.date(2024, 2, 1)),
+            _buy(3, "100", "12000", date=datetime.date(2024, 3, 1)),
+            _sell(4, "20", "3000", date=datetime.date(2024, 4, 1)),
+        ]
+        result = compute_invested_amount(txns)
+        # After sell 50: lot1 has 50 units @ 5000
+        # After buy 100: lot1(50@5000), lot2(100@12000)
+        # After sell 20: lot1 has 30 units @ 10000*30/100=3000
+        # Remaining: lot1(30@3000) + lot2(100@12000) = 15000
+        assert result[("SEC1", 1)] == Decimal("15000.00")
+
+
+class TestComputeInvestedAmountMultipleKeys:
+    """Tests for independent tracking across securities and accounts."""
+
+    def test_different_securities(self):
+        """Different securities tracked independently."""
+        txns = [
+            _buy(1, "100", "10000", security_key="SEC1"),
+            _buy(2, "50", "8000", security_key="SEC2"),
+            _sell(3, "20", "2500", security_key="SEC1"),
+        ]
+        result = compute_invested_amount(txns)
+        # SEC1: 80 remaining from 100-unit lot: 10000 * 80/100 = 8000
+        assert result[("SEC1", 1)] == Decimal("8000.00")
+        # SEC2: untouched
+        assert result[("SEC2", 1)] == Decimal("8000.00")
+
+    def test_same_security_different_accounts(self):
+        """Same security in different accounts tracked independently."""
+        txns = [
+            _buy(1, "100", "10000", account_id=1),
+            _buy(2, "100", "20000", account_id=2),
+            _sell(3, "50", "6000", account_id=1),
+        ]
+        result = compute_invested_amount(txns)
+        # Account 1: 50 remaining from 100-unit lot: 10000 * 50/100 = 5000
+        assert result[("SEC1", 1)] == Decimal("5000.00")
+        # Account 2: untouched
+        assert result[("SEC1", 2)] == Decimal("20000.00")
+
+
+class TestComputeInvestedAmountErrors:
+    """Tests for error conditions."""
+
+    def test_sell_without_buy_raises(self):
+        """Selling without prior purchase should raise OperationError."""
+        txns = [
+            _buy(1, "100", "10000", security_key="SEC1"),
+            _sell(2, "50", "6000", security_key="SEC2"),
+        ]
+        with pytest.raises(OperationError, match="Insufficient purchase history"):
+            compute_invested_amount(txns)
+
+    def test_oversell_raises(self):
+        """Selling more than purchased should raise OperationError."""
+        txns = [
+            _buy(1, "50", "5000"),
+            _sell(2, "100", "12000"),
+        ]
+        with pytest.raises(OperationError, match="Insufficient purchase history"):
+            compute_invested_amount(txns)
+
+
+class TestComputeInvestedAmountOutput:
+    """Tests for output format."""
+
+    def test_invested_quantized_to_two_decimals(self):
+        """Invested amounts should be quantized to 2 decimal places."""
+        txns = [
+            _buy(1, "3", "10.00"),
+            _sell(2, "1", "4.00"),
+        ]
+        result = compute_invested_amount(txns)
+        invested = result[("SEC1", 1)]
+        # 10/3 * 2 = 6.666... → quantized to 6.67
+        assert invested == Decimal("6.67")
+        assert invested == invested.quantize(Decimal("0.01"))
