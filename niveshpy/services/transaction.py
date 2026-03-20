@@ -22,6 +22,7 @@ from niveshpy.models.transaction import (
     Transaction,
     TransactionCreate,
     TransactionDisplay,
+    TransactionPublicWithCost,
     TransactionPublicWithRelations,
     TransactionPublicWithRelationsAndCost,
     TransactionType,
@@ -78,19 +79,21 @@ class TransactionService:
                 .order_by(col(Transaction.transaction_date).desc(), col(Transaction.id))
             ).all()
             if cost:
-                result: list[TransactionPublicWithRelationsAndCost] = []
-                id_to_cost_transaction = {t.id: t for t in transactions_with_cost}
-                for txn in transactions:
-                    txn_model = TransactionPublicWithRelations.model_validate(txn)
-
-                    result.append(
-                        TransactionPublicWithRelationsAndCost.model_validate(
-                            {
-                                **txn_model.model_dump(),
-                                "cost": id_to_cost_transaction[txn.id].cost,
-                            }
-                        )
+                id_to_cost_transaction: dict[int, TransactionPublicWithCost] = {
+                    t.id: t for t in transactions_with_cost if t.id is not None
+                }
+                result: list[TransactionPublicWithRelations] = [
+                    TransactionPublicWithRelationsAndCost.model_validate(
+                        {
+                            **TransactionPublicWithRelations.model_validate(
+                                txn
+                            ).model_dump(),
+                            "cost": id_to_cost_transaction[txn.id].cost,
+                        }
                     )
+                    for txn in transactions
+                    if txn.id is not None
+                ]
             else:
                 result = [
                     TransactionPublicWithRelations.model_validate(txn)

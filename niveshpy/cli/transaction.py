@@ -4,6 +4,7 @@ import datetime
 import decimal
 import textwrap
 from collections.abc import Sequence
+from typing import Any
 
 import click
 from InquirerPy import get_style, inquirer, validator
@@ -69,7 +70,7 @@ def show(
         output.display_warning(msg)
     else:
         if cost:
-            fmt_cls = (
+            fmt_cls: Any = (
                 TransactionPublicWithRelationsAndCost
                 if format == output.OutputFormat.JSON
                 else (
