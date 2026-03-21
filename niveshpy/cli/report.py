@@ -10,7 +10,12 @@ from niveshpy.cli.utils import essentials, flags, output
 from niveshpy.cli.utils.overrides import NiveshPyCommand
 from niveshpy.core.query import tokens
 from niveshpy.core.query.tokenizer import QueryLexer
-from niveshpy.models.report import Holding, HoldingDisplay, HoldingExport
+from niveshpy.models.report import (
+    Holding,
+    HoldingDisplay,
+    HoldingExport,
+    PerformanceDisplay,
+)
 
 DAYS_FOR_OLD = 15
 """Number of days after which holdings are considered old."""
@@ -97,15 +102,15 @@ def holdings(
             ]
 
             if total:
-                total_gains = sum(
-                    (h.gains for h in holdings if h.gains is not None),
-                    decimal.Decimal("0"),
-                )
-                has_gains = any(h.gains is not None for h in holdings)
+                # Full portfolio metrics (XIRR, detailed totals) are
+                # available via 'niveshpy reports performance'.
+                from niveshpy.services.report import compute_portfolio_totals
+
+                totals = compute_portfolio_totals(holdings)
                 overall_total = output.TotalRow(
-                    total_gains
-                    if has_gains
-                    else sum((h.amount for h in holdings), decimal.Decimal("0")),
+                    totals.total_gains
+                    if totals.total_gains is not None
+                    else totals.total_current_value,
                 )
                 items.append(overall_total)
             output.display_list(
@@ -182,3 +187,43 @@ def allocation(
             items=allocations,
             fmt=format,
         )
+
+
+@click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
+@flags.output("format")
+@essentials.command(parent=cli, cls=NiveshPyCommand)
+def performance(
+    queries: tuple[str, ...],
+    format: output.OutputFormat,
+):
+    """Generate portfolio performance report.
+
+    Shows portfolio-level metrics including total current value, total invested,
+    gains, and annualized returns (XIRR).
+
+    Optionally, provide text <queries> to filter securities and accounts.
+    """
+    with output.loading_spinner("Generating performance report..."):
+        from niveshpy.services.report import get_performance
+
+        totals, xirr = get_performance(queries)
+
+    # Convert gains_percentage from percentage (16.67) to fraction (0.1667)
+    # for consistent :.2% formatting with xirr
+    gains_pct = (
+        (totals.gains_percentage / decimal.Decimal("100")).quantize(
+            decimal.Decimal("0.0001")
+        )
+        if totals.gains_percentage is not None
+        else None
+    )
+
+    display = PerformanceDisplay(
+        total_current_value=totals.total_current_value,
+        total_invested=totals.total_invested,
+        absolute_gains=totals.total_gains,
+        absolute_gains_pct=gains_pct,
+        xirr=xirr,
+    )
+
+    output.display_list(cls=PerformanceDisplay, items=[display], fmt=format)

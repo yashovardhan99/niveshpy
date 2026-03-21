@@ -18,7 +18,12 @@ from niveshpy.models.report import (
 )
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
 from niveshpy.models.transaction import Transaction, TransactionType
-from niveshpy.services.report import get_allocation, get_holdings
+from niveshpy.services.report import (
+    compute_portfolio_totals,
+    get_allocation,
+    get_holdings,
+    get_performance,
+)
 
 
 @pytest.fixture
@@ -94,7 +99,7 @@ def sample_transactions(
             transaction_date=datetime.date(2024, 2, 20),
             type=TransactionType.SALE,
             description="Sold HDFC Fund",
-            amount=Decimal("2000.00"),
+            amount=Decimal("-2000.00"),
             units=Decimal("-20.000"),
             account_id=sample_accounts[0].id,
             security_key=sample_securities[0].key,
@@ -133,7 +138,7 @@ def sample_transactions(
             transaction_date=datetime.date(2024, 5, 15),
             type=TransactionType.SALE,
             description="Sold all TCS",
-            amount=Decimal("32000.00"),
+            amount=Decimal("-32000.00"),
             units=Decimal("-10.000"),
             account_id=sample_accounts[2].id,
             security_key=sample_securities[3].key,
@@ -683,7 +688,7 @@ class TestGetHoldings:
             transaction_date=datetime.date(2024, 1, 15),
             type=TransactionType.SALE,
             description="Mystery sale",
-            amount=Decimal("5000.00"),
+            amount=Decimal("-5000.00"),
             units=Decimal("-50.000"),
             account_id=sample_accounts[0].id,
             security_key=sample_securities[0].key,
@@ -1087,3 +1092,170 @@ class TestGetAllocation:
         # Should return only HDFC Equity Fund (Savings + HDFC in name)
         assert len(allocations) == 1
         assert allocations[0].allocation == Decimal("1.0000")
+
+
+def _make_holding(
+    *,
+    amount: str,
+    invested: str | None = None,
+    gains: str | None = None,
+    key: str = "TEST",
+    name: str = "Test Fund",
+) -> Holding:
+    """Create a Holding object for testing compute_portfolio_totals."""
+    account = Account(id=1, name="Test", institution="Test")
+    security = Security(
+        key=key,
+        name=name,
+        type=SecurityType.MUTUAL_FUND,
+        category=SecurityCategory.EQUITY,
+    )
+    inv = Decimal(invested) if invested is not None else None
+    amt = Decimal(amount)
+    g = Decimal(gains) if gains is not None else None
+    return Holding(
+        account=account,
+        security=security,
+        date=datetime.date.today(),
+        units=Decimal("100"),
+        amount=amt,
+        invested=inv,
+        gains=g,
+    )
+
+
+class TestComputePortfolioTotals:
+    """Tests for compute_portfolio_totals function."""
+
+    def test_basic_totals(self):
+        """Two holdings with invested amounts produce correct aggregate sums."""
+        holdings = [
+            _make_holding(amount="15000", invested="10000", gains="5000", key="SEC1"),
+            _make_holding(amount="8000", invested="6000", gains="2000", key="SEC2"),
+        ]
+        result = compute_portfolio_totals(holdings)
+        assert result.total_current_value == Decimal("23000.00")
+        assert result.total_invested == Decimal("16000.00")
+        assert result.total_gains == Decimal("7000.00")
+
+    def test_none_invested(self):
+        """Holdings where invested is None yield None for total_invested and gains."""
+        holdings = [
+            _make_holding(amount="15000", key="SEC1"),
+            _make_holding(amount="8000", key="SEC2"),
+        ]
+        result = compute_portfolio_totals(holdings)
+        assert result.total_current_value == Decimal("23000.00")
+        assert result.total_invested is None
+        assert result.total_gains is None
+        assert result.gains_percentage is None
+
+    def test_mixed_invested(self):
+        """Mix of holdings with and without invested computes gains from known only."""
+        holdings = [
+            _make_holding(amount="15000", invested="10000", gains="5000", key="SEC1"),
+            _make_holding(amount="8000", key="SEC2"),
+        ]
+        result = compute_portfolio_totals(holdings)
+        assert result.total_current_value == Decimal("23000.00")
+        assert result.total_invested == Decimal("10000.00")
+        # gains computed only from SEC1 (known invested): 15000 - 10000 = 5000
+        assert result.total_gains == Decimal("5000.00")
+
+    def test_empty_holdings_raises(self):
+        """Empty holdings list should raise OperationError."""
+        with pytest.raises(OperationError, match="No holdings available"):
+            compute_portfolio_totals([])
+
+    def test_zero_invested(self):
+        """Holdings with 0 invested yield None gains_percentage to avoid div by zero."""
+        holdings = [
+            _make_holding(amount="5000", invested="0", gains="5000"),
+        ]
+        result = compute_portfolio_totals(holdings)
+        assert result.total_invested == Decimal("0.00")
+        assert result.gains_percentage is None
+
+    def test_gains_percentage(self):
+        """Verify correct percentage calculation: (gains / invested) * 100."""
+        holdings = [
+            _make_holding(amount="12000", invested="10000", gains="2000", key="SEC1"),
+            _make_holding(amount="5500", invested="5000", gains="500", key="SEC2"),
+        ]
+        result = compute_portfolio_totals(holdings)
+        # total_current = 17500, total_invested = 15000
+        # gains = 2500, percentage = (2500 / 15000) * 100 = 16.67
+        assert result.gains_percentage == Decimal("16.67")
+
+
+class TestGetPerformance:
+    """Tests for get_performance function."""
+
+    def test_returns_totals_and_xirr(
+        self,
+        session,
+        sample_accounts,
+        sample_securities,
+        sample_transactions,
+        sample_prices,
+    ):
+        """Returns portfolio totals and a valid XIRR for sample data."""
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            totals, xirr = get_performance(queries=())
+
+        assert totals.total_current_value > Decimal("0")
+        assert totals.total_invested is not None
+        assert totals.total_invested > Decimal("0")
+        assert totals.total_gains is not None
+        assert totals.gains_percentage is not None
+        # XIRR should be computed (may be None if solver fails, but with
+        # this sample data it should succeed)
+        assert xirr is not None
+
+    def test_xirr_none_when_no_transactions(
+        self,
+        session,
+        sample_accounts,
+        sample_securities,
+        sample_prices,
+    ):
+        """XIRR is None when there are no holdings (raises OperationError internally)."""
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            with pytest.raises(OperationError, match="No holdings available"):
+                get_performance(queries=())
+
+    def test_xirr_none_when_computation_fails(
+        self,
+        session,
+        sample_accounts,
+        sample_securities,
+        sample_prices,
+    ):
+        """XIRR is None when the solver fails (e.g. zero-amount transactions)."""
+        # Create transactions with zero amounts — holdings exist but XIRR can't solve
+        txn = Transaction(
+            transaction_date=datetime.date(2024, 1, 15),
+            type=TransactionType.PURCHASE,
+            description="Zero amount purchase",
+            amount=Decimal("0.00"),
+            units=Decimal("100.000"),
+            account_id=sample_accounts[0].id,
+            security_key=sample_securities[0].key,
+        )
+        session.add(txn)
+        session.commit()
+
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            totals, xirr = get_performance(queries=())
+
+        assert totals.total_current_value > Decimal("0")
+        assert xirr is None

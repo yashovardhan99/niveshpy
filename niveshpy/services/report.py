@@ -12,7 +12,7 @@ from sqlmodel.sql.expression import SelectOfScalar
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import get_filters_from_queries
 from niveshpy.database import get_session
-from niveshpy.exceptions import InvalidInputError
+from niveshpy.exceptions import InvalidInputError, OperationError
 from niveshpy.models.account import Account
 from niveshpy.models.price import Price
 from niveshpy.models.report import (
@@ -22,10 +22,11 @@ from niveshpy.models.report import (
     AllocationByCategory,
     AllocationByType,
     Holding,
+    PortfolioTotals,
 )
 from niveshpy.models.security import Security
 from niveshpy.models.transaction import Transaction
-from niveshpy.services.helpers import compute_invested_amount
+from niveshpy.services.helpers import compute_invested_amount, compute_xirr
 
 
 def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Holding]:
@@ -154,6 +155,49 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
             )
 
     return holdings
+
+
+def get_performance(
+    queries: tuple[str, ...],
+) -> tuple[PortfolioTotals, decimal.Decimal | None]:
+    """Generate portfolio performance report.
+
+    Computes portfolio totals and annualized XIRR from holdings and transactions.
+
+    Args:
+        queries: Tuple of query strings to filter securities and accounts.
+
+    Returns:
+        Tuple of (PortfolioTotals, xirr) where xirr may be None if computation fails.
+    """
+    holdings = get_holdings(queries, limit=10000, offset=0)
+    totals = compute_portfolio_totals(holdings)
+
+    xirr: decimal.Decimal | None = None
+    cost_where_clauses: list[ColumnElement[bool]] = get_filters_from_queries(
+        queries,
+        ast.Field.SECURITY,
+        HOLDING_COLUMN_MAPPINGS_TXN,
+        include_fields={ast.Field.SECURITY, ast.Field.ACCOUNT},
+    )
+    with get_session() as session:
+        transactions = session.exec(
+            select(Transaction)
+            .join(Security)
+            .join(Account)
+            .where(*cost_where_clauses)
+            .order_by(
+                col(Transaction.transaction_date).asc(),
+                col(Transaction.id).asc(),
+            )
+        ).all()
+
+    try:
+        xirr = compute_xirr(transactions, totals.total_current_value)
+    except OperationError:
+        xirr = None
+
+    return totals, xirr
 
 
 def get_allocation(
@@ -285,3 +329,54 @@ def get_allocation(
                     )
                 )
         return allocations
+
+
+def compute_portfolio_totals(holdings: list[Holding]) -> PortfolioTotals:
+    """Compute portfolio-level aggregate totals from holdings.
+
+    Args:
+        holdings: List of Holding models with amount, invested, and gains.
+
+    Returns:
+        PortfolioTotals with aggregated values.
+
+    Raises:
+        OperationError: If no holdings are provided.
+    """
+    if not holdings:
+        raise OperationError("No holdings available for portfolio totals")
+
+    quantize_amt = decimal.Decimal("0.01")
+
+    total_current_value = sum(
+        (h.amount for h in holdings), decimal.Decimal(0)
+    ).quantize(quantize_amt)
+
+    known_invested = [h.invested for h in holdings if h.invested is not None]
+    total_invested: decimal.Decimal | None = (
+        sum(known_invested, decimal.Decimal(0)).quantize(quantize_amt)
+        if known_invested
+        else None
+    )
+
+    # Compute gains only from holdings with known cost basis
+    known_holdings = [h for h in holdings if h.invested is not None]
+    total_gains: decimal.Decimal | None = None
+    if total_invested is not None:
+        known_current = sum(
+            (h.amount for h in known_holdings), decimal.Decimal(0)
+        ).quantize(quantize_amt)
+        total_gains = (known_current - total_invested).quantize(quantize_amt)
+
+    gains_percentage: decimal.Decimal | None = (
+        (total_gains / total_invested * 100).quantize(quantize_amt)
+        if total_gains is not None and total_invested is not None and total_invested > 0
+        else None
+    )
+
+    return PortfolioTotals(
+        total_current_value=total_current_value,
+        total_invested=total_invested,
+        total_gains=total_gains,
+        gains_percentage=gains_percentage,
+    )

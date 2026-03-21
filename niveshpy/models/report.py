@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 from niveshpy.core.query import ast
 from niveshpy.exceptions import OperationError
 from niveshpy.models.account import Account
-from niveshpy.models.price import Price
 from niveshpy.models.security import (
     Security,
     SecurityCategory,
@@ -16,7 +15,6 @@ from niveshpy.models.security import (
     category_format_map,
     type_format_map,
 )
-from niveshpy.models.transaction import Transaction
 
 # Holdings
 
@@ -128,12 +126,22 @@ class HoldingExport(HoldingBase):
 HOLDING_COLUMN_MAPPINGS_TXN: dict[ast.Field, list] = {
     ast.Field.SECURITY: [Security.key, Security.name, Security.category, Security.type],
     ast.Field.ACCOUNT: [Account.name, Account.institution],
-    ast.Field.DATE: [Transaction.transaction_date],
 }
 HOLDING_COLUMN_MAPPINGS_PRICE: dict[ast.Field, list] = {
     ast.Field.SECURITY: [Security.key, Security.name, Security.category, Security.type],
-    ast.Field.DATE: [Price.date],
 }
+
+# Portfolio Totals
+
+
+class PortfolioTotals(BaseModel):
+    """Portfolio-level aggregate totals."""
+
+    total_current_value: decimal.Decimal
+    total_invested: decimal.Decimal | None
+    total_gains: decimal.Decimal | None
+    gains_percentage: decimal.Decimal | None
+
 
 # Allocations
 
@@ -204,3 +212,63 @@ class AllocationByCategory(AllocationBase):
 
 class Allocation(AllocationByType, AllocationByCategory):
     """Model representing allocation data for reports."""
+
+
+# Performance
+
+
+class PerformanceDisplay(BaseModel):
+    """Display model for portfolio performance metrics."""
+
+    total_current_value: decimal.Decimal = Field(
+        ...,
+        title="Total Current Value",
+        json_schema_extra={
+            "order": 1,
+            "justify": "right",
+            "style": "bold",
+            "no_wrap": True,
+        },
+    )
+    total_invested: decimal.Decimal | None = Field(
+        default=None,
+        title="Total Invested",
+        json_schema_extra={
+            "order": 2,
+            "justify": "right",
+            "no_wrap": True,
+            "formatter": lambda x: x or "N/A",  # type: ignore
+        },
+    )
+    absolute_gains: decimal.Decimal | None = Field(
+        default=None,
+        title="Absolute Gains",
+        json_schema_extra={
+            "order": 3,
+            "justify": "right",
+            "style": "bold green",
+            "no_wrap": True,
+            "formatter": lambda x: x or "N/A",  # type: ignore
+        },
+    )
+    absolute_gains_pct: decimal.Decimal | None = Field(
+        default=None,
+        title="Absolute Gains %",
+        json_schema_extra={
+            "order": 4,
+            "justify": "right",
+            "no_wrap": True,
+            "formatter": lambda x: f"{decimal.Decimal(x):.2%}" if x else "N/A",  # type: ignore
+        },
+    )
+    xirr: decimal.Decimal | None = Field(
+        default=None,
+        title="XIRR (Annualized)",
+        json_schema_extra={
+            "order": 5,
+            "justify": "right",
+            "style": "bold",
+            "no_wrap": True,
+            "formatter": lambda x: f"{decimal.Decimal(x):.2%}" if x else "N/A",  # type: ignore
+        },
+    )
