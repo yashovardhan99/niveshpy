@@ -41,31 +41,22 @@ class HoldingBase(BaseModel):
             "no_wrap": True,
         },
     )
-    amount: decimal.Decimal = Field(
-        ...,
+    invested: decimal.Decimal | None = Field(
+        default=None,
         json_schema_extra={
-            "style": "bold",
             "justify": "right",
             "order": 5,
             "max_width": 20,
             "no_wrap": True,
         },
     )
-    invested: decimal.Decimal | None = Field(
-        default=None,
+    amount: decimal.Decimal = Field(
+        ...,
+        title="Current Value",
         json_schema_extra={
+            "style": "bold",
             "justify": "right",
             "order": 6,
-            "max_width": 20,
-            "no_wrap": True,
-        },
-    )
-    gains: decimal.Decimal | None = Field(
-        default=None,
-        json_schema_extra={
-            "style": "bold green",
-            "justify": "right",
-            "order": 7,
             "max_width": 20,
             "no_wrap": True,
         },
@@ -97,7 +88,6 @@ class HoldingDisplay(HoldingBase):
             units=holding.units,
             amount=holding.amount,
             invested=holding.invested,
-            gains=holding.gains,
         )
 
 
@@ -119,7 +109,6 @@ class HoldingExport(HoldingBase):
             units=holding.units,
             amount=holding.amount,
             invested=holding.invested,
-            gains=holding.gains,
         )
 
 
@@ -141,6 +130,7 @@ class PortfolioTotals(BaseModel):
     total_invested: decimal.Decimal | None
     total_gains: decimal.Decimal | None
     gains_percentage: decimal.Decimal | None
+    xirr: decimal.Decimal | None = None
 
 
 # Allocations
@@ -217,45 +207,42 @@ class Allocation(AllocationByType, AllocationByCategory):
 # Performance
 
 
-class PerformanceDisplay(BaseModel):
-    """Display model for portfolio performance metrics."""
+class PerformanceHoldingBase(BaseModel):
+    """Base model for per-holding performance data."""
 
-    total_current_value: decimal.Decimal = Field(
+    current_value: decimal.Decimal = Field(
         ...,
-        title="Total Current Value",
         json_schema_extra={
-            "order": 1,
+            "order": 3,
             "justify": "right",
             "style": "bold",
             "no_wrap": True,
         },
     )
-    total_invested: decimal.Decimal | None = Field(
+    invested: decimal.Decimal | None = Field(
         default=None,
-        title="Total Invested",
         json_schema_extra={
-            "order": 2,
+            "order": 4,
             "justify": "right",
             "no_wrap": True,
             "formatter": lambda x: x or "N/A",  # type: ignore
         },
     )
-    absolute_gains: decimal.Decimal | None = Field(
+    gains: decimal.Decimal | None = Field(
         default=None,
-        title="Absolute Gains",
         json_schema_extra={
-            "order": 3,
+            "order": 5,
             "justify": "right",
             "style": "bold green",
             "no_wrap": True,
             "formatter": lambda x: x or "N/A",  # type: ignore
         },
     )
-    absolute_gains_pct: decimal.Decimal | None = Field(
+    gains_pct: decimal.Decimal | None = Field(
         default=None,
-        title="Absolute Gains %",
+        title="Gains %",
         json_schema_extra={
-            "order": 4,
+            "order": 6,
             "justify": "right",
             "no_wrap": True,
             "formatter": lambda x: f"{decimal.Decimal(x):.2%}" if x else "N/A",  # type: ignore
@@ -263,12 +250,104 @@ class PerformanceDisplay(BaseModel):
     )
     xirr: decimal.Decimal | None = Field(
         default=None,
-        title="XIRR (Annualized)",
+        title="XIRR",
         json_schema_extra={
-            "order": 5,
+            "order": 7,
             "justify": "right",
             "style": "bold",
             "no_wrap": True,
             "formatter": lambda x: f"{decimal.Decimal(x):.2%}" if x else "N/A",  # type: ignore
         },
     )
+
+
+def _compute_holding_gains(
+    amount: decimal.Decimal,
+    invested: decimal.Decimal | None,
+) -> tuple[decimal.Decimal | None, decimal.Decimal | None]:
+    """Compute gains and gains percentage from amount and invested.
+
+    Returns:
+        Tuple of (gains, gains_pct) where either may be None.
+    """
+    if invested is None:
+        return None, None
+    gains = (amount - invested).quantize(decimal.Decimal("0.01"))
+    gains_pct: decimal.Decimal | None = None
+    if invested > 0:
+        gains_pct = (gains / invested).quantize(decimal.Decimal("0.0001"))
+    return gains, gains_pct
+
+
+class PerformanceHolding(PerformanceHoldingBase):
+    """Model representing per-holding performance data for reports."""
+
+    account: Account = Field(...)
+    security: Security = Field(...)
+
+    @classmethod
+    def from_holding(
+        cls, holding: Holding, xirr: decimal.Decimal | None
+    ) -> "PerformanceHolding":
+        """Create PerformanceHolding from Holding and XIRR value."""
+        gains, gains_pct = _compute_holding_gains(holding.amount, holding.invested)
+        return cls(
+            account=holding.account,
+            security=holding.security,
+            current_value=holding.amount,
+            invested=holding.invested,
+            gains=gains,
+            gains_pct=gains_pct,
+            xirr=xirr,
+        )
+
+
+class PerformanceResult(BaseModel):
+    """Result of portfolio performance computation."""
+
+    holdings: list[PerformanceHolding]
+    totals: PortfolioTotals
+
+
+class PerformanceHoldingDisplay(PerformanceHoldingBase):
+    """Display model for per-holding performance in reports."""
+
+    account: str = Field(
+        ..., json_schema_extra={"style": "dim", "order": 1, "max_width": 30}
+    )
+    security: str = Field(..., json_schema_extra={"order": 2})
+
+    @classmethod
+    def from_holding(cls, holding: PerformanceHolding) -> "PerformanceHoldingDisplay":
+        """Create PerformanceHoldingDisplay from PerformanceHolding."""
+        return cls(
+            account=f"{holding.account.name} ({holding.account.institution})",
+            security=f"{holding.security.name} ({holding.security.key})",
+            current_value=holding.current_value,
+            invested=holding.invested,
+            gains=holding.gains,
+            gains_pct=holding.gains_pct,
+            xirr=holding.xirr,
+        )
+
+
+class PerformanceHoldingExport(PerformanceHoldingBase):
+    """Export model for per-holding performance in CSV."""
+
+    account: int = Field(..., json_schema_extra={"order": 1})
+    security: str = Field(..., json_schema_extra={"order": 2})
+
+    @classmethod
+    def from_holding(cls, holding: PerformanceHolding) -> "PerformanceHoldingExport":
+        """Create PerformanceHoldingExport from PerformanceHolding."""
+        if holding.account.id is None:
+            raise OperationError("Account ID is required for export.")
+        return cls(
+            account=holding.account.id,
+            security=holding.security.key,
+            current_value=holding.current_value,
+            invested=holding.invested,
+            gains=holding.gains,
+            gains_pct=holding.gains_pct,
+            xirr=holding.xirr,
+        )

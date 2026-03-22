@@ -1,6 +1,7 @@
 """Service for report generation and exporting."""
 
 import decimal
+from collections import defaultdict
 from collections.abc import Sequence
 from typing import Literal
 
@@ -22,6 +23,8 @@ from niveshpy.models.report import (
     AllocationByCategory,
     AllocationByType,
     Holding,
+    PerformanceHolding,
+    PerformanceResult,
     PortfolioTotals,
 )
 from niveshpy.models.security import Security
@@ -137,11 +140,6 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
             key = (security.key, account.id)
             invested = invested_amounts.get(key)
             current_value = holding_value.quantize(decimal.Decimal("0.01"))
-            gains = (
-                (current_value - invested).quantize(decimal.Decimal("0.01"))
-                if invested is not None
-                else None
-            )
             holdings.append(
                 Holding(
                     account=account,
@@ -150,7 +148,6 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
                     units=total_units.quantize(decimal.Decimal("0.001")),
                     amount=current_value,
                     invested=invested,
-                    gains=gains,
                 )
             )
 
@@ -159,21 +156,30 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
 
 def get_performance(
     queries: tuple[str, ...],
-) -> tuple[PortfolioTotals, decimal.Decimal | None]:
-    """Generate portfolio performance report.
+    limit: int = 10000,
+    offset: int = 0,
+) -> PerformanceResult:
+    """Generate portfolio performance report with per-holding XIRR.
 
-    Computes portfolio totals and annualized XIRR from holdings and transactions.
+    Returns a PerformanceResult containing per-holding performance data
+    (each holding with gains and XIRR), portfolio-level totals, and
+    the overall portfolio XIRR.
 
     Args:
         queries: Tuple of query strings to filter securities and accounts.
+        limit: Maximum number of holdings to return.
+        offset: Number of holdings to skip.
 
     Returns:
-        Tuple of (PortfolioTotals, xirr) where xirr may be None if computation fails.
+        PerformanceResult with holdings, totals, and portfolio_xirr.
     """
-    holdings = get_holdings(queries, limit=10000, offset=0)
-    totals = compute_portfolio_totals(holdings)
+    # Fetch all holdings for portfolio-level metrics, then apply limit/offset for display
+    all_holdings = get_holdings(queries, limit=10000, offset=0)
+    totals = compute_portfolio_totals(all_holdings)
 
-    xirr: decimal.Decimal | None = None
+    # Apply limit/offset for per-holding display
+    display_holdings = all_holdings[offset : offset + limit]
+
     cost_where_clauses: list[ColumnElement[bool]] = get_filters_from_queries(
         queries,
         ast.Field.SECURITY,
@@ -192,12 +198,33 @@ def get_performance(
             )
         ).all()
 
-    try:
-        xirr = compute_xirr(transactions, totals.total_current_value)
-    except OperationError:
-        xirr = None
+    # Group transactions by (account_id, security_key) for per-holding XIRR
+    txn_groups: dict[tuple[int, str], list[Transaction]] = defaultdict(list)
+    for txn in transactions:
+        txn_groups[(txn.account_id, txn.security_key)].append(txn)
 
-    return totals, xirr
+    # Compute per-holding XIRR and build PerformanceHolding models
+    holdings: list[PerformanceHolding] = []
+    for h in display_holdings:
+        key = (h.account.id, h.security.key) if h.account.id is not None else None
+        holding_xirr: decimal.Decimal | None = None
+        if key and key in txn_groups:
+            try:
+                holding_xirr = compute_xirr(txn_groups[key], h.amount)
+            except OperationError:
+                holding_xirr = None
+        holdings.append(PerformanceHolding.from_holding(h, holding_xirr))
+
+    # Compute portfolio-wide XIRR
+    try:
+        totals.xirr = compute_xirr(list(transactions), totals.total_current_value)
+    except OperationError:
+        pass
+
+    return PerformanceResult(
+        holdings=holdings,
+        totals=totals,
+    )
 
 
 def get_allocation(
@@ -335,7 +362,7 @@ def compute_portfolio_totals(holdings: list[Holding]) -> PortfolioTotals:
     """Compute portfolio-level aggregate totals from holdings.
 
     Args:
-        holdings: List of Holding models with amount, invested, and gains.
+        holdings: List of Holding models with amount and invested.
 
     Returns:
         PortfolioTotals with aggregated values.

@@ -14,7 +14,9 @@ from niveshpy.models.report import (
     Holding,
     HoldingDisplay,
     HoldingExport,
-    PerformanceDisplay,
+    PerformanceHolding,
+    PerformanceHoldingDisplay,
+    PerformanceHoldingExport,
 )
 
 DAYS_FOR_OLD = 15
@@ -65,8 +67,7 @@ def holdings(
     if _has_date_query(queries):
         output.display_warning(
             "Date filters apply to current value and units but not to invested "
-            "amounts or gains, which always use the full transaction history. "
-            "This will result in incorrect gains being reported."
+            "amounts, which always use the full transaction history."
         )
 
     if len(holdings) == 0:
@@ -102,17 +103,9 @@ def holdings(
             ]
 
             if total:
-                # Full portfolio metrics (XIRR, detailed totals) are
-                # available via 'niveshpy reports performance'.
-                from niveshpy.services.report import compute_portfolio_totals
+                total_value = sum((h.amount for h in holdings), decimal.Decimal("0"))
+                items.append(output.TotalRow(total_value))
 
-                totals = compute_portfolio_totals(holdings)
-                overall_total = output.TotalRow(
-                    totals.total_gains
-                    if totals.total_gains is not None
-                    else totals.total_current_value,
-                )
-                items.append(overall_total)
             output.display_list(
                 cls=HoldingDisplay,
                 items=items,
@@ -190,40 +183,101 @@ def allocation(
 
 
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
+@flags.limit("securities")
+@flags.offset("securities")
 @flags.output("format")
+@click.option(
+    "--total / --no-total",
+    is_flag=True,
+    help="Show overall total row in the report output.",
+    default=True,
+)
 @essentials.command(parent=cli, cls=NiveshPyCommand)
 def performance(
     queries: tuple[str, ...],
+    limit: int,
+    offset: int,
     format: output.OutputFormat,
+    total: bool,
 ):
     """Generate portfolio performance report.
 
-    Shows portfolio-level metrics including total current value, total invested,
-    gains, and annualized returns (XIRR).
+    Shows per-holding performance metrics including current value, invested,
+    gains, and annualized returns (XIRR) for each (account, security) pair.
 
     Optionally, provide text <queries> to filter securities and accounts.
     """
     with output.loading_spinner("Generating performance report..."):
         from niveshpy.services.report import get_performance
 
-        totals, xirr = get_performance(queries)
+        result = get_performance(queries, limit=limit, offset=offset)
 
-    # Convert gains_percentage from percentage (16.67) to fraction (0.1667)
-    # for consistent :.2% formatting with xirr
-    gains_pct = (
-        (totals.gains_percentage / decimal.Decimal("100")).quantize(
-            decimal.Decimal("0.0001")
+    if len(result.holdings) == 0:
+        msg = (
+            "No holdings found.\n"
+            "Make sure you have added transactions for your securities"
+            " and try syncing prices using 'niveshpy prices sync'."
         )
-        if totals.gains_percentage is not None
-        else None
+        output.display_warning(msg)
+        return
+
+    extra_message = (
+        f"Showing first {limit:,} holdings."
+        if len(result.holdings) == limit and offset == 0
+        else (
+            f"Showing holdings {offset + 1:,} to {offset + len(result.holdings):,}."
+            if offset > 0
+            else None
+        )
     )
 
-    display = PerformanceDisplay(
-        total_current_value=totals.total_current_value,
-        total_invested=totals.total_invested,
-        absolute_gains=totals.total_gains,
-        absolute_gains_pct=gains_pct,
-        xirr=xirr,
-    )
+    if format == output.OutputFormat.TABLE:
+        items: list[
+            PerformanceHoldingDisplay | output.SectionBreak | output.TotalRow
+        ] = [PerformanceHoldingDisplay.from_holding(h) for h in result.holdings]
 
-    output.display_list(cls=PerformanceDisplay, items=[display], fmt=format)
+        if total:
+            gains_pct = _compute_gains_pct_fraction(result.totals.gains_percentage)
+            total_row = PerformanceHoldingDisplay(
+                account="",
+                security="Total",
+                current_value=result.totals.total_current_value,
+                invested=result.totals.total_invested,
+                gains=result.totals.total_gains,
+                gains_pct=gains_pct,
+                xirr=result.totals.xirr,
+            )
+            items.append(output.SectionBreak())
+            items.append(total_row)
+
+        output.display_list(
+            cls=PerformanceHoldingDisplay,
+            items=items,
+            fmt=format,
+            extra_message=extra_message,
+        )
+    elif format == output.OutputFormat.CSV:
+        output.display_list(
+            cls=PerformanceHoldingExport,
+            items=[PerformanceHoldingExport.from_holding(h) for h in result.holdings],
+            fmt=format,
+            extra_message=extra_message,
+        )
+    else:
+        output.display_list(
+            cls=PerformanceHolding,
+            items=result.holdings,
+            fmt=format,
+            extra_message=extra_message,
+        )
+
+
+def _compute_gains_pct_fraction(
+    gains_percentage: decimal.Decimal | None,
+) -> decimal.Decimal | None:
+    """Convert gains percentage (e.g. 16.67) to fraction (0.1667) for :.2% formatting."""
+    if gains_percentage is None:
+        return None
+    return (gains_percentage / decimal.Decimal("100")).quantize(
+        decimal.Decimal("0.0001")
+    )
