@@ -106,25 +106,35 @@ def no_color() -> Callable[[FC], FC]:
     )
 
 
-def output(name: str = "output") -> Callable[[FC], FC]:
+def output(
+    name: str = "format", allowed: list[OutputFormat] | None = None
+) -> Callable[[FC], FC]:
     """Common output option for CLI commands."""
-    options = [
-        click.option(
-            "--csv",
-            name,
-            flag_value=OutputFormat.CSV,
-        ),
-        click.option(
-            "--json",
-            name,
-            flag_value=OutputFormat.JSON,
-        ),
-        click.option(
-            "--table",
-            name,
-            flag_value=OutputFormat.TABLE,
-            default=True,
-            hidden=True,
-        ),
-    ]
+    options = []
+    if allowed is None or OutputFormat.CSV in allowed:
+        options.append(
+            click.option(
+                "--csv",
+                name,
+                flag_value=OutputFormat.CSV,
+            )
+        )
+    if allowed is None or OutputFormat.JSON in allowed:
+        options.append(
+            click.option(
+                "--json",
+                name,
+                flag_value=OutputFormat.JSON,
+            )
+        )
+    if allowed is None or OutputFormat.TABLE in allowed:
+        options.append(
+            click.option(
+                "--table",
+                name,
+                flag_value=OutputFormat.TABLE,
+                default=True,
+                hidden=True,
+            )
+        )
     return functools.partial(functools.reduce, lambda x, opt: opt(x), options)

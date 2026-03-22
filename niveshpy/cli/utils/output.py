@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum, auto
 from io import StringIO
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 import click
 from pydantic import BaseModel, RootModel
@@ -21,7 +21,14 @@ from niveshpy.cli.utils import logging
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import NiveshPyError
-from niveshpy.models.output import BaseMessage, Message, ProgressUpdate, Warning
+from niveshpy.models.output import (
+    BaseMessage,
+    Message,
+    ProgressUpdate,
+    Warning,
+    format_datetime,
+    format_decimal,
+)
 
 _console = Console()  # Global console instance for utility functions
 _error_console = Console(stderr=True)  # Console for error messages
@@ -51,39 +58,6 @@ class TotalRow(Generic[TotalType]):
 
     total: TotalType
     description: str = "Total"
-
-
-def _format_datetime(dt: datetime) -> str:
-    """Format a datetime object to a relative time string.
-
-    If the datetime is within 7 days, it shows relative time (e.g., "about 3 hours ago").
-    If older than 7 days, it shows the absolute date (e.g., "on Jan 01, 2023").
-
-    Args:
-        dt (datetime): The datetime object to format.
-
-    Returns:
-        str: A human-readable relative time string.
-
-    """
-    now = datetime.now()
-    delta = now - dt
-    seconds = int(delta.total_seconds())
-    if seconds < 60:
-        return f"about {seconds} seconds ago"
-    elif seconds < 3600:
-        minutes = seconds // 60
-        return f"about {minutes} minutes ago"
-    elif seconds < 86400:
-        hours = seconds // 3600
-        return f"about {hours} hours ago"
-    else:
-        days = seconds // 86400
-        if days < 7:
-            return f"about {days} days ago"
-        else:
-            date = dt.strftime("%d %b %Y")
-            return f"on {date}"
 
 
 def _format_list_or_dict(data: list | dict) -> str:
@@ -129,24 +103,19 @@ def _convert_models_to_rich_table(
             no_wrap=extras.get("no_wrap", False),
         )
 
-    def mapper(data: object, fmt: Callable[[str], str] | None) -> str:
+    def mapper(data: object, fmt: Callable[[Any], str] | None) -> str:
+        if callable(fmt):
+            return fmt(data)
         if data is None:
-            data_str = ""
+            return ""
         elif isinstance(data, datetime):
-            data_str = _format_datetime(data)
+            return format_datetime(data)
         elif isinstance(data, date):
-            data_str = data.strftime("%d %b %Y")
+            return data.strftime("%d %b %Y")
         elif isinstance(data, decimal.Decimal):
-            data_str = f"{data:,}"
+            return format_decimal(data)
         else:
-            data_str = str(data)
-
-        if fmt is None:
-            return data_str
-        elif callable(fmt):
-            return fmt(data_str)
-        else:
-            return data_str
+            return str(data)
 
     for i, item in enumerate(items):
         if isinstance(item, SectionBreak):
@@ -181,9 +150,29 @@ def _convert_models_to_rich_table(
     return table
 
 
-def display_message(*objects: object, console: Console | None = None) -> None:
-    """Display a general message to the console."""
+@contextmanager
+def capture_for_pager(console: Console | None = None) -> Generator[None, None, None]:
+    """Context manager to capture console output for paging if the console is a terminal."""
+    if (console or _console).is_terminal:
+        with (console or _console).capture() as capture:
+            yield
+        click.echo_via_pager(capture.get())
+    else:
+        yield
+
+
+def display(*objects: object, console: Console | None = None) -> None:
+    """Display objects to the console with optional styling."""
     (console or _console).print(*objects)
+
+
+def display_json(data: str, console: Console | None = None) -> None:
+    """Display JSON data to the console with pretty formatting."""
+    (console or _console).print_json(data)
+
+
+display_message = display
+"""Alias to maintain backward compatibility."""
 
 
 def display_success(message: str, console: Console | None = None) -> None:
@@ -260,17 +249,16 @@ def display_list(
         formatted_data = _convert_models_to_rich_table(items, cls.model_fields)
 
     if _console.is_terminal:
-        with _console.capture() as capture:
+        with capture_for_pager():
             if extra_message:
-                _console.print(extra_message)
+                display(extra_message)
             if fmt == OutputFormat.JSON:
-                _console.print_json(str(formatted_data))
+                display_json(str(formatted_data))
             else:
-                _console.print(formatted_data)
-        click.echo_via_pager(capture.get())
+                display(formatted_data)
     else:
         if fmt == OutputFormat.JSON:
-            _console.print_json(str(formatted_data))
+            display_json(str(formatted_data))
         else:
             _console.print(formatted_data, soft_wrap=True)
 
@@ -374,4 +362,4 @@ def handle_niveshpy_message(
     if isinstance(message, Warning):
         display_warning(message, console=console)
     elif isinstance(message, Message):
-        display_message(message, console=console)
+        display(message, console=console)
