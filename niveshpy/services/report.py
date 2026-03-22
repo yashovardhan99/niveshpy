@@ -1,9 +1,10 @@
 """Service for report generation and exporting."""
 
+import datetime
 import decimal
+import heapq
 from collections import defaultdict
-from collections.abc import Sequence
-from typing import Literal
+from typing import Literal, overload
 
 from sqlalchemy import CTE, ColumnElement
 from sqlalchemy.orm import aliased
@@ -26,6 +27,7 @@ from niveshpy.models.report import (
     PerformanceHolding,
     PerformanceResult,
     PortfolioTotals,
+    SummaryResult,
 )
 from niveshpy.models.security import Security
 from niveshpy.models.transaction import Transaction
@@ -175,6 +177,16 @@ def get_performance(
     """
     # Fetch all holdings for portfolio-level metrics, then apply limit/offset for display
     all_holdings = get_holdings(queries, limit=10000, offset=0)
+    if len(all_holdings) == 0:
+        return PerformanceResult(
+            holdings=[],
+            totals=PortfolioTotals(
+                total_current_value=decimal.Decimal("0"),
+                total_invested=decimal.Decimal("0"),
+                total_gains=decimal.Decimal("0"),
+                gains_percentage=None,
+            ),
+        )
     totals = compute_portfolio_totals(all_holdings)
 
     # Apply limit/offset for per-holding display
@@ -227,9 +239,27 @@ def get_performance(
     )
 
 
+@overload
+def get_allocation(
+    queries: tuple[str, ...], group_by: Literal["both"]
+) -> list[Allocation]: ...
+
+
+@overload
+def get_allocation(
+    queries: tuple[str, ...], group_by: Literal["type"]
+) -> list[AllocationByType]: ...
+
+
+@overload
+def get_allocation(
+    queries: tuple[str, ...], group_by: Literal["category"]
+) -> list[AllocationByCategory]: ...
+
+
 def get_allocation(
     queries: tuple[str, ...], group_by: Literal["both", "type", "category"]
-) -> Sequence[Allocation | AllocationByCategory | AllocationByType]:
+) -> list[Allocation] | list[AllocationByCategory] | list[AllocationByType]:
     """Generate allocation report based on provided queries.
 
     Args:
@@ -237,7 +267,7 @@ def get_allocation(
         group_by: Grouping method for allocation report.
 
     Returns:
-        Sequence of Allocation models matching the queries.
+        List of Allocation models matching the queries.
     """
     where_clauses: list[ColumnElement[bool]] = get_filters_from_queries(
         queries, ast.Field.SECURITY, HOLDING_COLUMN_MAPPINGS_TXN
@@ -325,37 +355,37 @@ def get_allocation(
             .order_by(func.sum(cte_holdings.c.holding_value).desc())
         )
         result = session.exec(stm)
-        allocations: list[Allocation | AllocationByCategory | AllocationByType] = []
-        for row in result:
-            if group_by == "both":
-                allocations.append(
-                    Allocation(
-                        security_category=row[0],
-                        security_type=row[1],
-                        date=row[2],
-                        amount=row[3].quantize(decimal.Decimal("0.01")),
-                        allocation=row[4].quantize(decimal.Decimal("0.0001")),
-                    )
+        if group_by == "both":
+            return [
+                Allocation(
+                    security_category=row[0],
+                    security_type=row[1],
+                    date=row[2],
+                    amount=row[3].quantize(decimal.Decimal("0.01")),
+                    allocation=row[4].quantize(decimal.Decimal("0.0001")),
                 )
-            elif group_by == "category":
-                allocations.append(
-                    AllocationByCategory(
-                        security_category=row[0],
-                        date=row[2],
-                        amount=row[3].quantize(decimal.Decimal("0.01")),
-                        allocation=row[4].quantize(decimal.Decimal("0.0001")),
-                    )
+                for row in result
+            ]
+        elif group_by == "category":
+            return [
+                AllocationByCategory(
+                    security_category=row[0],
+                    date=row[2],
+                    amount=row[3].quantize(decimal.Decimal("0.01")),
+                    allocation=row[4].quantize(decimal.Decimal("0.0001")),
                 )
-            else:  # group_by == "type"
-                allocations.append(
-                    AllocationByType(
-                        security_type=row[1],
-                        date=row[2],
-                        amount=row[3].quantize(decimal.Decimal("0.01")),
-                        allocation=row[4].quantize(decimal.Decimal("0.0001")),
-                    )
+                for row in result
+            ]
+        else:  # group_by == "type"
+            return [
+                AllocationByType(
+                    security_type=row[1],
+                    date=row[2],
+                    amount=row[3].quantize(decimal.Decimal("0.01")),
+                    allocation=row[4].quantize(decimal.Decimal("0.0001")),
                 )
-        return allocations
+                for row in result
+            ]
 
 
 def compute_portfolio_totals(holdings: list[Holding]) -> PortfolioTotals:
@@ -396,14 +426,39 @@ def compute_portfolio_totals(holdings: list[Holding]) -> PortfolioTotals:
         total_gains = (known_current - total_invested).quantize(quantize_amt)
 
     gains_percentage: decimal.Decimal | None = (
-        (total_gains / total_invested * 100).quantize(quantize_amt)
+        (total_gains / total_invested).quantize(decimal.Decimal("0.0001"))
         if total_gains is not None and total_invested is not None and total_invested > 0
         else None
     )
+
+    last_update: datetime.date = max(h.date for h in holdings)
 
     return PortfolioTotals(
         total_current_value=total_current_value,
         total_invested=total_invested,
         total_gains=total_gains,
         gains_percentage=gains_percentage,
+        last_updated=last_update,
+    )
+
+
+def get_summary(
+    queries: tuple[str, ...],
+    top_n: int = 5,
+) -> SummaryResult:
+    """Generate portfolio summary combining metrics, top holdings, and allocation."""
+    # Get all holdings and compute totals for summary metrics
+    result = get_performance(queries)
+
+    # Get top N holdings by current value for summary display
+    top_holdings = heapq.nlargest(top_n, result.holdings, key=lambda h: h.current_value)
+
+    # Get allocation by category for summary display (could also do by type or both if desired)
+    allocation = get_allocation(queries, group_by="category")
+
+    return SummaryResult(
+        as_of=result.holdings[0].date if result.holdings else None,
+        metrics=result.totals,  # PortfolioTotals already has everything
+        top_holdings=top_holdings,
+        allocation=allocation,
     )

@@ -2,6 +2,7 @@
 
 import datetime
 import decimal
+from collections.abc import Sequence
 
 from pydantic import BaseModel, Field
 
@@ -133,6 +134,7 @@ class PortfolioTotals(BaseModel):
     total_gains: decimal.Decimal | None
     gains_percentage: decimal.Decimal | None
     xirr: decimal.Decimal | None = None
+    last_updated: datetime.date | None = None
 
 
 # Allocations
@@ -318,6 +320,15 @@ class PerformanceResult(BaseModel):
 
     holdings: list[PerformanceHolding]
     totals: PortfolioTotals
+
+
+class SummaryResult(BaseModel):
+    """Portfolio summary combining metrics, top holdings, and allocation."""
+
+    as_of: datetime.date | None
+    metrics: PortfolioTotals
+    top_holdings: Sequence[PerformanceHolding]
+    allocation: Sequence[AllocationByCategory]
 
 
 class PerformanceHoldingDisplay(PerformanceHoldingBase):

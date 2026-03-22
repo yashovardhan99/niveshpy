@@ -16,6 +16,7 @@ from niveshpy.models.report import (
     AllocationByType,
     Holding,
     PerformanceHolding,
+    SummaryResult,
 )
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
 from niveshpy.models.transaction import Transaction, TransactionType
@@ -24,6 +25,7 @@ from niveshpy.services.report import (
     get_allocation,
     get_holdings,
     get_performance,
+    get_summary,
 )
 
 
@@ -1134,6 +1136,7 @@ class TestComputePortfolioTotals:
         assert result.total_current_value == Decimal("23000.00")
         assert result.total_invested == Decimal("16000.00")
         assert result.total_gains == Decimal("7000.00")
+        assert result.last_updated == datetime.date.today()
 
     def test_none_invested(self):
         """Holdings where invested is None yield None for total_invested and gains."""
@@ -1174,15 +1177,15 @@ class TestComputePortfolioTotals:
         assert result.gains_percentage is None
 
     def test_gains_percentage(self):
-        """Verify correct percentage calculation: (gains / invested) * 100."""
+        """Verify correct fraction calculation: gains / invested."""
         holdings = [
             _make_holding(amount="12000", invested="10000", gains="2000", key="SEC1"),
             _make_holding(amount="5500", invested="5000", gains="500", key="SEC2"),
         ]
         result = compute_portfolio_totals(holdings)
         # total_current = 17500, total_invested = 15000
-        # gains = 2500, percentage = (2500 / 15000) * 100 = 16.67
-        assert result.gains_percentage == Decimal("16.67")
+        # gains = 2500, fraction = 2500 / 15000 = 0.1667
+        assert result.gains_percentage == Decimal("0.1667")
 
 
 class TestGetPerformance:
@@ -1247,20 +1250,25 @@ class TestGetPerformance:
         assert len(icici_results) == 1
         assert icici_results[0].xirr is not None  # Should compute (single purchase)
 
-    def test_no_holdings_raises(
+    def test_no_holdings_returns_empty(
         self,
         session,
         sample_accounts,
         sample_securities,
         sample_prices,
     ):
-        """Raises OperationError when there are no holdings."""
+        """Returns empty PerformanceResult when there are no holdings."""
         with patch("niveshpy.services.report.get_session") as mock_get_session:
             mock_get_session.return_value.__enter__.return_value = session
             mock_get_session.return_value.__exit__.return_value = None
 
-            with pytest.raises(OperationError, match="No holdings available"):
-                get_performance(queries=())
+            result = get_performance(queries=())
+
+        assert result.holdings == []
+        assert result.totals.total_current_value == Decimal("0")
+        assert result.totals.total_invested == Decimal("0")
+        assert result.totals.total_gains == Decimal("0")
+        assert result.totals.gains_percentage is None
 
     def test_xirr_none_when_computation_fails(
         self,
@@ -1314,3 +1322,112 @@ class TestGetPerformance:
             result = get_performance(queries=(), limit=2, offset=0)
 
         assert len(result.holdings) == 2
+
+
+class TestGetSummary:
+    """Tests for get_summary function."""
+
+    def test_basic_summary(
+        self,
+        session,
+        sample_accounts,
+        sample_securities,
+        sample_transactions,
+        sample_prices,
+    ):
+        """Basic summary returns expected structure with populated data."""
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            result = get_summary(queries=())
+
+        assert isinstance(result, SummaryResult)
+        assert result.metrics.total_current_value > 0
+        assert result.metrics.total_invested is not None
+        assert result.metrics.total_invested > 0
+        assert len(result.top_holdings) > 0
+        assert len(result.allocation) > 0
+        assert result.as_of is not None
+
+    def test_top_n_limits_holdings(
+        self,
+        session,
+        sample_accounts,
+        sample_securities,
+        sample_transactions,
+        sample_prices,
+    ):
+        """top_n controls the number of returned top holdings."""
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            result_one = get_summary(queries=(), top_n=1)
+
+        assert len(result_one.top_holdings) == 1
+
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            result_all = get_summary(queries=(), top_n=100)
+
+        # Fixtures produce 3 active holdings (TCS has 0 balance)
+        assert len(result_all.top_holdings) == 3
+
+    def test_top_holdings_sorted_by_value(
+        self,
+        session,
+        sample_accounts,
+        sample_securities,
+        sample_transactions,
+        sample_prices,
+    ):
+        """Top holdings are sorted by current_value descending."""
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            result = get_summary(queries=())
+
+        values = [h.current_value for h in result.top_holdings]
+        assert values == sorted(values, reverse=True)
+
+    def test_empty_portfolio(
+        self,
+        session,
+        sample_accounts,
+        sample_securities,
+        sample_prices,
+    ):
+        """Summary with no transactions yields empty holdings and zero values."""
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            result = get_summary(queries=())
+
+        assert len(result.top_holdings) == 0
+        assert result.metrics.total_current_value == 0
+        assert result.as_of is None
+
+    def test_allocation_included(
+        self,
+        session,
+        sample_accounts,
+        sample_securities,
+        sample_transactions,
+        sample_prices,
+    ):
+        """Allocation entries have security_category attributes."""
+        with patch("niveshpy.services.report.get_session") as mock_get_session:
+            mock_get_session.return_value.__enter__.return_value = session
+            mock_get_session.return_value.__exit__.return_value = None
+
+            result = get_summary(queries=())
+
+        assert len(result.allocation) > 0
+        for entry in result.allocation:
+            assert hasattr(entry, "security_category")
+            assert isinstance(entry.security_category, SecurityCategory)

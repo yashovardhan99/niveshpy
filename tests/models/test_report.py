@@ -23,6 +23,7 @@ from niveshpy.models.report import (
     PerformanceHoldingExport,
     PerformanceResult,
     PortfolioTotals,
+    SummaryResult,
     _compute_holding_gains,
 )
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
@@ -1022,3 +1023,116 @@ class TestPerformanceResultModel:
         result = PerformanceResult(holdings=[], totals=totals)
         assert result.holdings == []
         assert result.totals.total_invested is None
+
+
+class TestPortfolioTotalsLastUpdated:
+    """Tests for PortfolioTotals.last_updated field."""
+
+    def test_portfolio_totals_last_updated(self):
+        """Test creating PortfolioTotals with last_updated set."""
+        totals = PortfolioTotals(
+            total_current_value=Decimal("5000"),
+            total_invested=Decimal("4000"),
+            total_gains=Decimal("1000"),
+            gains_percentage=Decimal("0.25"),
+            last_updated=datetime.date(2026, 3, 22),
+        )
+        assert totals.last_updated == datetime.date(2026, 3, 22)
+
+    def test_portfolio_totals_last_updated_default_none(self):
+        """Test PortfolioTotals defaults last_updated to None."""
+        totals = PortfolioTotals(
+            total_current_value=Decimal("5000"),
+            total_invested=None,
+            total_gains=None,
+            gains_percentage=None,
+        )
+        assert totals.last_updated is None
+
+
+class TestSummaryResultModel:
+    """Tests for SummaryResult model."""
+
+    def test_summary_result_creation(self):
+        """Test creating SummaryResult with all fields populated."""
+        account = Account(id=1, name="Savings", institution="Bank")
+        security = Security(
+            key="MF001",
+            name="Equity Fund",
+            type=SecurityType.MUTUAL_FUND,
+            category=SecurityCategory.EQUITY,
+        )
+        holding = Holding(
+            account=account,
+            security=security,
+            date=datetime.date(2024, 6, 1),
+            units=Decimal("100"),
+            amount=Decimal("1100"),
+            invested=Decimal("1000"),
+        )
+        perf_holding = PerformanceHolding.from_holding(holding, xirr=Decimal("0.12"))
+        totals = PortfolioTotals(
+            total_current_value=Decimal("1100"),
+            total_invested=Decimal("1000"),
+            total_gains=Decimal("100"),
+            gains_percentage=Decimal("0.10"),
+            xirr=Decimal("0.12"),
+        )
+        alloc = AllocationByCategory(
+            date=datetime.date(2024, 6, 1),
+            amount=Decimal("1100"),
+            allocation=Decimal("1.0"),
+            security_category=SecurityCategory.EQUITY,
+        )
+        result = SummaryResult(
+            as_of=datetime.date(2024, 6, 1),
+            metrics=totals,
+            top_holdings=[perf_holding],
+            allocation=[alloc],
+        )
+        assert result.as_of == datetime.date(2024, 6, 1)
+        assert result.metrics.total_current_value == Decimal("1100")
+        assert len(result.top_holdings) == 1
+        assert len(result.allocation) == 1
+
+    def test_summary_result_empty_holdings(self):
+        """Test creating SummaryResult with empty lists and as_of=None."""
+        totals = PortfolioTotals(
+            total_current_value=Decimal("0"),
+            total_invested=None,
+            total_gains=None,
+            gains_percentage=None,
+        )
+        result = SummaryResult(
+            as_of=None,
+            metrics=totals,
+            top_holdings=[],
+            allocation=[],
+        )
+        assert result.as_of is None
+        assert result.top_holdings == []
+        assert result.allocation == []
+
+    def test_summary_result_as_of_date(self):
+        """Test as_of field accepts a date and None."""
+        totals = PortfolioTotals(
+            total_current_value=Decimal("0"),
+            total_invested=None,
+            total_gains=None,
+            gains_percentage=None,
+        )
+        with_date = SummaryResult(
+            as_of=datetime.date(2025, 1, 1),
+            metrics=totals,
+            top_holdings=[],
+            allocation=[],
+        )
+        assert with_date.as_of == datetime.date(2025, 1, 1)
+
+        without_date = SummaryResult(
+            as_of=None,
+            metrics=totals,
+            top_holdings=[],
+            allocation=[],
+        )
+        assert without_date.as_of is None
