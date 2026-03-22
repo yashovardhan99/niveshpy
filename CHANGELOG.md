@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New --cost flag for transactions.
 - New portfolio performance report.
 
+### Changed
+
+- Unified decimal formatting for cleaner UX.
+
 ### Fixed
 
 - Text queries being grouped incorrectly.

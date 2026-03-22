@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum, auto
 from io import StringIO
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 import click
 from pydantic import BaseModel, RootModel
@@ -21,7 +21,13 @@ from niveshpy.cli.utils import logging
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import NiveshPyError
-from niveshpy.models.output import BaseMessage, Message, ProgressUpdate, Warning
+from niveshpy.models.output import (
+    BaseMessage,
+    Message,
+    ProgressUpdate,
+    Warning,
+    format_decimal,
+)
 
 _console = Console()  # Global console instance for utility functions
 _error_console = Console(stderr=True)  # Console for error messages
@@ -129,24 +135,19 @@ def _convert_models_to_rich_table(
             no_wrap=extras.get("no_wrap", False),
         )
 
-    def mapper(data: object, fmt: Callable[[str], str] | None) -> str:
+    def mapper(data: object, fmt: Callable[[Any], str] | None) -> str:
+        if callable(fmt):
+            return fmt(data)
         if data is None:
-            data_str = ""
+            return ""
         elif isinstance(data, datetime):
-            data_str = _format_datetime(data)
+            return _format_datetime(data)
         elif isinstance(data, date):
-            data_str = data.strftime("%d %b %Y")
+            return data.strftime("%d %b %Y")
         elif isinstance(data, decimal.Decimal):
-            data_str = f"{data:,}"
+            return format_decimal(data)
         else:
-            data_str = str(data)
-
-        if fmt is None:
-            return data_str
-        elif callable(fmt):
-            return fmt(data_str)
-        else:
-            return data_str
+            return str(data)
 
     for i, item in enumerate(items):
         if isinstance(item, SectionBreak):

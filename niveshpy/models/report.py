@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from niveshpy.core.query import ast
 from niveshpy.exceptions import OperationError
 from niveshpy.models.account import Account
+from niveshpy.models.output import format_percentage
 from niveshpy.models.security import (
     Security,
     SecurityCategory,
@@ -34,7 +35,7 @@ class HoldingBase(BaseModel):
     units: decimal.Decimal = Field(
         ...,
         json_schema_extra={
-            "style": "green",
+            "style": "dim",
             "justify": "right",
             "order": 4,
             "max_width": 20,
@@ -46,6 +47,7 @@ class HoldingBase(BaseModel):
         json_schema_extra={
             "justify": "right",
             "order": 5,
+            "style": "dim",
             "max_width": 20,
             "no_wrap": True,
         },
@@ -165,7 +167,7 @@ class AllocationBase(BaseModel):
             "order": 5,
             "max_width": 10,
             "no_wrap": True,
-            "formatter": lambda x: f"{decimal.Decimal(x):.2%}",  # type: ignore
+            "formatter": format_percentage,  # type: ignore
         },
     )
 
@@ -210,12 +212,22 @@ class Allocation(AllocationByType, AllocationByCategory):
 class PerformanceHoldingBase(BaseModel):
     """Base model for per-holding performance data."""
 
+    date: datetime.date | None = Field(
+        ...,
+        json_schema_extra={
+            "style": "cyan",
+            "order": 2,
+            "max_width": 14,
+            "no_wrap": True,
+        },
+    )
+
     current_value: decimal.Decimal = Field(
         ...,
+        title="Current Value",
         json_schema_extra={
             "order": 3,
             "justify": "right",
-            "style": "bold",
             "no_wrap": True,
         },
     )
@@ -224,8 +236,8 @@ class PerformanceHoldingBase(BaseModel):
         json_schema_extra={
             "order": 4,
             "justify": "right",
+            "style": "dim",
             "no_wrap": True,
-            "formatter": lambda x: x or "N/A",  # type: ignore
         },
     )
     gains: decimal.Decimal | None = Field(
@@ -233,9 +245,7 @@ class PerformanceHoldingBase(BaseModel):
         json_schema_extra={
             "order": 5,
             "justify": "right",
-            "style": "bold green",
             "no_wrap": True,
-            "formatter": lambda x: x or "N/A",  # type: ignore
         },
     )
     gains_pct: decimal.Decimal | None = Field(
@@ -245,7 +255,7 @@ class PerformanceHoldingBase(BaseModel):
             "order": 6,
             "justify": "right",
             "no_wrap": True,
-            "formatter": lambda x: f"{decimal.Decimal(x):.2%}" if x else "N/A",  # type: ignore
+            "formatter": format_percentage,  # type: ignore
         },
     )
     xirr: decimal.Decimal | None = Field(
@@ -256,7 +266,7 @@ class PerformanceHoldingBase(BaseModel):
             "justify": "right",
             "style": "bold",
             "no_wrap": True,
-            "formatter": lambda x: f"{decimal.Decimal(x):.2%}" if x else "N/A",  # type: ignore
+            "formatter": format_percentage,  # type: ignore
         },
     )
 
@@ -294,6 +304,7 @@ class PerformanceHolding(PerformanceHoldingBase):
         return cls(
             account=holding.account,
             security=holding.security,
+            date=holding.date,
             current_value=holding.amount,
             invested=holding.invested,
             gains=gains,
@@ -313,9 +324,9 @@ class PerformanceHoldingDisplay(PerformanceHoldingBase):
     """Display model for per-holding performance in reports."""
 
     account: str = Field(
-        ..., json_schema_extra={"style": "dim", "order": 1, "max_width": 30}
+        ..., json_schema_extra={"style": "dim", "order": 0, "max_width": 20}
     )
-    security: str = Field(..., json_schema_extra={"order": 2})
+    security: str = Field(..., json_schema_extra={"order": 1})
 
     @classmethod
     def from_holding(cls, holding: PerformanceHolding) -> "PerformanceHoldingDisplay":
@@ -323,6 +334,7 @@ class PerformanceHoldingDisplay(PerformanceHoldingBase):
         return cls(
             account=f"{holding.account.name} ({holding.account.institution})",
             security=f"{holding.security.name} ({holding.security.key})",
+            date=holding.date,
             current_value=holding.current_value,
             invested=holding.invested,
             gains=holding.gains,
@@ -345,6 +357,7 @@ class PerformanceHoldingExport(PerformanceHoldingBase):
         return cls(
             account=holding.account.id,
             security=holding.security.key,
+            date=holding.date,
             current_value=holding.current_value,
             invested=holding.invested,
             gains=holding.gains,

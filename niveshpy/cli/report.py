@@ -239,8 +239,9 @@ def performance(
         if total:
             gains_pct = _compute_gains_pct_fraction(result.totals.gains_percentage)
             total_row = PerformanceHoldingDisplay(
-                account="",
-                security="Total",
+                account="[not dim bold]Total",
+                security="",
+                date=None,
                 current_value=result.totals.total_current_value,
                 invested=result.totals.total_invested,
                 gains=result.totals.total_gains,

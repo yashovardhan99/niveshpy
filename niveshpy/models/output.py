@@ -1,5 +1,7 @@
 """Models for output formatting and display."""
 
+import decimal
+import functools
 from dataclasses import dataclass
 
 
@@ -50,3 +52,24 @@ class ProgressUpdate:
 
 BaseMessage = Message | Warning | ProgressUpdate
 """Union type for all output message models."""
+
+
+def format_decimal(
+    value: decimal.Decimal | None,
+    is_percentage: bool = False,
+    ignore_negative: bool = False,
+) -> str:
+    """Format decimal value as a string with appropriate formatting."""
+    value_str = ""
+    if value is None:
+        return "N/A"
+    if is_percentage:
+        value_str = f"{value:.2%}"
+    else:
+        value_str = f"{value:,}"
+    if not ignore_negative and value < 0:
+        value_str = f"[red]{value_str}"
+    return value_str
+
+
+format_percentage = functools.partial(format_decimal, is_percentage=True)
