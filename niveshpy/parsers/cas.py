@@ -6,6 +6,7 @@ from pathlib import Path
 
 import casparser
 
+from niveshpy.core.logging import logger
 from niveshpy.exceptions import InvalidInputError, OperationError
 from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.models.parser import ParserInfo
@@ -25,6 +26,11 @@ class CASParser:
 
     def __init__(self, file_path: str, password: str | None = None):
         """Initialize the CAS Parser with a file path."""
+        logger.info(
+            "Parsing CAS file: %s (password=%s)",
+            file_path,
+            "***" if password else "none",
+        )
         self.data = casparser.read_cas_pdf(file_path, password)
         if not isinstance(self.data, casparser.CASData):
             raise InvalidInputError(
@@ -53,7 +59,7 @@ class CASParser:
 
     def get_accounts(self) -> list[AccountCreate]:
         """Get the list of folios as accounts from the CAS data."""
-        return [
+        accounts = [
             AccountCreate(
                 name=folio_data.folio,
                 institution=folio_data.amc,
@@ -61,14 +67,18 @@ class CASParser:
             )
             for folio_data in self.data.folios
         ]
+        logger.info("Found %d accounts in CAS", len(accounts))
+        return accounts
 
     def get_securities(self) -> Iterable[SecurityCreate]:
         """Get the list of securities from the CAS data."""
         securities = set()
+        count = 0
         for folio in self.data.folios:
             for scheme in folio.schemes:
                 if scheme.amfi not in securities:
                     securities.add(scheme.amfi)
+                    count += 1
                     yield SecurityCreate(
                         key=scheme.amfi,
                         name=scheme.scheme,
@@ -78,12 +88,15 @@ class CASParser:
                         else SecurityCategory.OTHER,
                         properties={"source": "cas", "isin": scheme.isin},
                     )
+        logger.info("Found %d unique securities in CAS", count)
 
     def get_transactions(
         self, accounts: Iterable[AccountPublic]
     ) -> Iterable[TransactionCreate]:
         """Get the list of transactions from the CAS data."""
         accounts_map = {(acc.name, acc.institution): acc.id for acc in accounts}
+        count = 0
+        skipped = 0
         for folio in self.data.folios:
             account_id = accounts_map.get((folio.folio, folio.amc))
             if account_id is None:
@@ -108,6 +121,7 @@ class CASParser:
                     ):
                         txn_type = TransactionType.SALE
                     else:
+                        skipped += 1
                         continue  # Skip unknown transaction types
 
                     txn = TransactionCreate(
@@ -120,7 +134,11 @@ class CASParser:
                         account_id=account_id,
                         properties={"source": "cas", "original_type": transaction.type},
                     )
+                    count += 1
                     yield txn
+        if skipped:
+            logger.warning("Skipped %d transactions with unknown types", skipped)
+        logger.info("Found %d transactions in CAS", count)
 
 
 class CASParserFactory:

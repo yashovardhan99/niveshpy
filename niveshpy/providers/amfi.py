@@ -6,6 +6,7 @@ from collections.abc import Iterable
 
 import requests
 
+from niveshpy.core.logging import logger
 from niveshpy.exceptions import (
     NetworkError,
     OperationError,
@@ -83,6 +84,10 @@ class AMFIProvider:
             data = response.json()
 
             price_data_list = data.get("data", [])
+            if not price_data_list:
+                logger.warning(
+                    "AMFI returned empty price data for security %s", security.key
+                )
 
             for item in price_data_list:
                 try:
@@ -126,12 +131,18 @@ class AMFIProvider:
         amfi_code = self._extract_amfi_code(security)
 
         url = f"{self.BASE_URL}/{amfi_code}/latest"
+        logger.info("Fetching latest price from AMFI for security %s", security.key)
+        logger.debug("AMFI request URL: %s", url)
         response = self.session.get(url=url)
 
         price_data_iter = iter(self._extract_price_data(response, security))
 
         try:
-            return next(price_data_iter)
+            price = next(price_data_iter)
+            logger.info(
+                "Fetched latest price for security %s: %s", security.key, price.close
+            )
+            return price
 
         except StopIteration:
             exc = ResourceNotFoundError("Security", security.key)
@@ -162,11 +173,20 @@ class AMFIProvider:
             "startDate": start_date.strftime("%Y-%m-%d"),
             "endDate": end_date.strftime("%Y-%m-%d"),
         }
+        logger.info(
+            "Fetching historical prices from AMFI for security %s (%s to %s)",
+            security.key,
+            start_date,
+            end_date,
+        )
+        logger.debug("AMFI request URL: %s, params: %s", url, payload)
         response = self.session.get(url=url, params=payload)
 
-        price_data_iter = self._extract_price_data(response, security)
-
-        yield from price_data_iter
+        count = 0
+        for price in self._extract_price_data(response, security):
+            count += 1
+            yield price
+        logger.info("Fetched %d historical prices for security %s", count, security.key)
 
 
 class AMFIProviderFactory:

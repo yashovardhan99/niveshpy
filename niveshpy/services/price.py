@@ -394,8 +394,10 @@ class PriceService:
                     )
                     break  # Try next provider
                 except NetworkError:
-                    logger.info(
-                        f"Network error fetching prices from provider {provider_info.name} for security {security.key}",
+                    logger.warning(
+                        "Network error fetching prices from provider %s for security %s",
+                        provider_info.name,
+                        security.key,
                         exc_info=True,
                     )
                     continue  # Retry with same provider

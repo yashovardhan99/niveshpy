@@ -9,6 +9,7 @@ import click
 
 from niveshpy.cli.utils import essentials, flags, output
 from niveshpy.cli.utils.overrides import NiveshPyCommand
+from niveshpy.core.logging import logger
 from niveshpy.core.query import tokens
 from niveshpy.core.query.tokenizer import QueryLexer
 from niveshpy.models.report import (
@@ -59,6 +60,7 @@ def holdings(
 
     Optionally, provide text <queries> to filter securities, accounts, and dates.
     """
+    logger.debug("Running holdings command with %d queries", len(queries))
     # Generate report
     with output.loading_spinner("Generating holdings report..."):
         from niveshpy.services.report import get_holdings
@@ -164,6 +166,11 @@ def allocation(
 
     Optionally, provide text <queries> to filter securities, accounts, and dates.
     """
+    logger.debug(
+        "Running allocation command with %d queries, group_by=%s",
+        len(queries),
+        group_by,
+    )
     # Generate report
     with output.loading_spinner("Generating allocation report..."):
         from niveshpy.services.report import get_allocation
@@ -209,6 +216,7 @@ def performance(
 
     Optionally, provide text <queries> to filter securities and accounts.
     """
+    logger.debug("Running performance command with %d queries", len(queries))
     with output.loading_spinner("Generating performance report..."):
         from niveshpy.services.report import get_performance
 
@@ -289,6 +297,7 @@ def summary(
 
     Optionally, provide text <queries> to filter securities and accounts.
     """
+    logger.debug("Running summary command with %d queries", len(queries))
     with output.loading_spinner("Generating portfolio summary..."):
         from niveshpy.models.output import format_decimal, format_percentage
         from niveshpy.services.report import get_summary
