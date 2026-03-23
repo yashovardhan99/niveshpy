@@ -83,7 +83,7 @@ class AccountService:
         with get_session() as session:
             existing_account = session.exec(query).first()
             if existing_account is not None:
-                logger.debug("Account already exists: %s", existing_account)
+                logger.info("Account already exists: %s", existing_account)
                 return InsertResult(MergeAction.NOTHING, existing_account)
 
             # Otherwise, insert new account

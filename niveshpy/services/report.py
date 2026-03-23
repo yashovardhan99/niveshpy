@@ -11,6 +11,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import col, func, literal, select
 from sqlmodel.sql.expression import SelectOfScalar
 
+from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import get_filters_from_queries
 from niveshpy.database import get_session
@@ -45,6 +46,7 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
     Returns:
         List of Holding models matching the queries.
     """
+    logger.info("Computing holdings for %d query filter(s)", len(queries))
     # Validate inputs
     if limit < 1:
         raise InvalidInputError(limit, "Limit must be positive.")
@@ -153,6 +155,7 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
                 )
             )
 
+    logger.info("Found %d holdings", len(holdings))
     return holdings
 
 
@@ -175,6 +178,7 @@ def get_performance(
     Returns:
         PerformanceResult with holdings, totals, and portfolio_xirr.
     """
+    logger.info("Computing performance metrics")
     # Fetch all holdings for portfolio-level metrics, then apply limit/offset for display
     all_holdings = get_holdings(queries, limit=10000, offset=0)
     if len(all_holdings) == 0:
@@ -228,11 +232,13 @@ def get_performance(
         holdings.append(PerformanceHolding.from_holding(h, holding_xirr))
 
     # Compute portfolio-wide XIRR
+    logger.debug("Computing XIRR with %d cash flows", len(transactions))
     try:
         totals.xirr = compute_xirr(list(transactions), totals.total_current_value)
     except OperationError:
         pass
 
+    logger.info("Performance computed: %d holdings", len(holdings))
     return PerformanceResult(
         holdings=holdings,
         totals=totals,
@@ -269,6 +275,7 @@ def get_allocation(
     Returns:
         List of Allocation models matching the queries.
     """
+    logger.info("Computing allocation grouped by %s", group_by)
     where_clauses: list[ColumnElement[bool]] = get_filters_from_queries(
         queries, ast.Field.SECURITY, HOLDING_COLUMN_MAPPINGS_TXN
     )
@@ -400,6 +407,7 @@ def compute_portfolio_totals(holdings: list[Holding]) -> PortfolioTotals:
     Raises:
         OperationError: If no holdings are provided.
     """
+    logger.debug("Computing portfolio totals for %d holdings", len(holdings))
     if not holdings:
         raise OperationError("No holdings available for portfolio totals")
 
@@ -433,13 +441,19 @@ def compute_portfolio_totals(holdings: list[Holding]) -> PortfolioTotals:
 
     last_update: datetime.date = max(h.date for h in holdings)
 
-    return PortfolioTotals(
+    totals = PortfolioTotals(
         total_current_value=total_current_value,
         total_invested=total_invested,
         total_gains=total_gains,
         gains_percentage=gains_percentage,
         last_updated=last_update,
     )
+    logger.debug(
+        "Portfolio totals: invested=%s, current=%s",
+        totals.total_invested,
+        totals.total_current_value,
+    )
+    return totals
 
 
 def get_summary(
@@ -447,6 +461,7 @@ def get_summary(
     top_n: int = 5,
 ) -> SummaryResult:
     """Generate portfolio summary combining metrics, top holdings, and allocation."""
+    logger.info("Generating portfolio summary (top_n=%d)", top_n)
     # Get all holdings and compute totals for summary metrics
     result = get_performance(queries)
 

@@ -8,6 +8,7 @@ from dataclasses import replace
 from sqlmodel import column, func
 from sqlmodel.sql.expression import ColumnClause, ColumnElement, or_
 
+from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.ast import Field, FilterNode, FilterValue, Operator
 from niveshpy.core.query.parser import QueryParser
@@ -181,6 +182,10 @@ def get_filters_from_queries(
     except QuerySyntaxError as e:
         e.add_note(f"Error was reported on input: {e.input_value}")
         raise QuerySyntaxError(" ".join(queries), cause=e.cause) from e
+
+    logger.debug(
+        "Query parsed: %d filter(s) from %d queries", len(filters), len(queries)
+    )
 
     # Regex expressions for text search
     text_expressions: list[ColumnElement[bool]] = []
