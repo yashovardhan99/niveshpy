@@ -1,6 +1,5 @@
 """Utility functions for styling CLI output."""
 
-import csv
 import decimal
 from collections.abc import Callable, Generator, MutableMapping, Sequence
 from contextlib import contextmanager
@@ -8,16 +7,13 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum, auto
 from io import StringIO
-from typing import Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-import click
 from pydantic import BaseModel, RootModel
-from pydantic.fields import FieldInfo
-from rich import box, progress
+from rich import box
 from rich.console import Console
 from rich.table import Table
 
-from niveshpy.cli.utils import logging
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import NiveshPyError
@@ -29,6 +25,11 @@ from niveshpy.models.output import (
     format_datetime,
     format_decimal,
 )
+
+if TYPE_CHECKING:
+    from pydantic.fields import FieldInfo
+    from rich import progress
+
 
 _console = Console()  # Global console instance for utility functions
 _error_console = Console(stderr=True)  # Console for error messages
@@ -154,6 +155,8 @@ def _convert_models_to_rich_table(
 def capture_for_pager(console: Console | None = None) -> Generator[None, None, None]:
     """Context manager to capture console output for paging if the console is a terminal."""
     if (console or _console).is_terminal:
+        import click
+
         with (console or _console).capture() as capture:
             yield
         click.echo_via_pager(capture.get())
@@ -233,6 +236,8 @@ def display_list(
     if fmt == OutputFormat.JSON:
         formatted_data = root_model.model_dump_json(indent=4)
     elif fmt == OutputFormat.CSV:
+        import csv
+
         headers = sorted(
             cls.model_fields.keys(),
             key=lambda x: (cls.model_fields[x].json_schema_extra or {}).get("order", 0),  # type: ignore
@@ -277,6 +282,8 @@ def ask_password(prompt: str = "Enter password: ") -> str:
 
 def get_progress_bar() -> progress.Progress:
     """Create and return a Rich Progress bar instance for displaying progress."""
+    from rich import progress
+
     return progress.Progress(
         progress.TextColumn("[progress.description]{task.description}"),
         progress.SpinnerColumn(),
@@ -324,6 +331,8 @@ def initialize_app_state(state: AppState) -> None:
     Args:
         state (AppState): The application state object to initialize.
     """
+    from niveshpy.cli.utils import logging
+
     if not state.no_input:
         # If no_input is not set, determine interactivity from console
         state.no_input = not _console.is_interactive

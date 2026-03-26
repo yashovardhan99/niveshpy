@@ -6,19 +6,10 @@ from collections.abc import MutableMapping
 
 import click
 import click.shell_completion
-import rich
-import rich.progress
 
-import niveshpy.models.output
 from niveshpy.cli.utils import essentials, flags, output, overrides
-from niveshpy.core import providers as provider_registry
 from niveshpy.core.app import AppState
 from niveshpy.exceptions import InvalidInputError
-from niveshpy.models.price import (
-    PriceDisplay,
-    PricePublic,
-    PricePublicWithRelations,
-)
 from niveshpy.services.result import MergeAction
 
 
@@ -31,6 +22,8 @@ class ProviderType(click.ParamType):
         self, ctx: click.Context, param: click.Parameter, incomplete: str
     ):
         """Provide shell completion for provider names."""
+        from niveshpy.core import providers as provider_registry
+
         if provider_registry.is_empty():
             provider_registry.discover_installed_providers()
         return [
@@ -72,6 +65,12 @@ def list_prices(
 
     See https://yashovardhan99.github.io/niveshpy/cli/prices for example usage.
     """
+    from niveshpy.models.price import (
+        PriceDisplay,
+        PricePublic,
+        PricePublicWithRelations,
+    )
+
     state = ctx.ensure_object(AppState)
     with output.loading_spinner("Loading prices..."):
         result = state.app.price.list_prices(
@@ -165,6 +164,10 @@ def sync_prices(
 
     See https://yashovardhan99.github.io/niveshpy/cli/prices for example usage.
     """
+    import rich.progress
+
+    from niveshpy.models.output import ProgressUpdate
+
     state = ctx.ensure_object(AppState)
 
     progress_bar = output.get_progress_bar()
@@ -180,7 +183,7 @@ def sync_prices(
         for message in state.app.price.sync_prices(
             queries=queries, force=force, provider_key=provider
         ):
-            if isinstance(message, niveshpy.models.output.ProgressUpdate):
+            if isinstance(message, ProgressUpdate):
                 output.update_progress_bar(progress_bar, progress_tasks, message)
             else:
                 output.handle_niveshpy_message(message, console=progress_bar.console)

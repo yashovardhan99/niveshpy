@@ -2,13 +2,16 @@
 
 import functools
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import click
 
-from niveshpy.cli.utils.output import OutputFormat
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
+
+if TYPE_CHECKING:
+    from niveshpy.cli.utils.output import OutputFormat
+
 
 _AnyCallable = Callable[..., Any]
 FC = TypeVar("FC", bound="_AnyCallable | click.Command")
@@ -110,6 +113,8 @@ def output(
     name: str = "format", allowed: list[OutputFormat] | None = None
 ) -> Callable[[FC], FC]:
     """Common output option for CLI commands."""
+    from niveshpy.cli.utils.output import OutputFormat
+
     options = []
     if allowed is None or OutputFormat.CSV in allowed:
         options.append(

@@ -12,15 +12,6 @@ from niveshpy.cli.utils.overrides import NiveshPyCommand
 from niveshpy.core.logging import logger
 from niveshpy.core.query import tokens
 from niveshpy.core.query.tokenizer import QueryLexer
-from niveshpy.models.report import (
-    Holding,
-    HoldingDisplay,
-    HoldingExport,
-    PerformanceHolding,
-    PerformanceHoldingDisplay,
-    PerformanceHoldingExport,
-)
-from niveshpy.models.security import category_format_map
 
 DAYS_FOR_OLD = 15
 """Number of days after which holdings are considered old."""
@@ -61,6 +52,12 @@ def holdings(
     Optionally, provide text <queries> to filter securities, accounts, and dates.
     """
     logger.debug("Running holdings command with %d queries", len(queries))
+    from niveshpy.models.report import (
+        Holding,
+        HoldingDisplay,
+        HoldingExport,
+    )
+
     # Generate report
     with output.loading_spinner("Generating holdings report..."):
         from niveshpy.services.report import get_holdings
@@ -216,6 +213,12 @@ def performance(
 
     Optionally, provide text <queries> to filter securities and accounts.
     """
+    from niveshpy.models.report import (
+        PerformanceHolding,
+        PerformanceHoldingDisplay,
+        PerformanceHoldingExport,
+    )
+
     logger.debug("Running performance command with %d queries", len(queries))
     with output.loading_spinner("Generating performance report..."):
         from niveshpy.services.report import get_performance
@@ -328,6 +331,8 @@ def summary(
             from rich.padding import Padding
             from rich.panel import Panel
             from rich.table import Table
+
+            from niveshpy.models.security import category_format_map
 
             # Metrics Section
             metrics = Table(show_header=False, box=box.SIMPLE)
