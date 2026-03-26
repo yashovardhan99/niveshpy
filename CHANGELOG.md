@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Unified decimal formatting for cleaner UX.
+- Standardized logging with level guidelines and consistent coverage across all modules.
+- Expanded test suite — added coverage for CAS parser, plugin system, CLI commands, and exception hierarchy.
 
 ### Fixed
 
