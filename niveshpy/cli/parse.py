@@ -13,6 +13,7 @@ from niveshpy.cli.utils import output as output
 from niveshpy.core import parsers as parser_registry
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
+from niveshpy.exceptions import ResourceNotFoundError
 
 
 class ParserType(click.ParamType):
@@ -71,8 +72,7 @@ def parse(
         parser_factory = parser_registry.get_parser(parser_key)
 
     if parser_factory is None:
-        logger.error(f"Parser with key '{parser_key}' not found.")
-        ctx.exit(1)
+        raise ResourceNotFoundError("parser", parser_key)
 
     parser_info = parser_factory.get_parser_info()
 

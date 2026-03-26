@@ -184,8 +184,8 @@ class TestParsingService:
         assert len(session.exec(select(Security)).all()) == 0
         assert len(session.exec(select(Transaction)).all()) == 0
 
-    def test_parse_twice_updates_accounts(self, session, mock_parser):
-        """Test that parsing same accounts twice updates them instead of duplicating."""
+    def test_parse_twice_no_updates_accounts(self, session, mock_parser):
+        """Test that parsing same accounts twice does not modify them."""
         with patch("niveshpy.services.parsing.get_session") as mock_get_session:
             mock_get_session.return_value.__enter__.return_value = session
             mock_get_session.return_value.__exit__.return_value = None
@@ -214,10 +214,10 @@ class TestParsingService:
         # Should still have only 2 accounts (updated, not duplicated)
         accounts = session.exec(select(Account)).all()
         assert len(accounts) == 2
-        assert all(acc.properties.get("updated") is True for acc in accounts)
+        assert all("updated" not in acc.properties for acc in accounts)
 
-    def test_parse_twice_updates_securities(self, session, mock_parser):
-        """Test that parsing same securities twice updates them instead of duplicating."""
+    def test_parse_twice_no_updates_securities(self, session, mock_parser):
+        """Test that parsing same securities twice does not modify them."""
         with patch("niveshpy.services.parsing.get_session") as mock_get_session:
             mock_get_session.return_value.__enter__.return_value = session
             mock_get_session.return_value.__exit__.return_value = None
@@ -250,8 +250,8 @@ class TestParsingService:
         # Should still have only 2 securities with updated names
         securities = session.exec(select(Security)).all()
         assert len(securities) == 2
-        assert securities[0].name == "Updated Security 1"
-        assert securities[1].name == "Updated Security 2"
+        assert securities[0].name == "Test Security 1"
+        assert securities[1].name == "Test Security 2"
 
     def test_parse_twice_replaces_transactions_in_date_range(self, session):
         """Test that re-parsing replaces transactions in the same date range."""

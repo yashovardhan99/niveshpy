@@ -1,16 +1,23 @@
 """CLI commands for managing accounts."""
 
+from collections.abc import Sequence
+
 import click
 import InquirerPy
 import InquirerPy.inquirer
 import InquirerPy.validator
+from InquirerPy.base.control import Choice
 
 from niveshpy.cli.utils import essentials, flags, output
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
+from niveshpy.exceptions import (
+    OperationError,
+    ResourceNotFoundError,
+)
 from niveshpy.models.account import AccountPublic
-from niveshpy.services.result import MergeAction, ResolutionStatus
+from niveshpy.services.result import MergeAction
 
 
 @essentials.group()
@@ -169,49 +176,18 @@ def delete(
 
     inquirer_style = InquirerPy.get_style({}, style_override=state.no_color)
 
-    resolution = state.app.account.resolve_account_id(
+    candidates: Sequence[AccountPublic] = state.app.account.resolve_account_id(
         queries, limit, allow_ambiguous=not state.no_input
     )
 
-    if resolution.status == ResolutionStatus.NOT_FOUND:
-        output.display_error(
-            "No accounts found matching the provided query. If running in non-interactive mode, ensure the query matches an account ID exactly."
-        )
-        ctx.exit(1)
-    elif resolution.status == ResolutionStatus.EXACT:
-        account = resolution.exact
-        if account is None:
-            logger.error(
-                "Account resolution failed unexpectedly. Please report this bug."
-            )
-            logger.debug("Resolution object: %s", resolution)
-            ctx.exit(1)
+    account: AccountPublic
 
-        if dry_run or not force:
-            output.display_message("The following account will be deleted: ", account)
-            if (
-                not dry_run
-                and not InquirerPy.inquirer.confirm(
-                    "Are you sure you want to delete this account?",
-                    default=False,
-                    style=inquirer_style,
-                ).execute()
-            ):
-                logger.info("Account deletion aborted by user.")
-                ctx.abort()
-
-    elif resolution.status == ResolutionStatus.AMBIGUOUS:
-        if state.no_input or not resolution.candidates:
-            output.display_error(
-                "The provided query is ambiguous and may match multiple accounts. Please refine your query."
-            )
-            ctx.exit(1)
-
-        choices = [
-            InquirerPy.base.control.Choice(
-                acc.id, name=f"[{acc.id}] {acc.name} ({acc.institution})"
-            )
-            for acc in resolution.candidates
+    if not candidates:
+        raise ResourceNotFoundError("account", " ".join(queries))
+    elif len(candidates) > 1:
+        choices: list[Choice] = [
+            Choice(acc.id, name=f"[{acc.id}] {acc.name} ({acc.institution})")
+            for acc in candidates
         ]
         account_id = InquirerPy.inquirer.fuzzy(
             message="Multiple accounts found. Select one to delete:",
@@ -220,28 +196,21 @@ def delete(
             style=inquirer_style,
         ).execute()
 
-        account = state.app.account.resolve_account_id(
-            (str(account_id),), 1, False
-        ).exact
-        if account is None:
-            logger.error(
-                "Selected account could not be found. It may have been deleted already."
-            )
-            logger.debug("Resolution object: %s", resolution)
-            ctx.exit(1)
-
-        if not force:
-            output.display_message("You have selected the following account:", account)
-            if (
-                not dry_run
-                and not InquirerPy.inquirer.confirm(
-                    "Are you sure you want to delete this account?",
-                    default=False,
-                    style=inquirer_style,
-                ).execute()
-            ):
-                logger.info("Account deletion aborted by user.")
-                ctx.abort()
+        account = state.app.account.resolve_account_id((str(account_id),), 1, False)[0]
+    else:
+        account = candidates[0]
+    if dry_run or not force:
+        output.display_message("The following account will be deleted: ", account)
+        if (
+            not dry_run
+            and not InquirerPy.inquirer.confirm(
+                "Are you sure you want to delete this account?",
+                default=False,
+                style=inquirer_style,
+            ).execute()
+        ):
+            logger.info("Account deletion aborted by user.")
+            ctx.abort()
 
     if dry_run:
         output.display_message("Dry Run: No changes were made.")
@@ -252,11 +221,8 @@ def delete(
         if deleted:
             output.display_success(f"Account ID {account.id} was deleted successfully.")
         else:
-            logger.error(
-                "Failed to delete account %s. It may have already been deleted.",
-                account.id,
-            )
-            logger.debug("Resolution object: %s", resolution)
+            msg = f"Account ID {account.id} could not be deleted."
+            raise OperationError(msg)
 
 
 cli.add_command(show)

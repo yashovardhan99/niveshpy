@@ -1,5 +1,6 @@
 """CLI commands for managing securities."""
 
+from collections.abc import Sequence
 from textwrap import dedent
 
 import click
@@ -11,12 +12,13 @@ from niveshpy.cli.utils import essentials, flags, output
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
+from niveshpy.exceptions import InvalidInputError, OperationError, ResourceNotFoundError
 from niveshpy.models.security import (
     Security,
     SecurityCategory,
     SecurityType,
 )
-from niveshpy.services.result import MergeAction, ResolutionStatus
+from niveshpy.services.result import MergeAction
 
 
 @essentials.group()
@@ -110,10 +112,10 @@ def add(
     if state.no_input:
         # Non-interactive mode: all arguments must be provided
         if not (default_key and default_name and default_category and default_type):
-            output.display_error(
-                "When running in non-interactive mode, all arguments for adding a security must be provided."
+            raise InvalidInputError(
+                (default_key, default_name, default_category, default_type),
+                "When running in non-interactive mode, all arguments for adding a security must be provided.",
             )
-            ctx.exit(1)
 
         result = state.app.security.add_security(
             default_key.strip(),
@@ -230,47 +232,17 @@ def delete(
 
     inquirer_style = get_style({}, style_override=state.no_color)
 
-    resolution = state.app.security.resolve_security_key(
+    candidates: Sequence[Security] = state.app.security.resolve_security_key(
         queries, limit, allow_ambiguous=not state.no_input
     )
 
-    if resolution.status == ResolutionStatus.NOT_FOUND:
-        output.display_error(
-            "No securities found matching the provided query. If running in non-interactive mode, ensure the query matches a security key exactly."
-        )
-        ctx.exit(1)
-    elif resolution.status == ResolutionStatus.EXACT:
-        security = resolution.exact
-        if security is None:
-            logger.error(
-                "Security resolution failed unexpectedly. Please report this bug."
-            )
-            logger.debug("Resolution object: %s", resolution)
-            ctx.exit(1)
+    security: Security
 
-        if dry_run or not force:
-            output.display_message("The following security will be deleted: ", security)
-            if (
-                not dry_run
-                and not inquirer.confirm(
-                    "Are you sure you want to delete this security?",
-                    default=False,
-                    style=inquirer_style,
-                ).execute()
-            ):
-                logger.info("Security deletion aborted by user.")
-                ctx.abort()
-
-    elif resolution.status == ResolutionStatus.AMBIGUOUS:
-        if state.no_input or not resolution.candidates:
-            output.display_error(
-                "The provided query is ambiguous and may match multiple securities. Please refine your query."
-            )
-            ctx.exit(1)
-
-        choices = [
-            Choice(sec.key, name=f"{sec.key} - {sec.name}")
-            for sec in resolution.candidates
+    if not candidates:
+        raise ResourceNotFoundError("security", " ".join(queries))
+    elif len(candidates) > 1:
+        choices: list[Choice] = [
+            Choice(sec.key, name=f"{sec.key} - {sec.name}") for sec in candidates
         ]
         security_key = inquirer.fuzzy(
             message="Multiple securities found. Select one to delete:",
@@ -278,31 +250,22 @@ def delete(
             validate=EmptyInputValidator(),
             style=inquirer_style,
         ).execute()
+        security = state.app.security.resolve_security_key((security_key,), 1, False)[0]
+    else:
+        security = candidates[0]
 
-        security = state.app.security.resolve_security_key(
-            (security_key,), 1, False
-        ).exact
-        if security is None:
-            logger.error(
-                "Selected security could not be found. It may have been deleted already."
-            )
-            logger.debug("Resolution object: %s", resolution)
-            ctx.exit(1)
-
-        if not force:
-            output.display_message(
-                "You have selected the following security:", security
-            )
-            if (
-                not dry_run
-                and not inquirer.confirm(
-                    "Are you sure you want to delete this security?",
-                    default=False,
-                    style=inquirer_style,
-                ).execute()
-            ):
-                logger.info("Security deletion aborted by user.")
-                ctx.abort()
+    if dry_run or not force:
+        output.display_message("You have selected the following security:", security)
+        if (
+            not dry_run
+            and not inquirer.confirm(
+                "Are you sure you want to delete this security?",
+                default=False,
+                style=inquirer_style,
+            ).execute()
+        ):
+            logger.info("Security deletion aborted by user.")
+            ctx.abort()
 
     if dry_run:
         output.display_message("Dry Run: No changes were made.")
@@ -315,11 +278,8 @@ def delete(
                 f"Security '{security.key}' was deleted successfully.",
             )
         else:
-            logger.error(
-                "Failed to delete security %s. It may have already been deleted.",
-                security.key,
-            )
-            logger.debug("Resolution object: %s", resolution)
+            msg = f"Security '{security.key}' could not be deleted."
+            raise OperationError(msg)
 
 
 cli.add_command(show)

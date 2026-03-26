@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from niveshpy.core.logging import logger
 from niveshpy.database import initialize as initialize_database
 from niveshpy.models.parser import Parser
 from niveshpy.services.account import AccountService
@@ -17,11 +18,13 @@ class Application:
 
     def __init__(self) -> None:
         """Initialize the application with its services."""
+        logger.info("Initializing application")
         initialize_database()
         self._security: SecurityService | None = None
         self._account: AccountService | None = None
         self._transaction: TransactionService | None = None
         self._price: PriceService | None = None
+        logger.info("Application initialized")
 
     @property
     def security(self) -> SecurityService:

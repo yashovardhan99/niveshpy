@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from pydantic import RootModel
 from sqlalchemy.orm import aliased
-from sqlmodel import delete, func, insert, select, update
+from sqlmodel import col, delete, func, insert, select, update
 
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.logging import logger
@@ -71,7 +71,9 @@ class PriceService:
                 # If no date filter, return only the latest price per security
                 row_num = (
                     func.row_number()
-                    .over(partition_by=Price.security_key, order_by=Price.date.desc())  # type: ignore[attr-defined]
+                    .over(
+                        partition_by=Price.security_key, order_by=col(Price.date).desc()
+                    )
                     .label("row_num")
                 )
                 cte = (
@@ -81,9 +83,18 @@ class PriceService:
                     .cte("cte_1")
                 )
                 aliased_price = aliased(Price, cte)
-                query = select(aliased_price).where(cte.c.row_num == 1)
+                query = (
+                    select(aliased_price)
+                    .where(cte.c.row_num == 1)
+                    .order_by(col(aliased_price.security_key))
+                )
             else:
-                query = select(Price).join(Security).where(*where_clause)
+                query = (
+                    select(Price)
+                    .join(Security)
+                    .where(*where_clause)
+                    .order_by(col(Price.security_key), col(Price.date).desc())
+                )
             prices = session.exec(query.offset(offset).limit(limit)).all()
             return (
                 RootModel[Sequence[PricePublicWithRelations]]
@@ -294,9 +305,9 @@ class PriceService:
         with get_session() as session:
             # Delete existing prices in the range first
             delete_stmt = delete(Price).where(
-                Price.security_key == security_key,  # type: ignore
-                Price.date >= start_date,  # type: ignore
-                Price.date <= end_date,  # type: ignore
+                col(Price.security_key) == security_key,
+                col(Price.date) >= start_date,
+                col(Price.date) <= end_date,
             )
             session.exec(delete_stmt)
 
@@ -383,8 +394,10 @@ class PriceService:
                     )
                     break  # Try next provider
                 except NetworkError:
-                    logger.info(
-                        f"Network error fetching prices from provider {provider_info.name} for security {security.key}",
+                    logger.warning(
+                        "Network error fetching prices from provider %s for security %s",
+                        provider_info.name,
+                        security.key,
                         exc_info=True,
                     )
                     continue  # Retry with same provider
@@ -531,7 +544,7 @@ class PriceService:
             with get_session() as session:
                 update_stmt = (
                     update(Security)
-                    .where(Security.key == security.key)  # type: ignore
+                    .where(col(Security.key) == security.key)
                     .values(properties=security.properties)
                 )
                 session.exec(update_stmt)

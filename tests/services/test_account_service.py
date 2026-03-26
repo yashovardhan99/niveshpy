@@ -1,13 +1,14 @@
 """Tests for AccountService."""
 
+from collections.abc import Sequence
 from unittest.mock import patch
 
 import pytest
 
-from niveshpy.exceptions import InvalidInputError
+from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
 from niveshpy.models.account import Account, AccountPublic
 from niveshpy.services.account import AccountService
-from niveshpy.services.result import InsertResult, MergeAction, ResolutionStatus
+from niveshpy.services.result import InsertResult, MergeAction
 
 
 @pytest.fixture
@@ -279,188 +280,165 @@ class TestResolveAccountId:
     """Tests for resolve_account_id method."""
 
     def test_resolve_empty_queries_ambiguous_allowed(
-        self, account_service, sample_accounts
+        self, account_service: AccountService, sample_accounts: list[Account]
     ):
         """Test resolving with empty queries when ambiguous is allowed."""
-        resolution = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=(), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.AMBIGUOUS
-        assert resolution.exact is None
-        assert resolution.candidates is not None
-        assert len(resolution.candidates) == 5
-        assert resolution.queries == ()
+        assert len(accounts) == 5
+        assert all(isinstance(acc, AccountPublic) for acc in accounts)
+        for i in range(5):
+            assert accounts[i].id == sample_accounts[i].id
 
     def test_resolve_empty_queries_ambiguous_not_allowed(
-        self, account_service, sample_accounts
+        self, account_service: AccountService, sample_accounts: list[Account]
     ):
         """Test resolving with empty queries when ambiguous is not allowed."""
-        resolution = account_service.resolve_account_id(
-            queries=(), limit=10, allow_ambiguous=False
-        )
-
-        assert resolution.status == ResolutionStatus.NOT_FOUND
-        assert resolution.exact is None
-        assert resolution.candidates is None
-        assert resolution.queries == ()
+        with pytest.raises(InvalidInputError, match="No queries provided"):
+            account_service.resolve_account_id(
+                queries=(), limit=10, allow_ambiguous=False
+            )
 
     def test_resolve_empty_queries_respects_limit(
-        self, account_service, sample_accounts
+        self, account_service: AccountService, sample_accounts: list[Account]
     ):
         """Test that empty queries resolution respects limit."""
-        resolution = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=(), limit=3, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.AMBIGUOUS
-        assert len(resolution.candidates) == 3
+        assert len(accounts) == 3
 
-    def test_resolve_exact_match_by_id(self, account_service, sample_accounts):
+    def test_resolve_exact_match_by_id(
+        self, account_service: AccountService, sample_accounts: list[Account]
+    ):
         """Test resolving by exact account ID."""
         account_id = sample_accounts[0].id
-        resolution = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=(str(account_id),), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.EXACT
-        assert resolution.exact is not None
-        assert resolution.exact.id == account_id
-        assert resolution.exact.name == "HDFC Savings"
-        assert resolution.candidates is None
+        assert len(accounts) == 1
+        assert accounts[0].id == account_id
+        assert accounts[0].name == sample_accounts[0].name
+        assert accounts[0].institution == sample_accounts[0].institution
 
     def test_resolve_exact_match_by_id_with_whitespace(
-        self, account_service, sample_accounts
+        self, account_service: AccountService, sample_accounts: list[Account]
     ):
         """Test resolving by ID with surrounding whitespace."""
         account_id = sample_accounts[0].id
-        resolution = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=(f"  {account_id}  ",), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.EXACT
-        assert resolution.exact.id == account_id
+        assert len(accounts) == 1
+        assert accounts[0].id == account_id
 
     def test_resolve_nonexistent_id_ambiguous_not_allowed(
-        self, account_service, sample_accounts
+        self, account_service: AccountService, sample_accounts: list[Account]
     ):
         """Test resolving non-existent ID when ambiguous not allowed."""
-        resolution = account_service.resolve_account_id(
-            queries=("99999",), limit=10, allow_ambiguous=False
-        )
-
-        assert resolution.status == ResolutionStatus.NOT_FOUND
-        assert resolution.exact is None
-        assert resolution.candidates is None
+        with pytest.raises(AmbiguousResourceError, match="account"):
+            account_service.resolve_account_id(
+                queries=("99999",), limit=10, allow_ambiguous=False
+            )
 
     def test_resolve_nonexistent_id_ambiguous_allowed(
-        self, account_service, sample_accounts
+        self, account_service: AccountService, sample_accounts: list[Account]
     ):
         """Test resolving non-existent ID when ambiguous allowed falls back to text search."""
-        resolution = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=("99999",), limit=10, allow_ambiguous=True
         )
 
         # Should fall back to text search and find nothing
-        assert resolution.status == ResolutionStatus.NOT_FOUND
+        assert len(accounts) == 0
 
-    def test_resolve_text_search_no_matches(self, account_service, sample_accounts):
+    def test_resolve_text_search_no_matches(
+        self, account_service: AccountService, sample_accounts: list[Account]
+    ):
         """Test text search with no matches."""
-        resolution = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=("NonExistent",), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.NOT_FOUND
-        assert resolution.exact is None
-        assert resolution.candidates is None
+        assert len(accounts) == 0
 
-    def test_resolve_text_search_single_match(self, account_service, sample_accounts):
+    def test_resolve_text_search_single_match(
+        self, account_service: AccountService, sample_accounts: list[Account]
+    ):
         """Test text search with exactly one match."""
-        resolution = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=("Zerodha",), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.EXACT
-        assert resolution.exact is not None
-        assert resolution.exact.name == "Zerodha Demat"
-        assert resolution.candidates is None
+        assert len(accounts) == 1
+        assert accounts[0].name == "Zerodha Demat"
 
     def test_resolve_text_search_multiple_matches(
-        self, account_service, sample_accounts
+        self, account_service: AccountService, sample_accounts: list[Account]
     ):
         """Test text search with multiple matches."""
-        resolution = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=("HDFC",), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.AMBIGUOUS
-        assert resolution.exact is None
-        assert resolution.candidates is not None
-        assert len(resolution.candidates) == 2
-        assert all(
-            "HDFC" in acc.name or "HDFC" in acc.institution
-            for acc in resolution.candidates
-        )
+        assert len(accounts) == 2
+        assert all("HDFC" in acc.name or "HDFC" in acc.institution for acc in accounts)
 
     def test_resolve_text_search_multiple_matches_ambiguous_not_allowed(
-        self, account_service, sample_accounts
+        self, account_service: AccountService, sample_accounts: list[Account]
     ):
         """Test text search with multiple matches when ambiguous not allowed."""
-        resolution = account_service.resolve_account_id(
-            queries=("HDFC",), limit=10, allow_ambiguous=False
-        )
+        with pytest.raises(AmbiguousResourceError, match="account"):
+            account_service.resolve_account_id(
+                queries=("HDFC",), limit=10, allow_ambiguous=False
+            )
 
-        assert resolution.status == ResolutionStatus.NOT_FOUND
-        assert resolution.exact is None
-        assert resolution.candidates is None
-
-    def test_resolve_text_search_respects_limit(self, account_service, sample_accounts):
+    def test_resolve_text_search_respects_limit(
+        self, account_service: AccountService, sample_accounts: list[Account]
+    ):
         """Test that text search respects limit parameter."""
-        resolution = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=("HDFC",), limit=1, allow_ambiguous=True
         )
 
         # Should find multiple HDFC accounts but limit to 1
         # With limit=1 and exactly 1 result, it should return EXACT
-        assert resolution.status in (ResolutionStatus.EXACT, ResolutionStatus.AMBIGUOUS)
+        assert len(accounts) == 1
 
     def test_resolve_non_numeric_query_ambiguous_not_allowed(
-        self, account_service, sample_accounts
+        self, account_service: AccountService, sample_accounts: list[Account]
     ):
         """Test non-numeric query when ambiguous not allowed."""
-        resolution = account_service.resolve_account_id(
-            queries=("HDFC",), limit=10, allow_ambiguous=False
-        )
+        with pytest.raises(AmbiguousResourceError, match="account"):
+            account_service.resolve_account_id(
+                queries=("HDFC",), limit=10, allow_ambiguous=False
+            )
 
-        assert resolution.status == ResolutionStatus.NOT_FOUND
-
-    def test_resolve_preserves_queries_tuple(self, account_service, sample_accounts):
-        """Test that resolution preserves the queries tuple."""
-        queries = ("HDFC", "Bank")
-        resolution = account_service.resolve_account_id(
-            queries=queries, limit=10, allow_ambiguous=True
-        )
-
-        assert resolution.queries == queries
-
-    def test_resolve_empty_database(self, account_service):
+    def test_resolve_empty_database(self, account_service: AccountService):
         """Test resolving in empty database."""
-        resolution = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=("test",), limit=10, allow_ambiguous=True
         )
 
-        assert resolution.status == ResolutionStatus.NOT_FOUND
+        assert len(accounts) == 0
 
-    def test_resolve_returns_accountpublic(self, account_service, sample_accounts):
+    def test_resolve_returns_accountpublic(
+        self, account_service: AccountService, sample_accounts: list[Account]
+    ):
         """Test that resolution returns AccountPublic instances."""
         account_id = sample_accounts[0].id
-        resolution = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=(str(account_id),), limit=10, allow_ambiguous=True
         )
 
-        assert isinstance(resolution.exact, AccountPublic)
-        assert hasattr(resolution.exact, "id")
-        assert hasattr(resolution.exact, "created_at")
+        assert isinstance(accounts[0], AccountPublic)
+        assert hasattr(accounts[0], "id")
+        assert hasattr(accounts[0], "created_at")
 
 
 class TestDeleteAccount:

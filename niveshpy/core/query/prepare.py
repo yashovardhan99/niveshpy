@@ -2,12 +2,13 @@
 
 import itertools
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Container, Iterable
 from dataclasses import replace
 
 from sqlmodel import column, func
 from sqlmodel.sql.expression import ColumnClause, ColumnElement, or_
 
+from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.ast import Field, FilterNode, FilterValue, Operator
 from niveshpy.core.query.parser import QueryParser
@@ -156,6 +157,7 @@ def get_filters_from_queries(
     queries: tuple[str, ...],
     default_field: Field,
     column_mappings: dict[Field, list],
+    include_fields: Container[Field] | None = None,
 ) -> list[ColumnElement[bool]]:
     """Convert query strings into a combined SQLAlchemy filter expression.
 
@@ -163,6 +165,8 @@ def get_filters_from_queries(
         queries (tuple): Tuple of query strings.
         default_field (Field): The default field to use for filters.
         column_mappings (dict): Mapping of Fields to database column names.
+        include_fields (Container[Field], optional): Set of Fields to include. \
+        If provided, only filters with fields in this set will be included.
 
     Returns:
         list: The list of SQLAlchemy filter expressions.
@@ -179,9 +183,23 @@ def get_filters_from_queries(
         e.add_note(f"Error was reported on input: {e.input_value}")
         raise QuerySyntaxError(" ".join(queries), cause=e.cause) from e
 
+    logger.debug(
+        "Query parsed: %d filter(s) from %d queries", len(filters), len(queries)
+    )
+
+    # Regex expressions for text search
+    text_expressions: list[ColumnElement[bool]] = []
+
+    # All expressions
     expressions: list[ColumnElement[bool]] = []
+
     for filter in filters:
         cols = column_mappings.get(filter.field, [])
+
+        if include_fields is not None and filter.field not in include_fields:
+            # Skip this filter as its field is not in the included fields
+            continue
+
         if not cols:
             raise QuerySyntaxError(
                 " ".join(queries), f"Field {filter.field} not mapped to any column."
@@ -192,7 +210,13 @@ def get_filters_from_queries(
             col_expressions.append(
                 prepare_expression(filter, column(col) if isinstance(col, str) else col)
             )
-        expressions.append(or_(*col_expressions))
+        if filter.operator in {ast.Operator.REGEX_MATCH, ast.Operator.NOT_REGEX_MATCH}:
+            text_expressions.extend(col_expressions)
+        else:
+            expressions.append(or_(*col_expressions))
+
+    if text_expressions:
+        expressions.append(or_(*text_expressions))
 
     return expressions
 

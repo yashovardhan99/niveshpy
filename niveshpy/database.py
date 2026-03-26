@@ -20,7 +20,7 @@ _sqlite_url = f"sqlite:///{_db_path}"
 _engine = create_engine(_sqlite_url, echo=False)
 
 
-def _iregexp(pattern: str, value: str) -> bool:
+def _iregexp(pattern: str, value: str | None) -> bool:
     """Case-insensitive regex match for SQLite."""
     if value is None:
         return False

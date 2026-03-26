@@ -1,12 +1,14 @@
 """Utility functions for styling CLI output."""
 
 import csv
+import decimal
 from collections.abc import Callable, Generator, MutableMapping, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum, auto
 from io import StringIO
-from typing import TypeVar
+from typing import Any, Generic, TypeVar
 
 import click
 from pydantic import BaseModel, RootModel
@@ -19,7 +21,14 @@ from niveshpy.cli.utils import logging
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import NiveshPyError
-from niveshpy.models.output import BaseMessage, Message, ProgressUpdate, Warning
+from niveshpy.models.output import (
+    BaseMessage,
+    Message,
+    ProgressUpdate,
+    Warning,
+    format_datetime,
+    format_decimal,
+)
 
 _console = Console()  # Global console instance for utility functions
 _error_console = Console(stderr=True)  # Console for error messages
@@ -36,37 +45,19 @@ class OutputFormat(StrEnum):
     JSON = auto()
 
 
-def _format_datetime(dt: datetime) -> str:
-    """Format a datetime object to a relative time string.
+class SectionBreak:
+    """Marker class for section breaks in output."""
 
-    If the datetime is within 7 days, it shows relative time (e.g., "about 3 hours ago").
-    If older than 7 days, it shows the absolute date (e.g., "on Jan 01, 2023").
 
-    Args:
-        dt (datetime): The datetime object to format.
+TotalType = TypeVar("TotalType")
 
-    Returns:
-        str: A human-readable relative time string.
 
-    """
-    now = datetime.now()
-    delta = now - dt
-    seconds = int(delta.total_seconds())
-    if seconds < 60:
-        return f"about {seconds} seconds ago"
-    elif seconds < 3600:
-        minutes = seconds // 60
-        return f"about {minutes} minutes ago"
-    elif seconds < 86400:
-        hours = seconds // 3600
-        return f"about {hours} hours ago"
-    else:
-        days = seconds // 86400
-        if days < 7:
-            return f"about {days} days ago"
-        else:
-            date = dt.strftime("%d %b %Y")
-            return f"on {date}"
+@dataclass
+class TotalRow(Generic[TotalType]):
+    """Marker class for total rows in output."""
+
+    total: TotalType
+    description: str = "Total"
 
 
 def _format_list_or_dict(data: list | dict) -> str:
@@ -89,7 +80,7 @@ def _format_list_or_dict(data: list | dict) -> str:
 
 
 def _convert_models_to_rich_table(
-    items: Sequence[BaseModel], schema: dict[str, FieldInfo]
+    items: Sequence[BaseModel | SectionBreak | TotalRow], schema: dict[str, FieldInfo]
 ) -> Table:
     """Convert a list of Pydantic models to a Rich Table for pretty printing."""
     table = Table(header_style="dim", box=box.SIMPLE)
@@ -108,39 +99,80 @@ def _convert_models_to_rich_table(
             field_info.title or field_name.capitalize(),
             justify=extras.get("justify", "left"),
             style=extras.get("style") if isinstance(extras.get("style"), str) else None,
+            max_width=extras.get("max_width"),
+            no_wrap=extras.get("no_wrap", False),
         )
 
-    def mapper(data: object, fmt: Callable[[str], str] | None) -> str:
-        if isinstance(data, datetime):
-            data_str = _format_datetime(data)
+    def mapper(data: object, fmt: Callable[[Any], str] | None) -> str:
+        if callable(fmt):
+            return fmt(data)
+        if data is None:
+            return ""
+        elif isinstance(data, datetime):
+            return format_datetime(data)
         elif isinstance(data, date):
-            data_str = data.strftime("%d %b %Y")
+            return data.strftime("%d %b %Y")
+        elif isinstance(data, decimal.Decimal):
+            return format_decimal(data)
         else:
-            data_str = str(data)
+            return str(data)
 
-        if fmt is None:
-            return data_str
-        elif callable(fmt):
-            return fmt(data_str)
+    for i, item in enumerate(items):
+        if isinstance(item, SectionBreak):
+            table.add_section()
+        elif isinstance(item, TotalRow):
+            if i == len(items) - 1:
+                table.show_footer = True
+                table.columns[0].footer = item.description
+                table.columns[-1].footer = mapper(item.total, None)
+                table.footer_style = "bold"
+            else:
+                table.add_row(
+                    item.description,
+                    *([None] * (len(ordered_fields) - 2)),
+                    mapper(item.total, None),
+                    style="bold",
+                )
         else:
-            return data_str
-
-    for item in items:
-        row = []
-        for field_name in ordered_fields:
-            fmt = None
-            extras: dict = schema[field_name].json_schema_extra or {}  # type: ignore
-            fmt = extras.get("formatter") if callable(extras.get("formatter")) else None
-            value = getattr(item, field_name)
-            row.append(mapper(value, fmt))
-        table.add_row(*row)
+            row = []
+            for field_name in ordered_fields:
+                fmt = None
+                extras: dict = schema[field_name].json_schema_extra or {}  # type: ignore
+                fmt = (
+                    extras.get("formatter")
+                    if callable(extras.get("formatter"))
+                    else None
+                )
+                value = getattr(item, field_name)
+                row.append(mapper(value, fmt))
+            table.add_row(*row)
 
     return table
 
 
-def display_message(*objects: object, console: Console | None = None) -> None:
-    """Display a general message to the console."""
+@contextmanager
+def capture_for_pager(console: Console | None = None) -> Generator[None, None, None]:
+    """Context manager to capture console output for paging if the console is a terminal."""
+    if (console or _console).is_terminal:
+        with (console or _console).capture() as capture:
+            yield
+        click.echo_via_pager(capture.get())
+    else:
+        yield
+
+
+def display(*objects: object, console: Console | None = None) -> None:
+    """Display objects to the console with optional styling."""
     (console or _console).print(*objects)
+
+
+def display_json(data: str, console: Console | None = None) -> None:
+    """Display JSON data to the console with pretty formatting."""
+    (console or _console).print_json(data)
+
+
+display_message = display
+"""Alias to maintain backward compatibility."""
 
 
 def display_success(message: str, console: Console | None = None) -> None:
@@ -177,7 +209,7 @@ T = TypeVar("T", bound=BaseModel)
 
 def display_list(
     cls: type[T],
-    items: Sequence[T],
+    items: Sequence[T | SectionBreak | TotalRow],
     fmt: OutputFormat,
     extra_message: str | None = None,
 ) -> None:
@@ -193,7 +225,11 @@ def display_list(
     """
     formatted_data: str | Table
 
-    root_model = RootModel[Sequence[T]](items)
+    data_items = [
+        item for item in items if not isinstance(item, SectionBreak | TotalRow)
+    ]
+
+    root_model = RootModel[Sequence[T]](data_items)
     if fmt == OutputFormat.JSON:
         formatted_data = root_model.model_dump_json(indent=4)
     elif fmt == OutputFormat.CSV:
@@ -213,17 +249,16 @@ def display_list(
         formatted_data = _convert_models_to_rich_table(items, cls.model_fields)
 
     if _console.is_terminal:
-        with _console.capture() as capture:
+        with capture_for_pager():
             if extra_message:
-                _console.print(extra_message)
+                display(extra_message)
             if fmt == OutputFormat.JSON:
-                _console.print_json(str(formatted_data))
+                display_json(str(formatted_data))
             else:
-                _console.print(formatted_data)
-        click.echo_via_pager(capture.get())
+                display(formatted_data)
     else:
         if fmt == OutputFormat.JSON:
-            _console.print_json(str(formatted_data))
+            display_json(str(formatted_data))
         else:
             _console.print(formatted_data, soft_wrap=True)
 
@@ -327,4 +362,4 @@ def handle_niveshpy_message(
     if isinstance(message, Warning):
         display_warning(message, console=console)
     elif isinstance(message, Message):
-        display_message(message, console=console)
+        display(message, console=console)

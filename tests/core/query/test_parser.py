@@ -373,7 +373,7 @@ class TestConvertToString:
         from niveshpy.core.query.parser import QueryParser
         from niveshpy.core.query.tokens import Colon, Int, Literal, Unknown
 
-        tokens = [Literal("test"), Colon(), Int(123), Unknown("@", 0)]
+        tokens = [Literal("test"), Colon(), Int("123"), Unknown("@", 0)]
         result = QueryParser.convert_to_string(tokens)
         assert result == "test:123@"
 

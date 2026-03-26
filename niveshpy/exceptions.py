@@ -68,6 +68,10 @@ class InvalidInputError(ValidationError):
         super().__init__(message, *args)
         self.input_value = input_value
 
+    def __str__(self):
+        """Return string representation of the InvalidInputError."""
+        return super().__str__() + f" (input: {self.input_value})"
+
 
 class QuerySyntaxError(ValidationError):
     """Exception raised for invalid query syntax."""
@@ -88,6 +92,10 @@ class QuerySyntaxError(ValidationError):
         super().__init__(message, *args)
         self.input_value = input_value
         self.cause = cause
+
+    def __str__(self):
+        """Return string representation of the QuerySyntaxError."""
+        return super().__str__() + f" (input: {self.input_value}, cause: {self.cause})"
 
 
 # Resource errors
@@ -116,3 +124,43 @@ class ResourceNotFoundError(ResourceError):
         super().__init__(message, *args)
         self.resource_type = resource_type
         self.identifier = identifier
+
+    def __str__(self):
+        """Return string representation of the ResourceNotFoundError."""
+        return (
+            super().__str__()
+            + f" (resource_type: {self.resource_type}, identifier: {self.identifier})"
+        )
+
+
+class AmbiguousResourceError(ResourceError):
+    """Exception raised when results are ambiguous."""
+
+    def __init__(
+        self,
+        resource_type: str,
+        query: str,
+        message: str | None = None,
+        *args: object,
+    ) -> None:
+        """Initialize the AmbiguousResourceError.
+
+        Args:
+            resource_type: The type of the resource (e.g., "User", "File").
+            query: The query used to look for the resource.
+            message: Optional custom error message.
+            *args: Additional arguments to pass to the base
+            Exception class.
+        """
+        if message is None:
+            message = f"Ambiguous results for {resource_type} with query '{query}'."
+        super().__init__(message, *args)
+        self.resource_type = resource_type
+        self.query = query
+
+    def __str__(self):
+        """Return string representation of the AmbiguousResourceError."""
+        return (
+            super().__str__()
+            + f" (resource_type: {self.resource_type}, query: {self.query})"
+        )

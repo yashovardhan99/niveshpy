@@ -7,10 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New holdings report.
+- New asset allocation report.
+- New --cost flag for transactions.
+- New portfolio performance report.
+- New portfolio summary report.
+
+### Changed
+
+- Unified decimal formatting for cleaner UX.
+- Standardized logging with level guidelines and consistent coverage across all modules.
+- Expanded test suite — added coverage for CAS parser, plugin system, CLI commands, and exception hierarchy.
+
+### Fixed
+
+- Text queries being grouped incorrectly.
+
+## [1.0.0a2] - 2026-01-08
+
+### Added
+
+- Unit testing for core components.
+- Python 3.14 support.
+
 ### Changed
 
 - Migrate to using sqlmodel/sqlalchemy with sqlite database.
 - Standardize exceptions into a proper hierarchy.
+- Simplified synchronization of prices.
+- Performance improvements for top command (`niveshpy -h`)
+- Updated documentation to reflect recent changes.
+- Updated dependencies.
+- Simplified deletion workflow.
+
+### Fixed
+
+- Bulk updates deleting all transactions irrespective of accounts.
+- Concurrency issues in bulk updates.
+- Unified error handling with clear messages.
+- Range operator not supporting one-sided open ranges in amount queries.
+- Security losing existing properties on update.
 
 ## [1.0.0a1] - 2025-11-09
 
@@ -39,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pre-built plugin: amfi (Mutual Fund)
 - Documentation
 
-[unreleased]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a1...HEAD
+[unreleased]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a2...HEAD
+[1.0.0a2]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a1...v1.0.0a2
 [1.0.0a1]: https://github.com/yashovardhan99/niveshpy/compare/v0.1.0.dev0...v1.0.0a1
 [0.1.0.dev0]: https://github.com/yashovardhan99/niveshpy/releases/tag/v0.1.0.dev0

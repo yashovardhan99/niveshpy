@@ -100,5 +100,14 @@ def prices():
     """
 
 
+@essentials.group(
+    cls=essentials.LazyGroup,
+    import_name="niveshpy.cli.report:cli",
+    parent=cli,
+)
+def reports():
+    """Generate various reports."""
+
+
 if __name__ == "__main__":
     sys.exit(cli())

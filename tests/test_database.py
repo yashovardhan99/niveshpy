@@ -391,6 +391,7 @@ class TestGetSession:
         session.commit()
 
         result = session.exec(select(Account)).first()
+        assert result is not None
         assert result.name == "Test Account"
 
         session.close()
