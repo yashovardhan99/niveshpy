@@ -8,6 +8,7 @@ import click
 import click.shell_completion
 
 from niveshpy.cli.utils import essentials, flags, output, overrides
+from niveshpy.cli.utils.output_models import OutputFormat
 from niveshpy.core.app import AppState
 from niveshpy.exceptions import InvalidInputError
 from niveshpy.services.result import MergeAction
@@ -52,7 +53,7 @@ def list_prices(
     queries: tuple[str, ...],
     limit: int,
     offset: int,
-    format: output.OutputFormat,
+    format: OutputFormat,
 ) -> None:
     """List latest price for all securities.
 
@@ -86,8 +87,8 @@ def list_prices(
     else:
         fmt_cls = (
             PricePublicWithRelations
-            if format == output.OutputFormat.JSON
-            else (PricePublic if format == output.OutputFormat.CSV else PriceDisplay)
+            if format == OutputFormat.JSON
+            else (PricePublic if format == OutputFormat.CSV else PriceDisplay)
         )
 
         prices = [fmt_cls.model_validate(price) for price in result]

@@ -8,6 +8,7 @@ from typing import Literal
 import click
 
 from niveshpy.cli.utils import essentials, flags, output
+from niveshpy.cli.utils.output_models import OutputFormat, SectionBreak, TotalRow
 from niveshpy.cli.utils.overrides import NiveshPyCommand
 from niveshpy.core.logging import logger
 from niveshpy.core.query import tokens
@@ -42,7 +43,7 @@ def holdings(
     queries: tuple[str, ...],
     limit: int,
     offset: int,
-    format: output.OutputFormat,
+    format: OutputFormat,
     total: bool,
 ):
     """Generate holdings report.
@@ -98,14 +99,14 @@ def holdings(
                 "Consider syncing latest prices using 'niveshpy prices sync'."
             )
 
-        if format == output.OutputFormat.TABLE:
-            items: list[HoldingDisplay | output.TotalRow] = [
+        if format == OutputFormat.TABLE:
+            items: list[HoldingDisplay | TotalRow] = [
                 HoldingDisplay.from_holding(h) for h in holdings
             ]
 
             if total:
                 total_value = sum((h.amount for h in holdings), decimal.Decimal("0"))
-                items.append(output.TotalRow(total_value))
+                items.append(TotalRow(total_value))
 
             output.display_list(
                 cls=HoldingDisplay,
@@ -113,7 +114,7 @@ def holdings(
                 fmt=format,
                 extra_message=extra_message,
             )
-        elif format == output.OutputFormat.CSV:
+        elif format == OutputFormat.CSV:
             output.display_list(
                 cls=HoldingExport,
                 items=[HoldingExport.from_holding(h) for h in holdings],
@@ -153,7 +154,7 @@ def holdings(
 @essentials.command(parent=cli, cls=NiveshPyCommand)
 def allocation(
     queries: tuple[str, ...],
-    format: output.OutputFormat,
+    format: OutputFormat,
     group_by: Literal["both", "type", "category"],
 ):
     """Generate asset allocation report.
@@ -203,7 +204,7 @@ def performance(
     queries: tuple[str, ...],
     limit: int,
     offset: int,
-    format: output.OutputFormat,
+    format: OutputFormat,
     total: bool,
 ):
     """Generate portfolio performance report.
@@ -244,10 +245,10 @@ def performance(
         )
     )
 
-    if format == output.OutputFormat.TABLE:
-        items: list[
-            PerformanceHoldingDisplay | output.SectionBreak | output.TotalRow
-        ] = [PerformanceHoldingDisplay.from_holding(h) for h in result.holdings]
+    if format == OutputFormat.TABLE:
+        items: list[PerformanceHoldingDisplay | SectionBreak | TotalRow] = [
+            PerformanceHoldingDisplay.from_holding(h) for h in result.holdings
+        ]
 
         if total:
             gains_pct = result.totals.gains_percentage
@@ -261,7 +262,7 @@ def performance(
                 gains_pct=gains_pct,
                 xirr=result.totals.xirr,
             )
-            items.append(output.SectionBreak())
+            items.append(SectionBreak())
             items.append(total_row)
 
         output.display_list(
@@ -270,7 +271,7 @@ def performance(
             fmt=format,
             extra_message=extra_message,
         )
-    elif format == output.OutputFormat.CSV:
+    elif format == OutputFormat.CSV:
         output.display_list(
             cls=PerformanceHoldingExport,
             items=[PerformanceHoldingExport.from_holding(h) for h in result.holdings],
@@ -287,11 +288,11 @@ def performance(
 
 
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
-@flags.output("format", allowed=[output.OutputFormat.TABLE, output.OutputFormat.JSON])
+@flags.output("format", allowed=[OutputFormat.TABLE, OutputFormat.JSON])
 @essentials.command(parent=cli, cls=NiveshPyCommand)
 def summary(
     queries: tuple[str, ...],
-    format: Literal[output.OutputFormat.TABLE, output.OutputFormat.JSON],
+    format: Literal[OutputFormat.TABLE, OutputFormat.JSON],
 ):
     """Generate portfolio summary report.
 
@@ -325,7 +326,7 @@ def summary(
             output.display(msg)
 
     else:
-        if format == output.OutputFormat.TABLE:
+        if format == OutputFormat.TABLE:
             from rich import box
             from rich.bar import Bar
             from rich.padding import Padding

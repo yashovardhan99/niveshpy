@@ -4,7 +4,8 @@ from collections.abc import Sequence
 
 import click
 
-from niveshpy.cli.utils import essentials, flags, output
+from niveshpy.cli.utils import essentials, flags
+from niveshpy.cli.utils.output_models import OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
@@ -31,12 +32,13 @@ def show(
     queries: tuple[str, ...],
     limit: int,
     offset: int,
-    format: output.OutputFormat,
+    format: OutputFormat,
 ) -> None:
     """List all accounts.
 
     An optional QUERY can be provided to filter accounts by name or institution.
     """
+    from niveshpy.cli.utils import output
     from niveshpy.models.account import AccountPublic
 
     state = ctx.ensure_object(AppState)
@@ -81,6 +83,8 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
     """
     from InquirerPy import get_style, inquirer
     from InquirerPy.validator import EmptyInputValidator
+
+    from niveshpy.cli.utils import output
 
     state = ctx.ensure_object(AppState)
 
@@ -170,6 +174,7 @@ def delete(
     from InquirerPy.base.control import Choice
     from InquirerPy.validator import NumberValidator
 
+    from niveshpy.cli.utils import output
     from niveshpy.models.account import AccountPublic
 
     state = ctx.ensure_object(AppState)

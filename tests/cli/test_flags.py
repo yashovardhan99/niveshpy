@@ -5,7 +5,7 @@ import pytest
 from click.testing import CliRunner
 
 from niveshpy.cli.utils import flags
-from niveshpy.cli.utils.output import OutputFormat
+from niveshpy.cli.utils.output_models import OutputFormat
 
 
 @pytest.fixture

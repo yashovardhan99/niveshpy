@@ -3,18 +3,17 @@
 import decimal
 from collections.abc import Callable, Generator, MutableMapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import date, datetime
-from enum import StrEnum, auto
 from io import StringIO
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pydantic import BaseModel, RootModel
 from rich import box
 from rich.console import Console
 from rich.table import Table
 
-from niveshpy.core.app import AppState
+from niveshpy.cli.utils.output_models import OutputFormat, SectionBreak, TotalRow
+from niveshpy.cli.utils.setup import _console, _error_console
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import NiveshPyError
 from niveshpy.models.output import (
@@ -29,36 +28,6 @@ from niveshpy.models.output import (
 if TYPE_CHECKING:
     from pydantic.fields import FieldInfo
     from rich import progress
-
-
-_console = Console()  # Global console instance for utility functions
-_error_console = Console(stderr=True)  # Console for error messages
-
-
-FormatMap = Sequence[str | Callable[[str], str] | None]
-
-
-class OutputFormat(StrEnum):
-    """Enumeration of supported output formats."""
-
-    TABLE = auto()
-    CSV = auto()
-    JSON = auto()
-
-
-class SectionBreak:
-    """Marker class for section breaks in output."""
-
-
-TotalType = TypeVar("TotalType")
-
-
-@dataclass
-class TotalRow(Generic[TotalType]):
-    """Marker class for total rows in output."""
-
-    total: TotalType
-    description: str = "Total"
 
 
 def _format_list_or_dict(data: list | dict) -> str:
@@ -320,28 +289,6 @@ def update_progress_bar(
             completed=update.current,
             description=update.description,
         )
-
-
-def initialize_app_state(state: AppState) -> None:
-    """Initialize the application state for CLI operations.
-
-    This function sets up the application state by determining interactivity,
-    color settings, and initializing logging.
-
-    Args:
-        state (AppState): The application state object to initialize.
-    """
-    from niveshpy.cli.utils import logging
-
-    if not state.no_input:
-        # If no_input is not set, determine interactivity from console
-        state.no_input = not _console.is_interactive
-
-    if state.no_color:
-        _console.no_color = True
-        _error_console.no_color = True
-
-    logging.setup(state.debug, _error_console)  # Initialize logging with debug flag
 
 
 def handle_error(error: NiveshPyError) -> None:

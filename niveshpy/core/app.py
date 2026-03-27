@@ -1,5 +1,6 @@
 """Main application class to hold state for the CLI."""
 
+import functools
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -85,11 +86,7 @@ class AppState:
     no_input: bool = False
     no_color: bool = False
 
-    @property
+    @functools.cached_property
     def app(self) -> Application:
         """The main application instance."""
-        return self._app
-
-    @app.setter
-    def app(self, value: Application) -> None:
-        self._app = value
+        return Application()

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Performance improvements across the board to reduce cold-start times.
+
 ## [1.0.0a3] - 2026-03-26
 
 ### Added

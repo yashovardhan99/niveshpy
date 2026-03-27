@@ -11,6 +11,7 @@ from InquirerPy import get_style, inquirer, validator
 from InquirerPy.base.control import Choice
 
 from niveshpy.cli.utils import essentials, flags, inputs, output
+from niveshpy.cli.utils.output_models import OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
@@ -48,7 +49,7 @@ def show(
     queries: tuple[str, ...],
     limit: int,
     offset: int,
-    format: output.OutputFormat,
+    format: OutputFormat,
     cost: bool,
 ) -> None:
     """List all transactions.
@@ -72,20 +73,20 @@ def show(
         if cost:
             fmt_cls: Any = (
                 TransactionPublicWithRelationsAndCost
-                if format == output.OutputFormat.JSON
+                if format == OutputFormat.JSON
                 else (
                     TransactionPublicWithCost
-                    if format == output.OutputFormat.CSV
+                    if format == OutputFormat.CSV
                     else TransactionDisplayWithCost
                 )
             )
         else:
             fmt_cls = (
                 TransactionPublicWithRelations
-                if format == output.OutputFormat.JSON
+                if format == OutputFormat.JSON
                 else (
                     TransactionPublic
-                    if format == output.OutputFormat.CSV
+                    if format == OutputFormat.CSV
                     else TransactionDisplay
                 )
             )
