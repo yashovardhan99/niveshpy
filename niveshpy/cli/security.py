@@ -1,17 +1,17 @@
 """CLI commands for managing securities."""
 
-from collections.abc import Sequence
 from textwrap import dedent
 
 import click
-from InquirerPy import get_style, inquirer
-from InquirerPy.base.control import Choice
-from InquirerPy.validator import EmptyInputValidator
 
-from niveshpy.cli.utils import essentials, flags, output
+from niveshpy.cli.models.security import SecurityDisplay
+from niveshpy.cli.utils import essentials, flags
+from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
+    capture_for_pager,
     display,
     display_error,
+    display_json,
     display_success,
     display_warning,
     loading_spinner,
@@ -22,7 +22,6 @@ from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import InvalidInputError, OperationError, ResourceNotFoundError
 from niveshpy.models.security import (
-    Security,
     SecurityCategory,
     SecurityType,
 )
@@ -53,28 +52,41 @@ def show(
     """
     state = ctx.ensure_object(AppState)
     with loading_spinner("Loading securities..."):
-        securities = state.app.security.list_securities(
+        result = state.app.security.list_securities(
             queries=queries, limit=limit, offset=offset
         )
 
-    if len(securities) == 0:
-        display_warning(
-            "No securities "
-            + ("match your query." if queries else "found in the database.")
+    if len(result) == 0:
+        msg = "No securities " + (
+            "match your query." if queries else "found in the database."
         )
-    else:
-        output.display_list(
-            Security,
-            securities,
-            format,
-            extra_message=f"Showing first {limit:,} securities."
-            if len(securities) == limit and offset == 0
-            else (
-                f"Showing securities {offset + 1:,} to {offset + len(securities):,}."
-                if offset > 0
-                else None
-            ),
+        display_warning(msg)
+        ctx.exit()
+
+    securities = map(SecurityDisplay.from_domain, result)
+    extra_message = (
+        f"Showing first {limit:,} securities."
+        if len(result) == limit and offset == 0
+        else (
+            f"Showing securities {offset + 1:,} to {offset + len(result):,}."
+            if offset > 0
+            else None
         )
+    )
+    with capture_for_pager():
+        if format == OutputFormat.TABLE:
+            if extra_message:
+                display(extra_message)
+            table = build_table(securities, SecurityDisplay.columns)
+            display(table)
+        elif format == OutputFormat.CSV:
+            csv = build_csv(
+                map(SecurityDisplay.to_csv_dict, securities),
+                fields=SecurityDisplay.csv_fields,
+            )
+            display(csv)
+        elif format == OutputFormat.JSON:
+            display_json(data=[sec.to_json_dict() for sec in securities])
 
 
 @command()
@@ -115,6 +127,10 @@ def add(
     * Category: EQUITY, DEBT, COMMODITY, OTHER
     * Type: STOCK, BOND, MUTUAL_FUND, ETF, OTHER
     """  # noqa: D301
+    from InquirerPy import get_style, inquirer
+    from InquirerPy.base.control import Choice
+    from InquirerPy.validator import EmptyInputValidator
+
     state = ctx.ensure_object(AppState)
 
     if state.no_input:
@@ -226,6 +242,10 @@ def delete(
 
     When running in a non-interactive mode, --force must be provided to confirm deletion. Additionally, the <query> must match exactly one security key.
     """
+    from InquirerPy import get_style, inquirer
+    from InquirerPy.base.control import Choice
+    from InquirerPy.validator import EmptyInputValidator
+
     state = ctx.ensure_object(AppState)
 
     if state.no_input and not force:
@@ -236,11 +256,9 @@ def delete(
 
     inquirer_style = get_style({}, style_override=state.no_color)
 
-    candidates: Sequence[Security] = state.app.security.resolve_security_key(
+    candidates = state.app.security.resolve_security_key(
         queries, limit, allow_ambiguous=not state.no_input
     )
-
-    security: Security
 
     if not candidates:
         raise ResourceNotFoundError("security", " ".join(queries))

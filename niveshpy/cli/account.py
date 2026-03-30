@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 import click
 
-from niveshpy.cli.models.accounts import AccountDisplay
+from niveshpy.cli.models.account import AccountDisplay
 from niveshpy.cli.utils import essentials, flags
 from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
