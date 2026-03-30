@@ -14,6 +14,7 @@ from niveshpy.cli.utils.display import (
     display_error,
     display_success,
     display_warning,
+    loading_spinner,
 )
 from niveshpy.cli.utils.output_models import OutputFormat
 from niveshpy.cli.utils.overrides import command
@@ -51,7 +52,7 @@ def show(
     Optionally provide a text QUERY to filter securities by key or name.
     """
     state = ctx.ensure_object(AppState)
-    with output.loading_spinner("Loading securities..."):
+    with loading_spinner("Loading securities..."):
         securities = state.app.security.list_securities(
             queries=queries, limit=limit, offset=offset
         )
@@ -185,7 +186,7 @@ def add(
         ).execute()
 
         # Add the security
-        with output.loading_spinner(f"Adding security '{name}'..."):
+        with loading_spinner(f"Adding security '{name}'..."):
             result = state.app.security.add_security(
                 security_key,
                 name,
@@ -274,7 +275,7 @@ def delete(
         display("Dry Run: No changes were made.")
         ctx.exit()
 
-    with output.loading_spinner(f"Deleting security '{security.key}'..."):
+    with loading_spinner(f"Deleting security '{security.key}'..."):
         deleted = state.app.security.delete_security(security.key)
         if deleted:
             display_success(

@@ -16,6 +16,7 @@ from niveshpy.cli.utils.display import (
     display_error,
     display_success,
     display_warning,
+    loading_spinner,
 )
 from niveshpy.cli.utils.output_models import OutputFormat
 from niveshpy.cli.utils.overrides import command
@@ -65,7 +66,7 @@ def show(
     View the documentation at https://yashovardhan99.github.io/niveshpy/cli/transactions/ for examples.
     """
     state = ctx.ensure_object(AppState)
-    with output.loading_spinner("Loading transactions..."):
+    with loading_spinner("Loading transactions..."):
         transactions = state.app.transaction.list_transactions(
             queries=queries, limit=limit, offset=offset, cost=cost
         )
@@ -375,7 +376,7 @@ def delete(
         display("Dry Run: No changes were made.")
         ctx.exit()
 
-    with output.loading_spinner(f"Deleting transaction '{transaction.id}'..."):
+    with loading_spinner(f"Deleting transaction '{transaction.id}'..."):
         deleted = state.app.transaction.delete_transaction(transaction.id)
         if deleted:
             display_success(

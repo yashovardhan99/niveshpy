@@ -10,7 +10,12 @@ from rich import progress
 
 from niveshpy.cli.utils import flags, overrides
 from niveshpy.cli.utils import output as output
-from niveshpy.cli.utils.display import ask_password, display, display_error
+from niveshpy.cli.utils.display import (
+    ask_password,
+    display,
+    display_error,
+    loading_spinner,
+)
 from niveshpy.core import parsers as parser_registry
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
@@ -67,7 +72,7 @@ def parse(
     state = ctx.ensure_object(AppState)
     inquirer_style = get_style({}, style_override=state.no_color)
 
-    with output.loading_spinner(f"Looking for parser {parser_key}..."):
+    with loading_spinner(f"Looking for parser {parser_key}..."):
         if parser_registry.is_empty():
             parser_registry.discover_installed_parsers(parser_key)
         parser_factory = parser_registry.get_parser(parser_key)
@@ -89,7 +94,7 @@ def parse(
             )
             password = ask_password()
 
-    with output.loading_spinner(f"Loading parser {parser_key}..."):
+    with loading_spinner(f"Loading parser {parser_key}..."):
         parser = parser_factory.create_parser(
             file_path,
             password=password,

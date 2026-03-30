@@ -1,9 +1,13 @@
 """Simple utilities for displaying output in the CLI."""
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from rich.console import Console
+
+# Simple printing utilities for the CLI, using Rich for styling and formatting.
 
 
 def display(
@@ -55,6 +59,47 @@ def display_error(
         console = _error_console
 
     display(f"[bold red]{tag}[/bold red]", *objects, console=console)
+
+
+# Additional utilities for the CLI.
+
+
+@contextmanager
+def capture_for_pager(console: Console | None = None) -> Generator[None, None, None]:
+    """Context manager to capture console output for paging if the console is a terminal."""
+    if not console:
+        from niveshpy.cli.utils.setup import _console
+
+        console = _console
+
+    if console.is_terminal:
+        import click
+
+        with console.capture() as capture:
+            yield
+        click.echo_via_pager(capture.get())
+    else:
+        yield
+
+
+@contextmanager
+def loading_spinner(
+    message: str, console: Console | None = None
+) -> Generator[None, None, None]:
+    """Context manager to show a loading spinner with a message."""
+    if not console:
+        from niveshpy.cli.utils.setup import _error_console
+
+        console = _error_console
+
+    if console.is_terminal:
+        with console.status(message):
+            yield
+    else:
+        yield
+
+
+# Input utilities for the CLI.
 
 
 def ask_password(prompt: str = "Enter password: ") -> str:

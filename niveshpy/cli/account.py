@@ -7,11 +7,13 @@ import click
 from niveshpy.cli.models.accounts import AccountDisplay
 from niveshpy.cli.utils import essentials, flags
 from niveshpy.cli.utils.display import (
+    capture_for_pager,
     display,
     display_error,
     display_json,
     display_success,
     display_warning,
+    loading_spinner,
 )
 from niveshpy.cli.utils.output_models import OutputFormat
 from niveshpy.cli.utils.overrides import command
@@ -49,7 +51,7 @@ def show(
     from niveshpy.cli.utils import output
 
     state = ctx.ensure_object(AppState)
-    with output.loading_spinner("Loading accounts..."):
+    with loading_spinner("Loading accounts..."):
         result = state.app.account.list_accounts(
             queries=queries, limit=limit, offset=offset
         )
@@ -71,7 +73,7 @@ def show(
             else None
         )
     )
-    with output.capture_for_pager():
+    with capture_for_pager():
         if format == OutputFormat.TABLE:
             if extra_message:
                 display(extra_message)
@@ -189,7 +191,6 @@ def delete(
     from InquirerPy.base.control import Choice
     from InquirerPy.validator import NumberValidator
 
-    from niveshpy.cli.utils import output
     from niveshpy.models.account import AccountPublic
 
     state = ctx.ensure_object(AppState)
@@ -242,7 +243,7 @@ def delete(
         display("Dry Run: No changes were made.")
         ctx.exit()
 
-    with output.loading_spinner(f"Deleting account with ID {account.id}..."):
+    with loading_spinner(f"Deleting account with ID {account.id}..."):
         deleted = state.app.account.delete_account(account.id)
         if deleted:
             display_success(f"Account ID {account.id} was deleted successfully.")

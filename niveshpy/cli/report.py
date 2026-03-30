@@ -8,7 +8,13 @@ from typing import Literal
 import click
 
 from niveshpy.cli.utils import essentials, flags, output
-from niveshpy.cli.utils.display import display, display_json, display_warning
+from niveshpy.cli.utils.display import (
+    capture_for_pager,
+    display,
+    display_json,
+    display_warning,
+    loading_spinner,
+)
 from niveshpy.cli.utils.output_models import OutputFormat, SectionBreak, TotalRow
 from niveshpy.cli.utils.overrides import NiveshPyCommand
 from niveshpy.core.logging import logger
@@ -61,7 +67,7 @@ def holdings(
     )
 
     # Generate report
-    with output.loading_spinner("Generating holdings report..."):
+    with loading_spinner("Generating holdings report..."):
         from niveshpy.services.report import get_holdings
 
         holdings = get_holdings(queries, limit, offset)
@@ -171,7 +177,7 @@ def allocation(
         group_by,
     )
     # Generate report
-    with output.loading_spinner("Generating allocation report..."):
+    with loading_spinner("Generating allocation report..."):
         from niveshpy.services.report import get_allocation
 
         allocations = get_allocation(queries, group_by=group_by)
@@ -222,7 +228,7 @@ def performance(
     )
 
     logger.debug("Running performance command with %d queries", len(queries))
-    with output.loading_spinner("Generating performance report..."):
+    with loading_spinner("Generating performance report..."):
         from niveshpy.services.report import get_performance
 
         result = get_performance(queries, limit=limit, offset=offset)
@@ -303,7 +309,7 @@ def summary(
     Optionally, provide text <queries> to filter securities and accounts.
     """
     logger.debug("Running summary command with %d queries", len(queries))
-    with output.loading_spinner("Generating portfolio summary..."):
+    with loading_spinner("Generating portfolio summary..."):
         from niveshpy.models.output import format_decimal, format_percentage
         from niveshpy.services.report import get_summary
 
@@ -408,10 +414,10 @@ def summary(
                 )
 
             # Display group
-            with output.capture_for_pager():
+            with capture_for_pager():
                 display(top_panel)
                 display(Padding(holdings, (2, 0)))
                 display(allocation)
         else:
-            with output.capture_for_pager():
+            with capture_for_pager():
                 display_json(result.model_dump_json())

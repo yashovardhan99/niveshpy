@@ -3,13 +3,11 @@
 import decimal
 from collections.abc import (
     Callable,
-    Generator,
     Iterable,
     Mapping,
     MutableMapping,
     Sequence,
 )
-from contextlib import contextmanager
 from datetime import date, datetime
 from io import StringIO
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -19,10 +17,21 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
-from niveshpy.cli.utils.display import display as _display
-from niveshpy.cli.utils.display import display_error as _display_error
-from niveshpy.cli.utils.display import display_json as _display_json
-from niveshpy.cli.utils.display import display_warning as _display_warning
+from niveshpy.cli.utils.display import (
+    capture_for_pager as _capture_for_pager,
+)
+from niveshpy.cli.utils.display import (
+    display as _display,
+)
+from niveshpy.cli.utils.display import (
+    display_error as _display_error,
+)
+from niveshpy.cli.utils.display import (
+    display_json as _display_json,
+)
+from niveshpy.cli.utils.display import (
+    display_warning as _display_warning,
+)
 from niveshpy.cli.utils.output_models import OutputFormat, SectionBreak, TotalRow
 from niveshpy.cli.utils.setup import _console, _error_console
 from niveshpy.core.logging import logger
@@ -133,31 +142,6 @@ def _convert_models_to_rich_table(
     return table
 
 
-@contextmanager
-def capture_for_pager(console: Console | None = None) -> Generator[None, None, None]:
-    """Context manager to capture console output for paging if the console is a terminal."""
-    if (console or _console).is_terminal:
-        import click
-
-        with (console or _console).capture() as capture:
-            yield
-        click.echo_via_pager(capture.get())
-    else:
-        yield
-
-
-@contextmanager
-def loading_spinner(
-    message: str, console: Console | None = None
-) -> Generator[None, None, None]:
-    """Context manager to show a loading spinner with a message."""
-    if (console or _error_console).is_terminal:
-        with (console or _error_console).status(message):
-            yield
-    else:
-        yield
-
-
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -249,7 +233,7 @@ def display_list(
         formatted_data = _convert_models_to_rich_table(items, cls.model_fields)
 
     if _console.is_terminal:
-        with capture_for_pager():
+        with _capture_for_pager():
             if extra_message:
                 _display(extra_message)
             if fmt == OutputFormat.JSON:
