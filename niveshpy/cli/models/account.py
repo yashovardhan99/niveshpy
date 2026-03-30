@@ -6,10 +6,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from niveshpy.cli.utils.output_models import Column
+from niveshpy.exceptions import ResourceError
 from niveshpy.models.output import format_datetime
 
 if TYPE_CHECKING:
-    from niveshpy.models.account import AccountPublic
+    from niveshpy.models.account import Account, AccountPublic
 
 
 @dataclass(slots=True, frozen=True)
@@ -37,8 +38,11 @@ class AccountDisplay:
     ]
 
     @classmethod
-    def from_domain(cls, account: AccountPublic) -> Self:
-        """Create an AccountDisplay instance from a domain AccountPublic model."""
+    def from_domain(cls, account: AccountPublic | Account) -> Self:
+        """Create an AccountDisplay instance from a domain Account model."""
+        if account.id is None:
+            msg = f"Invalid account data: missing ID for account '{account.name}'"
+            raise ResourceError(msg)
         return cls(
             id=account.id,
             name=account.name,

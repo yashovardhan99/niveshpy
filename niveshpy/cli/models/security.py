@@ -1,4 +1,4 @@
-"""Module for account-related data models used in the CLI."""
+"""Module for security-related data models used in the CLI."""
 
 import datetime
 from collections.abc import Sequence

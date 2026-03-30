@@ -3,17 +3,17 @@
 import datetime
 import decimal
 import textwrap
-from collections.abc import Sequence
-from typing import Any
 
 import click
-from InquirerPy import get_style, inquirer, validator
-from InquirerPy.base.control import Choice
 
-from niveshpy.cli.utils import essentials, flags, inputs, output
+from niveshpy.cli.models.transaction import TransactionDisplay
+from niveshpy.cli.utils import essentials, flags, inputs
+from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
+    capture_for_pager,
     display,
     display_error,
+    display_json,
     display_success,
     display_warning,
     loading_spinner,
@@ -23,15 +23,7 @@ from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import InvalidInputError, ResourceNotFoundError
-from niveshpy.models.transaction import (
-    TransactionDisplay,
-    TransactionDisplayWithCost,
-    TransactionPublic,
-    TransactionPublicWithCost,
-    TransactionPublicWithRelations,
-    TransactionPublicWithRelationsAndCost,
-    TransactionType,
-)
+from niveshpy.models.transaction import TransactionType
 
 
 @essentials.group()
@@ -67,53 +59,48 @@ def show(
     """
     state = ctx.ensure_object(AppState)
     with loading_spinner("Loading transactions..."):
-        transactions = state.app.transaction.list_transactions(
+        result = state.app.transaction.list_transactions(
             queries=queries, limit=limit, offset=offset, cost=cost
         )
 
-    if len(transactions) == 0:
+    if len(result) == 0:
         msg = "No transactions " + (
             "match your query." if queries else "found in the database."
         )
         display_warning(msg)
-    else:
-        if cost:
-            fmt_cls: Any = (
-                TransactionPublicWithRelationsAndCost
-                if format == OutputFormat.JSON
-                else (
-                    TransactionPublicWithCost
-                    if format == OutputFormat.CSV
-                    else TransactionDisplayWithCost
-                )
-            )
-        else:
-            fmt_cls = (
-                TransactionPublicWithRelations
-                if format == OutputFormat.JSON
-                else (
-                    TransactionPublic
-                    if format == OutputFormat.CSV
-                    else TransactionDisplay
-                )
-            )
+        ctx.exit()
 
-        transformed_transactions = [
-            fmt_cls.model_validate(transaction) for transaction in transactions
-        ]
-
-        output.display_list(
-            fmt_cls,
-            transformed_transactions,
-            format,
-            extra_message=f"Showing first {limit:,} transactions."
-            if len(transactions) == limit and offset == 0
-            else (
-                f"Showing transactions {offset + 1:,} to {offset + len(transactions):,}."
-                if offset > 0
-                else None
-            ),
+    transactions = map(TransactionDisplay.from_domain, result)
+    extra_message = (
+        f"Showing first {limit:,} transactions."
+        if len(result) == limit and offset == 0
+        else (
+            f"Showing transactions {offset + 1:,} to {offset + len(result):,}."
+            if offset > 0
+            else None
         )
+    )
+    with capture_for_pager():
+        if format == OutputFormat.TABLE:
+            if extra_message:
+                display(extra_message)
+            table = build_table(
+                transactions,
+                TransactionDisplay.columns_with_cost
+                if cost
+                else TransactionDisplay.columns,
+            )
+            display(table)
+        elif format == OutputFormat.CSV:
+            csv = build_csv(
+                (t.to_csv_dict(include_cost=cost) for t in transactions),
+                fields=TransactionDisplay.csv_fields_with_cost
+                if cost
+                else TransactionDisplay.csv_fields,
+            )
+            display(csv)
+        elif format == OutputFormat.JSON:
+            display_json(data=[t.to_json_dict(include_cost=cost) for t in transactions])
 
 
 @command("add")
@@ -162,6 +149,8 @@ def add(
         account_id : ID of the account associated with the transaction.
         security_key : Key of the security involved in the transaction.
     """  # noqa: D301
+    from InquirerPy import inquirer, validator
+
     state = ctx.ensure_object(AppState)
     if state.no_input:
         # Check that all required arguments are provided
@@ -318,6 +307,9 @@ def delete(
 
     When running in a non-interactive mode, --force must be provided to confirm deletion. Additionally, the <query> must match exactly one transaction ID.
     """
+    from InquirerPy import get_style, inquirer, validator
+    from InquirerPy.base.control import Choice
+
     state = ctx.ensure_object(AppState)
 
     if state.no_input and not force:
@@ -328,13 +320,9 @@ def delete(
 
     inquirer_style = get_style({}, style_override=state.no_color)
 
-    candidates: Sequence[TransactionDisplay] = (
-        state.app.transaction.resolve_transaction(
-            queries, limit, allow_ambiguous=not state.no_input
-        )
+    candidates = state.app.transaction.resolve_transaction(
+        queries, limit, allow_ambiguous=not state.no_input
     )
-
-    transaction: TransactionDisplay
 
     if not candidates:
         raise ResourceNotFoundError("transaction", " ".join(queries))
