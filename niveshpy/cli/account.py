@@ -6,6 +6,7 @@ import click
 
 from niveshpy.cli.models.accounts import AccountDisplay
 from niveshpy.cli.utils import essentials, flags
+from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
     capture_for_pager,
     display,
@@ -48,8 +49,6 @@ def show(
 
     An optional QUERY can be provided to filter accounts by name or institution.
     """
-    from niveshpy.cli.utils import output
-
     state = ctx.ensure_object(AppState)
     with loading_spinner("Loading accounts..."):
         result = state.app.account.list_accounts(
@@ -77,10 +76,10 @@ def show(
         if format == OutputFormat.TABLE:
             if extra_message:
                 display(extra_message)
-            table = output.build_table(accounts, AccountDisplay.columns)
+            table = build_table(accounts, AccountDisplay.columns)
             display(table)
         elif format == OutputFormat.CSV:
-            csv = output.build_csv(
+            csv = build_csv(
                 map(AccountDisplay.to_csv_dict, accounts),
                 fields=AccountDisplay.csv_fields,
             )

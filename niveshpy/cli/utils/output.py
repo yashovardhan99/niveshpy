@@ -3,8 +3,6 @@
 import decimal
 from collections.abc import (
     Callable,
-    Iterable,
-    Mapping,
     MutableMapping,
     Sequence,
 )
@@ -48,8 +46,6 @@ from niveshpy.models.output import (
 if TYPE_CHECKING:
     from pydantic.fields import FieldInfo
     from rich import progress
-
-    from niveshpy.cli.utils.output_models import Column
 
 
 def _format_list_or_dict(data: list | dict) -> str:
@@ -143,50 +139,6 @@ def _convert_models_to_rich_table(
 
 
 T = TypeVar("T", bound=BaseModel)
-
-
-def build_table(
-    items: Iterable[Any | SectionBreak | TotalRow],
-    columns: Sequence[Column],
-) -> Table:
-    """Build a Rich Table from an iterable of items with section breaks and total rows."""
-    table = Table(header_style="dim", box=box.SIMPLE)
-    for column in columns:
-        table.add_column(
-            column.name,
-            justify=column.justify,
-            style=column.style,
-        )
-
-    for item in items:
-        if isinstance(item, SectionBreak):
-            table.add_section()
-        elif isinstance(item, TotalRow):
-            table.add_row(
-                item.description,
-                *([None] * (len(columns) - 2)),
-                str(item.total),
-                style="bold",
-            )
-        else:
-            row = []
-            for column in columns:
-                value = getattr(item, column.key, None)
-                row.append(column.format(value))
-            table.add_row(*row)
-
-    return table
-
-
-def build_csv(items: Iterable[Mapping[str, Any]], *, fields: Sequence[str]) -> str:
-    """Build a CSV string from an iterable of items."""
-    import csv
-
-    f = StringIO()
-    writer = csv.DictWriter(f, fieldnames=fields)
-    writer.writeheader()
-    writer.writerows(items)
-    return f.getvalue()
 
 
 def display_list(
