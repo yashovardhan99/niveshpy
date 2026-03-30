@@ -10,6 +10,7 @@ from rich import progress
 
 from niveshpy.cli.utils import flags, overrides
 from niveshpy.cli.utils import output as output
+from niveshpy.cli.utils.display import ask_password, display, display_error
 from niveshpy.core import parsers as parser_registry
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
@@ -86,7 +87,7 @@ def parse(
             logger.info(
                 "Password is required for this parser but not provided. Asking interactively."
             )
-            password = output.ask_password()
+            password = ask_password()
 
     with output.loading_spinner(f"Loading parser {parser_key}..."):
         parser = parser_factory.create_parser(
@@ -95,7 +96,7 @@ def parse(
         )
 
     if not state.no_input:
-        output.display_message(
+        display(
             textwrap.dedent(f"""
                     The parser ({parser_info.name}) will now parse and store data from the file.
                     This may take some time depending on the file size and content.
@@ -105,7 +106,7 @@ def parse(
         if not inquirer.confirm(
             "Do you want to continue?", style=inquirer_style, default=True
         ).execute():
-            output.display_error("Operation cancelled by user.")
+            display_error("Operation cancelled by user.")
             ctx.abort()
 
     prog = output.get_progress_bar()

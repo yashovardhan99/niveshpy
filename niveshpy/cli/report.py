@@ -8,6 +8,7 @@ from typing import Literal
 import click
 
 from niveshpy.cli.utils import essentials, flags, output
+from niveshpy.cli.utils.display import display, display_json, display_warning
 from niveshpy.cli.utils.output_models import OutputFormat, SectionBreak, TotalRow
 from niveshpy.cli.utils.overrides import NiveshPyCommand
 from niveshpy.core.logging import logger
@@ -67,7 +68,7 @@ def holdings(
 
     # Warn if date filter is used — invested amounts don't respect date filters
     if _has_date_query(queries):
-        output.display_warning(
+        display_warning(
             "Date filters apply to current value and units but not to invested "
             "amounts, which always use the full transaction history."
         )
@@ -78,7 +79,7 @@ def holdings(
             "Make sure you have added transactions for your securities"
             " and try syncing prices using 'niveshpy prices sync'."
         )
-        output.display_warning(msg)
+        display_warning(msg)
     else:
         extra_message = (
             f"Showing first {limit:,} holdings."
@@ -94,7 +95,7 @@ def holdings(
             h.date < (datetime.date.today() - datetime.timedelta(days=DAYS_FOR_OLD))
             for h in holdings
         ) and (not _has_date_query(queries)):
-            output.display_warning(
+            display_warning(
                 "Some holdings have not been updated recently. "
                 "Consider syncing latest prices using 'niveshpy prices sync'."
             )
@@ -180,7 +181,7 @@ def allocation(
             "Make sure you have added transactions for your securities"
             " and try syncing prices using 'niveshpy prices sync'."
         )
-        output.display_warning(msg)
+        display_warning(msg)
     else:
         output.display_list(
             cls=type(allocations[0]),
@@ -232,7 +233,7 @@ def performance(
             "Make sure you have added transactions for your securities"
             " and try syncing prices using 'niveshpy prices sync'."
         )
-        output.display_warning(msg)
+        display_warning(msg)
         return
 
     extra_message = (
@@ -315,7 +316,7 @@ def summary(
                 "Make sure your queries are correct and try syncing prices using "
                 "'niveshpy prices sync'."
             )
-            output.display_warning(msg)
+            display_warning(msg)
         else:
             msg = (
                 "Welcome to [bold]NiveshPy[/bold].\n"
@@ -323,7 +324,7 @@ def summary(
                 " and try syncing prices using 'niveshpy prices sync'.\n"
                 "You can also import transactions from your preferred source using 'niveshpy parse ...'"
             )
-            output.display(msg)
+            display(msg)
 
     else:
         if format == OutputFormat.TABLE:
@@ -408,9 +409,9 @@ def summary(
 
             # Display group
             with output.capture_for_pager():
-                output.display(top_panel)
-                output.display(Padding(holdings, (2, 0)))
-                output.display(allocation)
+                display(top_panel)
+                display(Padding(holdings, (2, 0)))
+                display(allocation)
         else:
             with output.capture_for_pager():
-                output.display_json(result.model_dump_json())
+                display_json(result.model_dump_json())

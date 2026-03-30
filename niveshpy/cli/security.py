@@ -9,6 +9,12 @@ from InquirerPy.base.control import Choice
 from InquirerPy.validator import EmptyInputValidator
 
 from niveshpy.cli.utils import essentials, flags, output
+from niveshpy.cli.utils.display import (
+    display,
+    display_error,
+    display_success,
+    display_warning,
+)
 from niveshpy.cli.utils.output_models import OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
@@ -51,7 +57,7 @@ def show(
         )
 
     if len(securities) == 0:
-        output.display_warning(
+        display_warning(
             "No securities "
             + ("match your query." if queries else "found in the database.")
         )
@@ -127,13 +133,11 @@ def add(
         )
 
         action = "added" if result.action == MergeAction.INSERT else "updated"
-        output.display_success(
-            f"Security '{result.data.name}' was {action} successfully."
-        )
+        display_success(f"Security '{result.data.name}' was {action} successfully.")
         return
 
-    output.display_message("Adding a new security.")
-    output.display_message(
+    display("Adding a new security.")
+    display(
         dedent("""
             Any command-line arguments will be used as defaults.
             Use arrow keys to navigate, and [i]Enter[/i] to accept defaults.
@@ -191,16 +195,14 @@ def add(
             )
 
         action = "added" if result.action == MergeAction.INSERT else "updated"
-        output.display_success(
-            f"Security '{result.data.name}' was {action} successfully."
-        )
+        display_success(f"Security '{result.data.name}' was {action} successfully.")
 
         if default_key:
             # If defaults were provided via command-line arguments, exit after one iteration
             break
 
-        output.display_message("Add Next Security")
-        output.display_message("Press [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.")
+        display("Add Next Security")
+        display("Press [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.")
 
 
 @command()
@@ -226,7 +228,7 @@ def delete(
     state = ctx.ensure_object(AppState)
 
     if state.no_input and not force:
-        output.display_error(
+        display_error(
             "When running in non-interactive mode, --force must be provided to confirm deletion."
         )
         ctx.exit(1)
@@ -256,7 +258,7 @@ def delete(
         security = candidates[0]
 
     if dry_run or not force:
-        output.display_message("You have selected the following security:", security)
+        display("You have selected the following security:", security)
         if (
             not dry_run
             and not inquirer.confirm(
@@ -269,13 +271,13 @@ def delete(
             ctx.abort()
 
     if dry_run:
-        output.display_message("Dry Run: No changes were made.")
+        display("Dry Run: No changes were made.")
         ctx.exit()
 
     with output.loading_spinner(f"Deleting security '{security.key}'..."):
         deleted = state.app.security.delete_security(security.key)
         if deleted:
-            output.display_success(
+            display_success(
                 f"Security '{security.key}' was deleted successfully.",
             )
         else:

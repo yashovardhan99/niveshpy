@@ -8,6 +8,7 @@ import click
 import click.shell_completion
 
 from niveshpy.cli.utils import essentials, flags, output, overrides
+from niveshpy.cli.utils.display import display_success, display_warning
 from niveshpy.cli.utils.output_models import OutputFormat
 from niveshpy.core.app import AppState
 from niveshpy.exceptions import InvalidInputError
@@ -83,7 +84,7 @@ def list_prices(
             + ("match your query." if queries else "found in the database.")
             + " Try syncing prices using 'niveshpy prices sync'."
         )
-        output.display_warning(msg)
+        display_warning(msg)
     else:
         fmt_cls = (
             PricePublicWithRelations
@@ -137,7 +138,7 @@ def update_prices(
     result = state.app.price.update_price(key, date, ohlc, source="cli")
 
     action = "added" if result == MergeAction.INSERT else "updated"
-    output.display_success(f"Price was {action} successfully.")
+    display_success(f"Price was {action} successfully.")
 
 
 @overrides.command("sync")

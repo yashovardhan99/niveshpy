@@ -86,7 +86,7 @@ class AppState:
     no_input: bool = False
     no_color: bool = False
 
-    @functools.cached_property
+    @functools.cached_property[Application]
     def app(self) -> Application:
         """The main application instance."""
         return Application()

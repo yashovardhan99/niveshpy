@@ -11,6 +11,12 @@ from InquirerPy import get_style, inquirer, validator
 from InquirerPy.base.control import Choice
 
 from niveshpy.cli.utils import essentials, flags, inputs, output
+from niveshpy.cli.utils.display import (
+    display,
+    display_error,
+    display_success,
+    display_warning,
+)
 from niveshpy.cli.utils.output_models import OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
@@ -68,7 +74,7 @@ def show(
         msg = "No transactions " + (
             "match your query." if queries else "found in the database."
         )
-        output.display_warning(msg)
+        display_warning(msg)
     else:
         if cost:
             fmt_cls: Any = (
@@ -172,7 +178,7 @@ def add(
             if arg_value is None
         ]
         if missing_args:
-            output.display_error(
+            display_error(
                 f"Missing required arguments for non-interactive mode: {missing_args}"
             )
             ctx.exit(1)
@@ -188,10 +194,10 @@ def add(
             security_key=security_key,
             source="cli",
         )
-        output.display_success(f"Transaction added successfully with ID: {result.id}")
+        display_success(f"Transaction added successfully with ID: {result.id}")
     else:
-        output.display_message("Adding a new transaction.")
-        output.display_message(
+        display("Adding a new transaction.")
+        display(
             textwrap.dedent("""
                 Any command-line arguments will be used as defaults.
                 Use arrow keys to navigate, and [i]Enter[/i] to accept defaults.
@@ -245,7 +251,7 @@ def add(
             # Fetch accounts for selection
             accounts = state.app.transaction.get_account_choices()
             if not accounts:
-                output.display_error(
+                display_error(
                     "No accounts found in the database. Please add an account first."
                 )
                 ctx.exit(1)
@@ -262,7 +268,7 @@ def add(
             # Fetch securities for selection
             securities = state.app.transaction.get_security_choices()
             if not securities:
-                output.display_error(
+                display_error(
                     "No securities found in the database. Please add a security first."
                 )
                 ctx.exit(1)
@@ -284,12 +290,10 @@ def add(
                 security_key=security_key,
                 source="cli",
             )
-            output.display_success(
-                f"Transaction added successfully with ID: {result.id}"
-            )
+            display_success(f"Transaction added successfully with ID: {result.id}")
 
-            output.display_message("Adding another transaction...")
-            output.display_message("(Press Ctrl+C or Ctrl+D to exit.)")
+            display("Adding another transaction...")
+            display("(Press Ctrl+C or Ctrl+D to exit.)")
 
 
 @command("delete")
@@ -355,9 +359,7 @@ def delete(
         )[0]
 
     if dry_run or not force:
-        output.display_message(
-            "You have selected the following transaction:", transaction
-        )
+        display("You have selected the following transaction:", transaction)
         if (
             not dry_run
             and not inquirer.confirm(
@@ -370,13 +372,13 @@ def delete(
             ctx.abort()
 
     if dry_run:
-        output.display_message("Dry Run: No changes were made.")
+        display("Dry Run: No changes were made.")
         ctx.exit()
 
     with output.loading_spinner(f"Deleting transaction '{transaction.id}'..."):
         deleted = state.app.transaction.delete_transaction(transaction.id)
         if deleted:
-            output.display_success(
+            display_success(
                 f"Transaction with ID {transaction.id} was deleted successfully.",
             )
         else:

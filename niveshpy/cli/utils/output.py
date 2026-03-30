@@ -1,7 +1,14 @@
 """Utility functions for styling CLI output."""
 
 import decimal
-from collections.abc import Callable, Generator, MutableMapping, Sequence
+from collections.abc import (
+    Callable,
+    Generator,
+    Iterable,
+    Mapping,
+    MutableMapping,
+    Sequence,
+)
 from contextlib import contextmanager
 from datetime import date, datetime
 from io import StringIO
@@ -12,6 +19,10 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
+from niveshpy.cli.utils.display import display as _display
+from niveshpy.cli.utils.display import display_error as _display_error
+from niveshpy.cli.utils.display import display_json as _display_json
+from niveshpy.cli.utils.display import display_warning as _display_warning
 from niveshpy.cli.utils.output_models import OutputFormat, SectionBreak, TotalRow
 from niveshpy.cli.utils.setup import _console, _error_console
 from niveshpy.core.logging import logger
@@ -28,6 +39,8 @@ from niveshpy.models.output import (
 if TYPE_CHECKING:
     from pydantic.fields import FieldInfo
     from rich import progress
+
+    from niveshpy.cli.utils.output_models import Column
 
 
 def _format_list_or_dict(data: list | dict) -> str:
@@ -133,37 +146,6 @@ def capture_for_pager(console: Console | None = None) -> Generator[None, None, N
         yield
 
 
-def display(*objects: object, console: Console | None = None) -> None:
-    """Display objects to the console with optional styling."""
-    (console or _console).print(*objects)
-
-
-def display_json(data: str, console: Console | None = None) -> None:
-    """Display JSON data to the console with pretty formatting."""
-    (console or _console).print_json(data)
-
-
-display_message = display
-"""Alias to maintain backward compatibility."""
-
-
-def display_success(message: str, console: Console | None = None) -> None:
-    """Display a success message to the console."""
-    (console or _console).print(message, style="green")
-
-
-def display_warning(message: object, console: Console | None = None) -> None:
-    """Display a warning message to the error console."""
-    (console or _error_console).print("[bold yellow]Warning:[/bold yellow]", message)
-
-
-def display_error(
-    message: str, tag: str = "Error:", console: Console | None = None
-) -> None:
-    """Display an error message to the error console."""
-    (console or _error_console).print(f"[bold red]{tag}[/bold red] {message}")
-
-
 @contextmanager
 def loading_spinner(
     message: str, console: Console | None = None
@@ -177,6 +159,50 @@ def loading_spinner(
 
 
 T = TypeVar("T", bound=BaseModel)
+
+
+def build_table(
+    items: Iterable[Any | SectionBreak | TotalRow],
+    columns: Sequence[Column],
+) -> Table:
+    """Build a Rich Table from an iterable of items with section breaks and total rows."""
+    table = Table(header_style="dim", box=box.SIMPLE)
+    for column in columns:
+        table.add_column(
+            column.name,
+            justify=column.justify,
+            style=column.style,
+        )
+
+    for item in items:
+        if isinstance(item, SectionBreak):
+            table.add_section()
+        elif isinstance(item, TotalRow):
+            table.add_row(
+                item.description,
+                *([None] * (len(columns) - 2)),
+                str(item.total),
+                style="bold",
+            )
+        else:
+            row = []
+            for column in columns:
+                value = getattr(item, column.key, None)
+                row.append(column.format(value))
+            table.add_row(*row)
+
+    return table
+
+
+def build_csv(items: Iterable[Mapping[str, Any]], *, fields: Sequence[str]) -> str:
+    """Build a CSV string from an iterable of items."""
+    import csv
+
+    f = StringIO()
+    writer = csv.DictWriter(f, fieldnames=fields)
+    writer.writeheader()
+    writer.writerows(items)
+    return f.getvalue()
 
 
 def display_list(
@@ -225,28 +251,16 @@ def display_list(
     if _console.is_terminal:
         with capture_for_pager():
             if extra_message:
-                display(extra_message)
+                _display(extra_message)
             if fmt == OutputFormat.JSON:
-                display_json(str(formatted_data))
+                _display_json(str(formatted_data))
             else:
-                display(formatted_data)
+                _display(formatted_data)
     else:
         if fmt == OutputFormat.JSON:
-            display_json(str(formatted_data))
+            _display_json(str(formatted_data))
         else:
             _console.print(formatted_data, soft_wrap=True)
-
-
-def ask_password(prompt: str = "Enter password: ") -> str:
-    """Prompt the user for a password securely.
-
-    Args:
-        prompt (str): The prompt message to display.
-
-    Returns:
-        str: The password entered by the user.
-    """
-    return _console.input(prompt, password=True).strip()
 
 
 def get_progress_bar() -> progress.Progress:
@@ -303,7 +317,7 @@ def handle_error(error: NiveshPyError) -> None:
         error.message,
         exc_info=True,
     )
-    display_error(error.message)
+    _display_error(error.message)
 
 
 def handle_niveshpy_message(
@@ -316,6 +330,6 @@ def handle_niveshpy_message(
         console (Console | None): Optional Rich Console to use for output.
     """
     if isinstance(message, Warning):
-        display_warning(message, console=console)
+        _display_warning(message, console=console)
     elif isinstance(message, Message):
-        display(message, console=console)
+        _display(message, console=console)
