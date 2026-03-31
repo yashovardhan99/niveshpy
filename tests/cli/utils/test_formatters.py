@@ -1,9 +1,13 @@
-"""Tests for niveshpy.models.output formatting functions."""
+"""Tests for niveshpy.cli.utils formatting functions."""
 
 import datetime
 from decimal import Decimal
 
-from niveshpy.models.output import format_datetime, format_decimal, format_percentage
+from niveshpy.cli.utils.formatters import (
+    format_datetime,
+    format_decimal,
+    format_percentage,
+)
 
 
 class TestFormatDecimal:

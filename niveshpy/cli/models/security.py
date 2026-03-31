@@ -5,8 +5,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from niveshpy.cli.utils.formatters import format_datetime
 from niveshpy.cli.utils.output_models import Column
-from niveshpy.models.output import format_datetime
 
 if TYPE_CHECKING:
     from niveshpy.models.security import Security, SecurityCategory, SecurityType

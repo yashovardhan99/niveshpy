@@ -6,10 +6,10 @@ from collections.abc import Sequence
 
 from pydantic import BaseModel, Field
 
+from niveshpy.cli.utils.formatters import format_percentage
 from niveshpy.core.query import ast
 from niveshpy.exceptions import OperationError
 from niveshpy.models.account import Account
-from niveshpy.models.output import format_percentage
 from niveshpy.models.security import (
     Security,
     SecurityCategory,

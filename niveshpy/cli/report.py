@@ -15,6 +15,7 @@ from niveshpy.cli.utils.display import (
     display_warning,
     loading_spinner,
 )
+from niveshpy.cli.utils.formatters import format_decimal, format_percentage
 from niveshpy.cli.utils.output_models import OutputFormat, SectionBreak, TotalRow
 from niveshpy.cli.utils.overrides import NiveshPyCommand
 from niveshpy.core.logging import logger
@@ -310,7 +311,6 @@ def summary(
     """
     logger.debug("Running summary command with %d queries", len(queries))
     with loading_spinner("Generating portfolio summary..."):
-        from niveshpy.models.output import format_decimal, format_percentage
         from niveshpy.services.report import get_summary
 
         result = get_summary(queries)
