@@ -55,5 +55,10 @@ def format_datetime(dt: datetime.datetime) -> str:
         if days < 7:
             return f"about {days} days ago"
         else:
-            date = dt.strftime("%d %b %Y")
+            date = format_date(dt.date())
             return f"on {date}"
+
+
+def format_date(d: datetime.date) -> str:
+    """Format a date object to a string in the format 'DD MMM YYYY'."""
+    return d.strftime("%d %b %Y")

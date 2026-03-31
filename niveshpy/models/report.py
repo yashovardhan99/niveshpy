@@ -3,6 +3,7 @@
 import datetime
 import decimal
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 
@@ -21,98 +22,16 @@ from niveshpy.models.security import (
 # Holdings
 
 
-class HoldingBase(BaseModel):
-    """Base model for holding data."""
+@dataclass(slots=True, frozen=True)
+class Holding:
+    """Data class for a single holding used in report computations."""
 
-    date: datetime.date = Field(
-        ...,
-        json_schema_extra={
-            "style": "cyan",
-            "order": 3,
-            "max_width": 14,
-            "no_wrap": True,
-        },
-    )
-    units: decimal.Decimal = Field(
-        ...,
-        json_schema_extra={
-            "style": "dim",
-            "justify": "right",
-            "order": 4,
-            "max_width": 20,
-            "no_wrap": True,
-        },
-    )
-    invested: decimal.Decimal | None = Field(
-        default=None,
-        json_schema_extra={
-            "justify": "right",
-            "order": 5,
-            "style": "dim",
-            "max_width": 20,
-            "no_wrap": True,
-        },
-    )
-    amount: decimal.Decimal = Field(
-        ...,
-        title="Current Value",
-        json_schema_extra={
-            "style": "bold",
-            "justify": "right",
-            "order": 6,
-            "max_width": 20,
-            "no_wrap": True,
-        },
-    )
-
-
-class Holding(HoldingBase):
-    """Model representing holding data for reports."""
-
-    account: Account = Field(...)
-    security: Security = Field(...)
-
-
-class HoldingDisplay(HoldingBase):
-    """Model representing holding data for display in reports."""
-
-    account: str = Field(
-        ..., json_schema_extra={"style": "dim", "order": 1, "max_width": 30}
-    )
-    security: str = Field(..., json_schema_extra={"order": 2})
-
-    @classmethod
-    def from_holding(cls, holding: Holding) -> "HoldingDisplay":
-        """Create HoldingDisplay from Holding model."""
-        return cls(
-            account=f"{holding.account.name} ({holding.account.institution})",
-            security=f"{holding.security.name} ({holding.security.key})",
-            date=holding.date,
-            units=holding.units,
-            amount=holding.amount,
-            invested=holding.invested,
-        )
-
-
-class HoldingExport(HoldingBase):
-    """Model representing holding data for csv export."""
-
-    account: int
-    security: str
-
-    @classmethod
-    def from_holding(cls, holding: Holding) -> "HoldingExport":
-        """Create HoldingExport from Holding model."""
-        if holding.account.id is None:
-            raise OperationError("Account ID is required for export.")
-        return cls(
-            account=holding.account.id,
-            security=holding.security.key,
-            date=holding.date,
-            units=holding.units,
-            amount=holding.amount,
-            invested=holding.invested,
-        )
+    account: Account
+    security: Security
+    date: datetime.date
+    units: decimal.Decimal
+    invested: decimal.Decimal | None
+    amount: decimal.Decimal
 
 
 HOLDING_COLUMN_MAPPINGS_TXN: dict[ast.Field, list] = {

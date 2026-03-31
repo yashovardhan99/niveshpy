@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from niveshpy.cli.models.security import SecurityDisplay
-from niveshpy.cli.utils.formatters import format_datetime, format_decimal
+from niveshpy.cli.utils.formatters import format_date, format_datetime, format_decimal
 from niveshpy.cli.utils.models import Column
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ class PriceDisplay:
     source: str | None
     columns: ClassVar[Sequence[Column]] = [
         Column("security", formatter=_format_security),
-        Column("date", formatter=lambda d: d.strftime("%d %b %Y"), style="cyan"),
+        Column("date", formatter=format_date, style="cyan"),
         Column("open", formatter=format_decimal, justify="right"),
         Column("high", formatter=format_decimal, style="green", justify="right"),
         Column("low", formatter=format_decimal, style="red", justify="right"),

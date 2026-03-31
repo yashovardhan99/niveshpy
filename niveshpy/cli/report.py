@@ -3,11 +3,14 @@
 import datetime
 import decimal
 import textwrap
+from collections.abc import Sequence
 from typing import Literal
 
 import click
 
+from niveshpy.cli.models.report import HoldingDisplay
 from niveshpy.cli.utils import essentials, flags, output
+from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
     capture_for_pager,
     display,
@@ -61,11 +64,6 @@ def holdings(
     Optionally, provide text <queries> to filter securities, accounts, and dates.
     """
     logger.debug("Running holdings command with %d queries", len(queries))
-    from niveshpy.models.report import (
-        Holding,
-        HoldingDisplay,
-        HoldingExport,
-    )
 
     # Generate report
     with loading_spinner("Generating holdings report..."):
@@ -107,35 +105,32 @@ def holdings(
                 "Consider syncing latest prices using 'niveshpy prices sync'."
             )
 
-        if format == OutputFormat.TABLE:
-            items: list[HoldingDisplay | TotalRow] = [
-                HoldingDisplay.from_holding(h) for h in holdings
-            ]
+        items = [HoldingDisplay.from_domain(h) for h in holdings]
+        with capture_for_pager():
+            if format == OutputFormat.TABLE:
+                table_items: Sequence[HoldingDisplay | TotalRow]
+                if total:
+                    total_value = sum(
+                        (h.amount for h in holdings), decimal.Decimal("0")
+                    )
+                    table_items = items + [TotalRow(format_decimal(total_value))]
+                else:
+                    table_items = items
 
-            if total:
-                total_value = sum((h.amount for h in holdings), decimal.Decimal("0"))
-                items.append(TotalRow(total_value))
+                if extra_message:
+                    display(extra_message)
 
-            output.display_list(
-                cls=HoldingDisplay,
-                items=items,
-                fmt=format,
-                extra_message=extra_message,
-            )
-        elif format == OutputFormat.CSV:
-            output.display_list(
-                cls=HoldingExport,
-                items=[HoldingExport.from_holding(h) for h in holdings],
-                fmt=format,
-                extra_message=extra_message,
-            )
-        else:
-            output.display_list(
-                cls=Holding,
-                items=holdings,
-                fmt=format,
-                extra_message=extra_message,
-            )
+                table = build_table(table_items, HoldingDisplay.columns)
+                display(table)
+            elif format == OutputFormat.CSV:
+                csv = build_csv(
+                    map(HoldingDisplay.to_csv_dict, items),
+                    fields=HoldingDisplay.csv_fields,
+                )
+                display(csv)
+            elif format == OutputFormat.JSON:
+                json = [h.to_json_dict() for h in items]
+                display_json(data=json)
 
 
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)

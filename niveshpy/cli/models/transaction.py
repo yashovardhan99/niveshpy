@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from niveshpy.cli.models.account import AccountDisplay
 from niveshpy.cli.models.security import SecurityDisplay
-from niveshpy.cli.utils.formatters import format_datetime, format_decimal
+from niveshpy.cli.utils.formatters import format_date, format_datetime, format_decimal
 from niveshpy.cli.utils.models import Column
 
 if TYPE_CHECKING:
@@ -57,7 +57,7 @@ class TransactionDisplay:
         Column(
             "transaction_date",
             name="Date",
-            formatter=lambda d: d.strftime("%d %b %Y"),
+            formatter=format_date,
             style="cyan",
         ),
         Column("type", formatter=_format_transaction_type),
