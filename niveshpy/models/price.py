@@ -4,8 +4,6 @@ import datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import Field as PydanticField
-from pydantic import field_validator
 from sqlmodel import JSON, NUMERIC, Column, Field, Relationship, SQLModel
 
 from niveshpy.core.query import ast
@@ -143,32 +141,6 @@ class PricePublicWithRelations(PricePublic):
         title="Security",
         schema_extra={"json_schema_extra": {"order": 0}},
     )
-
-
-class PriceDisplay(PricePublic):
-    """Model for displaying price data with related info.
-
-    Attributes:
-        security (str): Formatted security information.
-        date (datetime.date): Date of the price data.
-        open (Decimal): Opening price.
-        high (Decimal): Highest price.
-        low (Decimal): Lowest price.
-        close (Decimal): Closing price.
-        properties (dict[str, Any]): Additional properties of the price data.
-        created (datetime.datetime): Timestamp when the price data was created.
-    """
-
-    security: str = PydanticField(
-        json_schema_extra={"order": 0},
-    )
-
-    @field_validator("security", mode="before", json_schema_input_type=str | Security)
-    def format_security(cls, value: str | Security) -> str:
-        """Format the security field for display."""
-        if isinstance(value, Security):
-            return f"{value.name} ({value.key})"
-        return value
 
 
 PRICE_COLUMN_MAPPING: dict[ast.Field, list] = {

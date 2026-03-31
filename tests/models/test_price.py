@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
-from niveshpy.models.price import Price, PriceCreate, PriceDisplay
+from niveshpy.models.price import Price, PriceCreate
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
 
 
@@ -665,44 +665,3 @@ class TestPriceDatabase:
         ).all()
         assert len(retrieved_prices) == 5
         assert all(p.security_key == "TEST" for p in retrieved_prices)
-
-
-class TestPriceDisplay:
-    """Tests for PriceDisplay model with field validator."""
-
-    def test_price_display_security_validator_with_object(self):
-        """Test that PriceDisplay formats Security object to string."""
-        security = Security(
-            key="TEST123",
-            name="Test Mutual Fund",
-            type=SecurityType.MUTUAL_FUND,
-            category=SecurityCategory.EQUITY,
-        )
-
-        price = PriceDisplay(
-            security=security,  # Pass Security object
-            security_key="TEST123",
-            date=date(2024, 1, 15),
-            open=Decimal("100.0000"),
-            high=Decimal("100.0000"),
-            low=Decimal("100.0000"),
-            close=Decimal("100.0000"),
-            created=datetime.now(),
-        )
-
-        assert price.security == "Test Mutual Fund (TEST123)"
-
-    def test_price_display_security_validator_with_string(self):
-        """Test that PriceDisplay keeps string security as-is."""
-        price = PriceDisplay(
-            security="Already Formatted Security",
-            security_key="TEST",
-            date=date(2024, 1, 15),
-            open=Decimal("100.0000"),
-            high=Decimal("100.0000"),
-            low=Decimal("100.0000"),
-            close=Decimal("100.0000"),
-            created=datetime.now(),
-        )
-
-        assert price.security == "Already Formatted Security"

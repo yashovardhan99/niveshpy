@@ -255,34 +255,6 @@ class TransactionPublicWithCost(TransactionPublic):
     cost: Decimal | None = Field(schema_extra={"json_schema_extra": {"order": 6}})
 
 
-class TransactionDisplayWithCost(TransactionDisplay):
-    """Model for displaying transaction with related info and cost basis.
-
-    Attributes:
-        id (int): Primary key ID of the transaction.
-        transaction_date (date): Date of the transaction.
-        type (TransactionType): Type of the transaction.
-        description (str): Description of the transaction.
-        amount (Decimal): Amount involved in the transaction.
-        units (Decimal): Number of units involved in the transaction.
-        security (str): Formatted security information.
-        account (str): Formatted account information.
-        properties (dict[str, Any]): Additional properties of the transaction.
-        created (datetime): Timestamp when the transaction was created.
-        cost (Decimal | None): Cost basis of the transaction.
-    """
-
-    cost: Decimal | None = Field(
-        schema_extra={
-            "json_schema_extra": {
-                "order": 6,
-                "style": "bold magenta",
-                "justify": "right",
-            }
-        },
-    )
-
-
 class TransactionPublicWithRelationsAndCost(TransactionPublicWithRelations):
     """Public model for transactions with related account and security info and cost basis.
 
