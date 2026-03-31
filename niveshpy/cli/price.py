@@ -7,8 +7,17 @@ from collections.abc import MutableMapping
 import click
 import click.shell_completion
 
-from niveshpy.cli.utils import essentials, flags, output, overrides
-from niveshpy.cli.utils.display import display_success, display_warning, loading_spinner
+from niveshpy.cli.models.price import PriceDisplay
+from niveshpy.cli.utils import essentials, flags, overrides
+from niveshpy.cli.utils.builders import build_csv, build_table
+from niveshpy.cli.utils.display import (
+    capture_for_pager,
+    display,
+    display_json,
+    display_success,
+    display_warning,
+    loading_spinner,
+)
 from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.core.app import AppState
 from niveshpy.exceptions import InvalidInputError
@@ -67,12 +76,6 @@ def list_prices(
 
     See https://yashovardhan99.github.io/niveshpy/cli/prices for example usage.
     """
-    from niveshpy.models.price import (
-        PriceDisplay,
-        PricePublic,
-        PricePublicWithRelations,
-    )
-
     state = ctx.ensure_object(AppState)
     with loading_spinner("Loading prices..."):
         result = state.app.price.list_prices(
@@ -85,26 +88,31 @@ def list_prices(
             + " Try syncing prices using 'niveshpy prices sync'."
         )
         display_warning(msg)
-    else:
-        fmt_cls = (
-            PricePublicWithRelations
-            if format == OutputFormat.JSON
-            else (PricePublic if format == OutputFormat.CSV else PriceDisplay)
+        ctx.exit()
+    prices = map(PriceDisplay.from_domain, result)
+    extra_message = (
+        f"Showing first {limit:,} prices."
+        if len(result) == limit and offset == 0
+        else (
+            f"Showing prices {offset + 1:,} to {offset + len(result):,}."
+            if offset > 0
+            else None
         )
+    )
 
-        prices = [fmt_cls.model_validate(price) for price in result]
-        output.display_list(
-            fmt_cls,
-            prices,
-            format,
-            extra_message=f"Showing first {limit:,} prices."
-            if len(result) == limit and offset == 0
-            else (
-                f"Showing prices {offset + 1:,} to {offset + len(result):,}."
-                if offset > 0
-                else None
-            ),
-        )
+    with capture_for_pager():
+        if format == OutputFormat.TABLE:
+            table = build_table(prices, PriceDisplay.columns)
+            display(table)
+            if extra_message:
+                display(extra_message)
+        elif format == OutputFormat.CSV:
+            csv = build_csv(
+                map(PriceDisplay.to_csv_dict, prices), fields=PriceDisplay.csv_fields
+            )
+            display(csv)
+        elif format == OutputFormat.JSON:
+            display_json(data=[price.to_json_dict() for price in prices])
 
 
 @overrides.command("update")
@@ -168,6 +176,7 @@ def sync_prices(
     """
     import rich.progress
 
+    from niveshpy.cli.utils import output
     from niveshpy.models.output import ProgressUpdate
 
     state = ctx.ensure_object(AppState)
