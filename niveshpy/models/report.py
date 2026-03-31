@@ -3,13 +3,9 @@
 import datetime
 import decimal
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from pydantic import BaseModel, Field
-
-from niveshpy.cli.utils.formatters import format_percentage
 from niveshpy.core.query import ast
-from niveshpy.exceptions import OperationError
 from niveshpy.models.account import Account
 from niveshpy.models.security import (
     Security,
@@ -79,167 +75,64 @@ class Allocation:
 # Performance
 
 
-class PerformanceHoldingBase(BaseModel):
-    """Base model for per-holding performance data."""
+@dataclass(slots=True, frozen=True)
+class PerformanceHolding:
+    """Data class for per-holding performance data used in reports."""
 
-    date: datetime.date | None = Field(
-        ...,
-        json_schema_extra={
-            "style": "cyan",
-            "order": 2,
-            "max_width": 14,
-            "no_wrap": True,
-        },
-    )
+    account: Account
+    security: Security
+    date: datetime.date
+    current_value: decimal.Decimal
+    invested: decimal.Decimal | None
+    gains: decimal.Decimal | None = field(init=False)
+    gains_pct: decimal.Decimal | None = field(init=False)
+    xirr: decimal.Decimal | None
 
-    current_value: decimal.Decimal = Field(
-        ...,
-        title="Current Value",
-        json_schema_extra={
-            "order": 3,
-            "justify": "right",
-            "no_wrap": True,
-        },
-    )
-    invested: decimal.Decimal | None = Field(
-        default=None,
-        json_schema_extra={
-            "order": 4,
-            "justify": "right",
-            "style": "dim",
-            "no_wrap": True,
-        },
-    )
-    gains: decimal.Decimal | None = Field(
-        default=None,
-        json_schema_extra={
-            "order": 5,
-            "justify": "right",
-            "no_wrap": True,
-        },
-    )
-    gains_pct: decimal.Decimal | None = Field(
-        default=None,
-        title="Gains %",
-        json_schema_extra={
-            "order": 6,
-            "justify": "right",
-            "no_wrap": True,
-            "formatter": format_percentage,  # type: ignore
-        },
-    )
-    xirr: decimal.Decimal | None = Field(
-        default=None,
-        title="XIRR",
-        json_schema_extra={
-            "order": 7,
-            "justify": "right",
-            "style": "bold",
-            "no_wrap": True,
-            "formatter": format_percentage,  # type: ignore
-        },
-    )
-
-
-def _compute_holding_gains(
-    amount: decimal.Decimal,
-    invested: decimal.Decimal | None,
-) -> tuple[decimal.Decimal | None, decimal.Decimal | None]:
-    """Compute gains and gains percentage from amount and invested.
-
-    Returns:
-        Tuple of (gains, gains_pct) where either may be None.
-    """
-    if invested is None:
-        return None, None
-    gains = (amount - invested).quantize(decimal.Decimal("0.01"))
-    gains_pct: decimal.Decimal | None = None
-    if invested > 0:
-        gains_pct = (gains / invested).quantize(decimal.Decimal("0.0001"))
-    return gains, gains_pct
-
-
-class PerformanceHolding(PerformanceHoldingBase):
-    """Model representing per-holding performance data for reports."""
-
-    account: Account = Field(...)
-    security: Security = Field(...)
+    def __post_init__(self) -> None:
+        """Compute gains and gains percentage after initialization."""
+        object.__setattr__(
+            self,
+            "gains",
+            self.current_value - self.invested if self.invested is not None else None,
+        )
+        object.__setattr__(
+            self,
+            "gains_pct",
+            (self.gains / self.invested).quantize(decimal.Decimal("0.0001"))
+            if self.gains is not None
+            and self.invested is not None
+            and self.invested != 0
+            else None,
+        )
 
     @classmethod
     def from_holding(
         cls, holding: Holding, xirr: decimal.Decimal | None
     ) -> "PerformanceHolding":
         """Create PerformanceHolding from Holding and XIRR value."""
-        gains, gains_pct = _compute_holding_gains(holding.amount, holding.invested)
         return cls(
             account=holding.account,
             security=holding.security,
             date=holding.date,
             current_value=holding.amount,
             invested=holding.invested,
-            gains=gains,
-            gains_pct=gains_pct,
             xirr=xirr,
         )
 
 
-class PerformanceResult(BaseModel):
+@dataclass(slots=True, frozen=True)
+class PerformanceResult:
     """Result of portfolio performance computation."""
 
     holdings: list[PerformanceHolding]
     totals: PortfolioTotals
 
 
-class SummaryResult(BaseModel):
+@dataclass(slots=True, frozen=True)
+class SummaryResult:
     """Portfolio summary combining metrics, top holdings, and allocation."""
 
     as_of: datetime.date | None
     metrics: PortfolioTotals
     top_holdings: Sequence[PerformanceHolding]
     allocation: Sequence[Allocation]
-
-
-class PerformanceHoldingDisplay(PerformanceHoldingBase):
-    """Display model for per-holding performance in reports."""
-
-    account: str = Field(
-        ..., json_schema_extra={"style": "dim", "order": 0, "max_width": 20}
-    )
-    security: str = Field(..., json_schema_extra={"order": 1})
-
-    @classmethod
-    def from_holding(cls, holding: PerformanceHolding) -> "PerformanceHoldingDisplay":
-        """Create PerformanceHoldingDisplay from PerformanceHolding."""
-        return cls(
-            account=f"{holding.account.name} ({holding.account.institution})",
-            security=f"{holding.security.name} ({holding.security.key})",
-            date=holding.date,
-            current_value=holding.current_value,
-            invested=holding.invested,
-            gains=holding.gains,
-            gains_pct=holding.gains_pct,
-            xirr=holding.xirr,
-        )
-
-
-class PerformanceHoldingExport(PerformanceHoldingBase):
-    """Export model for per-holding performance in CSV."""
-
-    account: int = Field(..., json_schema_extra={"order": 1})
-    security: str = Field(..., json_schema_extra={"order": 2})
-
-    @classmethod
-    def from_holding(cls, holding: PerformanceHolding) -> "PerformanceHoldingExport":
-        """Create PerformanceHoldingExport from PerformanceHolding."""
-        if holding.account.id is None:
-            raise OperationError("Account ID is required for export.")
-        return cls(
-            account=holding.account.id,
-            security=holding.security.key,
-            date=holding.date,
-            current_value=holding.current_value,
-            invested=holding.invested,
-            gains=holding.gains,
-            gains_pct=holding.gains_pct,
-            xirr=holding.xirr,
-        )

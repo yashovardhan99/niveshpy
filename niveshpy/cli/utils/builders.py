@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 def build_table(
     items: Iterable[Any | SectionBreak | TotalRow],
     columns: Sequence[Column],
+    **kwargs: Any,
 ) -> Table:
     """Build a Rich Table from an iterable of items with section breaks and total rows."""
     from rich import box
@@ -19,7 +20,7 @@ def build_table(
 
     from niveshpy.cli.utils.models import SectionBreak, TotalRow
 
-    table = Table(header_style="dim", box=box.SIMPLE)
+    table = Table(header_style="dim", box=box.SIMPLE, **kwargs)
     for column in columns:
         table.add_column(
             column.name,

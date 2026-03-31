@@ -8,8 +8,13 @@ from typing import Literal
 
 import click
 
-from niveshpy.cli.models.report import AllocationDisplay, HoldingDisplay
-from niveshpy.cli.utils import essentials, flags, output
+from niveshpy.cli.models.report import (
+    AllocationDisplay,
+    HoldingDisplay,
+    PerformanceHoldingDisplay,
+    SummaryResultDisplay,
+)
+from niveshpy.cli.utils import essentials, flags
 from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
     capture_for_pager,
@@ -225,12 +230,6 @@ def performance(
 
     Optionally, provide text <queries> to filter securities and accounts.
     """
-    from niveshpy.models.report import (
-        PerformanceHolding,
-        PerformanceHoldingDisplay,
-        PerformanceHoldingExport,
-    )
-
     logger.debug("Running performance command with %d queries", len(queries))
     with loading_spinner("Generating performance report..."):
         from niveshpy.services.report import get_performance
@@ -256,46 +255,33 @@ def performance(
         )
     )
 
-    if format == OutputFormat.TABLE:
-        items: list[PerformanceHoldingDisplay | SectionBreak | TotalRow] = [
-            PerformanceHoldingDisplay.from_holding(h) for h in result.holdings
-        ]
+    items = map(PerformanceHoldingDisplay.from_domain, result.holdings)
 
-        if total:
-            gains_pct = result.totals.gains_percentage
-            total_row = PerformanceHoldingDisplay(
-                account="[not dim bold]Total",
-                security="",
-                date=None,
-                current_value=result.totals.total_current_value,
-                invested=result.totals.total_invested,
-                gains=result.totals.total_gains,
-                gains_pct=gains_pct,
-                xirr=result.totals.xirr,
+    with capture_for_pager():
+        if format == OutputFormat.TABLE:
+            table_items: list[PerformanceHoldingDisplay | SectionBreak | TotalRow] = (
+                list(items)
             )
-            items.append(SectionBreak())
-            items.append(total_row)
+            if extra_message:
+                display(extra_message)
+            if total:
+                total_row = TotalRow(
+                    total=format_percentage(result.totals.xirr),
+                    description="Overall XIRR",
+                )
+                table_items.append(SectionBreak())
+                table_items.append(total_row)
 
-        output.display_list(
-            cls=PerformanceHoldingDisplay,
-            items=items,
-            fmt=format,
-            extra_message=extra_message,
-        )
-    elif format == OutputFormat.CSV:
-        output.display_list(
-            cls=PerformanceHoldingExport,
-            items=[PerformanceHoldingExport.from_holding(h) for h in result.holdings],
-            fmt=format,
-            extra_message=extra_message,
-        )
-    else:
-        output.display_list(
-            cls=PerformanceHolding,
-            items=result.holdings,
-            fmt=format,
-            extra_message=extra_message,
-        )
+            table = build_table(table_items, PerformanceHoldingDisplay.columns)
+            display(table)
+        elif format == OutputFormat.CSV:
+            csv = build_csv(
+                map(PerformanceHoldingDisplay.to_csv_dict, items),
+                fields=PerformanceHoldingDisplay.csv_fields,
+            )
+            display(csv)
+        elif format == OutputFormat.JSON:
+            display_json(data=[h.to_json_dict() for h in items])
 
 
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
@@ -336,6 +322,8 @@ def summary(
             display(msg)
 
     else:
+        display_result = SummaryResultDisplay.from_domain(result)
+
         if format == OutputFormat.TABLE:
             from rich import box
             from rich.bar import Bar
@@ -352,17 +340,17 @@ def summary(
             metrics.add_column(justify="right", style="bold")
             metrics.add_row(
                 "Total Current Value",
-                format_decimal(result.metrics.total_current_value),
+                format_decimal(display_result.metrics.total_current_value),
             )
             metrics.add_row(
-                "Total Invested", format_decimal(result.metrics.total_invested)
+                "Total Invested", format_decimal(display_result.metrics.total_invested)
             )
-            gains = format_decimal(result.metrics.total_gains)
-            gains_pct = format_percentage(result.metrics.gains_percentage)
+            gains = format_decimal(display_result.metrics.total_gains)
+            gains_pct = format_percentage(display_result.metrics.gains_percentage)
             metrics.add_row(
                 "Absolute Gains", f"[green]{gains}", f"[green]({gains_pct})"
             )
-            xirr = format_percentage(result.metrics.xirr)
+            xirr = format_percentage(display_result.metrics.xirr)
             metrics.add_row("XIRR (%)", f"[green]{xirr}")
 
             subtitle = []
@@ -372,14 +360,17 @@ def summary(
                 subtitle.append(
                     textwrap.shorten(f"Query: {queries[0]}", 20, placeholder="...")
                 )
-            if result.metrics.last_updated:
-                subtitle.append(f"Last Updated: {result.metrics.last_updated:%d %b %Y}")
+            if display_result.metrics.last_updated:
+                subtitle.append(
+                    f"Last Updated: {display_result.metrics.last_updated:%d %b %Y}"
+                )
 
             top_panel = Panel.fit(
                 metrics,
                 title="Portfolio Summary",
                 border_style="green"
-                if result.metrics.total_gains and result.metrics.total_gains >= 0
+                if display_result.metrics.total_gains
+                and display_result.metrics.total_gains >= 0
                 else "red",
                 subtitle=" | ".join(subtitle) if subtitle else None,
             )
@@ -393,8 +384,8 @@ def summary(
                 "Security", style="bold", no_wrap=True, max_width=30, min_width=20
             )
             holdings.add_column("Current Value", justify="right", min_width=10)
-            holdings.add_column("XIRR", justify="right", min_width=7)
-            for h in result.top_holdings:
+            holdings.add_column("XIRR", justify="right", min_width=7, style="bold")
+            for h in display_result.top_holdings:
                 holdings.add_row(
                     f"{h.account.name} ({h.account.institution})",
                     h.security.name,
@@ -409,7 +400,7 @@ def summary(
             allocation.add_column("Category", no_wrap=True)
             allocation.add_column("Weight", justify="right", style="bold")
             allocation.add_column("", justify="left", no_wrap=True, width=30)
-            for a in result.allocation:
+            for a in display_result.allocation:
                 allocation.add_row(
                     category_format_map.get(a.security_category.value)
                     if a.security_category
@@ -425,4 +416,4 @@ def summary(
                 display(allocation)
         else:
             with capture_for_pager():
-                display_json(result.model_dump_json())
+                display_json(data=display_result.to_json_dict())
