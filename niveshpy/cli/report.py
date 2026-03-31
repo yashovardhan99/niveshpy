@@ -8,7 +8,7 @@ from typing import Literal
 
 import click
 
-from niveshpy.cli.models.report import HoldingDisplay
+from niveshpy.cli.models.report import AllocationDisplay, HoldingDisplay
 from niveshpy.cli.utils import essentials, flags, output
 from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
@@ -185,11 +185,19 @@ def allocation(
         )
         display_warning(msg)
     else:
-        output.display_list(
-            cls=type(allocations[0]),
-            items=allocations,
-            fmt=format,
-        )
+        items = map(AllocationDisplay.from_domain, allocations)
+        with capture_for_pager():
+            if format == OutputFormat.TABLE:
+                table = build_table(items, AllocationDisplay.get_columns(group_by))
+                display(table)
+            elif format == OutputFormat.CSV:
+                csv = build_csv(
+                    map(AllocationDisplay.to_csv_dict, items),
+                    fields=AllocationDisplay.get_csv_fields(group_by),
+                )
+                display(csv)
+            elif format == OutputFormat.JSON:
+                display_json(data=[a.to_json_dict() for a in items])
 
 
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
@@ -403,7 +411,9 @@ def summary(
             allocation.add_column("", justify="left", no_wrap=True, width=30)
             for a in result.allocation:
                 allocation.add_row(
-                    category_format_map.get(a.security_category.value),
+                    category_format_map.get(a.security_category.value)
+                    if a.security_category
+                    else None,
                     format_percentage(a.allocation),
                     Bar(1, 0, float(a.allocation), color="white"),
                 )

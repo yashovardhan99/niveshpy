@@ -15,8 +15,6 @@ from niveshpy.models.security import (
     Security,
     SecurityCategory,
     SecurityType,
-    category_format_map,
-    type_format_map,
 )
 
 # Holdings
@@ -45,7 +43,8 @@ HOLDING_COLUMN_MAPPINGS_PRICE: dict[ast.Field, list] = {
 # Portfolio Totals
 
 
-class PortfolioTotals(BaseModel):
+@dataclass(slots=True)
+class PortfolioTotals:
     """Portfolio-level aggregate totals."""
 
     total_current_value: decimal.Decimal
@@ -59,72 +58,22 @@ class PortfolioTotals(BaseModel):
 # Allocations
 
 
-class AllocationBase(BaseModel):
-    """Base model for allocation data."""
+@dataclass(slots=True, frozen=True)
+class Allocation:
+    """Data class for allocation data."""
 
-    date: datetime.date = Field(
-        ...,
-        json_schema_extra={
-            "style": "cyan",
-            "order": 3,
-            "max_width": 14,
-            "no_wrap": True,
-        },
-    )
-    amount: decimal.Decimal = Field(
-        ...,
-        json_schema_extra={
-            "justify": "right",
-            "order": 4,
-            "max_width": 20,
-            "no_wrap": True,
-        },
-    )
-    allocation: decimal.Decimal = Field(
-        ...,
-        json_schema_extra={
-            "style": "green",
-            "justify": "right",
-            "order": 5,
-            "max_width": 10,
-            "no_wrap": True,
-            "formatter": format_percentage,  # type: ignore
-        },
-    )
+    date: datetime.date
+    amount: decimal.Decimal
+    allocation: decimal.Decimal
+    security_type: SecurityType | None
+    security_category: SecurityCategory | None
 
-
-class AllocationByType(AllocationBase):
-    """Model representing allocation by security type."""
-
-    security_type: SecurityType = Field(
-        ...,
-        json_schema_extra={
-            "order": 1,
-            "max_width": 30,
-            "formatter": lambda stype: type_format_map.get(stype, "[reverse]Unknown"),  # type: ignore
-        },
-        title="Type",
-    )
-
-
-class AllocationByCategory(AllocationBase):
-    """Model representing allocation by security category."""
-
-    security_category: SecurityCategory = Field(
-        ...,
-        json_schema_extra={
-            "order": 1,
-            "max_width": 30,
-            "formatter": lambda category: category_format_map.get(  # type: ignore
-                category, "[reverse]Unknown"
-            ),
-        },
-        title="Category",
-    )
-
-
-class Allocation(AllocationByType, AllocationByCategory):
-    """Model representing allocation data for reports."""
+    def __post_init__(self) -> None:
+        """Validate that at least one of security_type or security_category is provided."""
+        if self.security_type is None and self.security_category is None:
+            raise ValueError(
+                "Either security_type or security_category must be provided."
+            )
 
 
 # Performance
@@ -247,7 +196,7 @@ class SummaryResult(BaseModel):
     as_of: datetime.date | None
     metrics: PortfolioTotals
     top_holdings: Sequence[PerformanceHolding]
-    allocation: Sequence[AllocationByCategory]
+    allocation: Sequence[Allocation]
 
 
 class PerformanceHoldingDisplay(PerformanceHoldingBase):
