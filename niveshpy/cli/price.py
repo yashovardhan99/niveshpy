@@ -9,7 +9,7 @@ import click.shell_completion
 
 from niveshpy.cli.utils import essentials, flags, output, overrides
 from niveshpy.cli.utils.display import display_success, display_warning, loading_spinner
-from niveshpy.cli.utils.output_models import OutputFormat
+from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.core.app import AppState
 from niveshpy.exceptions import InvalidInputError
 from niveshpy.services.result import MergeAction

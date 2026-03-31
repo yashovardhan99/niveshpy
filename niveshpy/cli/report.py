@@ -16,7 +16,7 @@ from niveshpy.cli.utils.display import (
     loading_spinner,
 )
 from niveshpy.cli.utils.formatters import format_decimal, format_percentage
-from niveshpy.cli.utils.output_models import OutputFormat, SectionBreak, TotalRow
+from niveshpy.cli.utils.models import OutputFormat, SectionBreak, TotalRow
 from niveshpy.cli.utils.overrides import NiveshPyCommand
 from niveshpy.core.logging import logger
 from niveshpy.core.query import tokens

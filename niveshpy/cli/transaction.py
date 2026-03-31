@@ -18,7 +18,7 @@ from niveshpy.cli.utils.display import (
     display_warning,
     loading_spinner,
 )
-from niveshpy.cli.utils.output_models import OutputFormat
+from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger

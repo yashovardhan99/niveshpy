@@ -6,7 +6,7 @@ from typing import Any, TypeVar
 
 import click
 
-from niveshpy.cli.utils.output_models import OutputFormat
+from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 

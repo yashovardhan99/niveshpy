@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from rich.table import Table
 
-    from niveshpy.cli.utils.output_models import Column, SectionBreak, TotalRow
+    from niveshpy.cli.utils.models import Column, SectionBreak, TotalRow
 
 
 def build_table(
@@ -17,7 +17,7 @@ def build_table(
     from rich import box
     from rich.table import Table
 
-    from niveshpy.cli.utils.output_models import SectionBreak, TotalRow
+    from niveshpy.cli.utils.models import SectionBreak, TotalRow
 
     table = Table(header_style="dim", box=box.SIMPLE)
     for column in columns:

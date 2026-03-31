@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from niveshpy.cli.utils.formatters import format_datetime
-from niveshpy.cli.utils.output_models import Column
+from niveshpy.cli.utils.models import Column
 from niveshpy.exceptions import ResourceError
 
 if TYPE_CHECKING:
