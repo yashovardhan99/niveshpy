@@ -10,12 +10,8 @@ from rich import progress
 
 from niveshpy.cli.utils import flags, overrides
 from niveshpy.cli.utils import output as output
-from niveshpy.cli.utils.display import (
-    ask_password,
-    display,
-    display_error,
-    loading_spinner,
-)
+from niveshpy.cli.utils.display import display, display_error, loading_spinner
+from niveshpy.cli.utils.inputs import ask_password
 from niveshpy.core import parsers as parser_registry
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger

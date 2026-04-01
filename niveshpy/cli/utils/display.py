@@ -97,20 +97,3 @@ def loading_spinner(
             yield
     else:
         yield
-
-
-# Input utilities for the CLI.
-
-
-def ask_password(prompt: str = "Enter password: ") -> str:
-    """Prompt the user for a password securely.
-
-    Args:
-        prompt (str): The prompt message to display.
-
-    Returns:
-        str: The password entered by the user.
-    """
-    from niveshpy.cli.utils.setup import _console
-
-    return _console.input(prompt, password=True).strip()
