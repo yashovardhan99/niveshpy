@@ -24,42 +24,13 @@ class PriceBase(SQLModel):
             Defaults to an empty dictionary.
     """
 
-    security_key: str = Field(
-        foreign_key="security.key",
-        primary_key=True,
-        schema_extra={"json_schema_extra": {"order": 0, "hidden": True}},
-    )
-    date: datetime.date = Field(
-        primary_key=True,
-        schema_extra={"json_schema_extra": {"order": 1, "style": "cyan"}},
-    )
-    open: Decimal = Field(
-        sa_column=Column(NUMERIC(24, 4)),
-        schema_extra={"json_schema_extra": {"order": 2, "justify": "right"}},
-    )
-    high: Decimal = Field(
-        sa_column=Column(NUMERIC(24, 4)),
-        schema_extra={
-            "json_schema_extra": {"order": 3, "style": "green", "justify": "right"}
-        },
-    )
-    low: Decimal = Field(
-        sa_column=Column(NUMERIC(24, 4)),
-        schema_extra={
-            "json_schema_extra": {"order": 4, "style": "red", "justify": "right"}
-        },
-    )
-    close: Decimal = Field(
-        sa_column=Column(NUMERIC(24, 4)),
-        schema_extra={
-            "json_schema_extra": {"order": 5, "style": "bold", "justify": "right"}
-        },
-    )
-    properties: dict[str, Any] = Field(
-        default_factory=dict,
-        sa_column=Column(JSON),
-        schema_extra={"json_schema_extra": {"style": "dim", "order": 7}},
-    )
+    security_key: str = Field(foreign_key="security.key", primary_key=True)
+    date: datetime.date = Field(primary_key=True)
+    open: Decimal = Field(sa_column=Column(NUMERIC(24, 4)))
+    high: Decimal = Field(sa_column=Column(NUMERIC(24, 4)))
+    low: Decimal = Field(sa_column=Column(NUMERIC(24, 4)))
+    close: Decimal = Field(sa_column=Column(NUMERIC(24, 4)))
+    properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
 
     def __init_subclass__(cls, **kwargs):
         """Ensure subclasses inherit schema extra metadata."""
@@ -116,10 +87,7 @@ class PricePublic(PriceBase):
         created (datetime.datetime): Timestamp when the price data was created.
     """
 
-    created: datetime.datetime = Field(
-        title="Created",
-        schema_extra={"json_schema_extra": {"style": "dim", "order": 6}},
-    )
+    created: datetime.datetime = Field(title="Created")
 
 
 class PricePublicWithRelations(PricePublic):
@@ -137,10 +105,7 @@ class PricePublicWithRelations(PricePublic):
         created (datetime.datetime): Timestamp when the price data was created.
     """
 
-    security: Security = Field(
-        title="Security",
-        schema_extra={"json_schema_extra": {"order": 0}},
-    )
+    security: Security = Field(title="Security")
 
 
 PRICE_COLUMN_MAPPING: dict[ast.Field, list] = {

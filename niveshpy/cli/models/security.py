@@ -25,7 +25,8 @@ def _format_security_type(sec_type: SecurityType) -> str:
     return type_format_map.get(sec_type, "[reverse]Unknown")
 
 
-def _format_security_category(category: SecurityCategory) -> str:
+def format_security_category(category: SecurityCategory) -> str:
+    """Format the security category for display in the CLI."""
     from niveshpy.models.security import SecurityCategory
 
     category_format_map = {
@@ -52,7 +53,7 @@ class SecurityDisplay:
         Column("key", style="green", justify="right"),
         Column("name"),
         Column("type", formatter=_format_security_type),
-        Column("category", formatter=_format_security_category),
+        Column("category", formatter=format_security_category),
         Column("created", style="dim", formatter=format_datetime),
         Column("source", style="dim"),
     ]

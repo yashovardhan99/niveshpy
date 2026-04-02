@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
 from niveshpy.cli.models.account import AccountDisplay
 from niveshpy.cli.models.security import (
     SecurityDisplay,
-    _format_security_category,
     _format_security_type,
+    format_security_category,
 )
 from niveshpy.cli.utils.formatters import format_date, format_decimal, format_percentage
 from niveshpy.cli.utils.models import Column
@@ -147,7 +147,7 @@ class AllocationDisplay:
             columns.append(Column("security_type", formatter=_format_security_type))
         if group_by in ("both", "category"):
             columns.append(
-                Column("security_category", formatter=_format_security_category)
+                Column("security_category", formatter=format_security_category)
             )
         columns.extend(cls._base_columns)
         return columns

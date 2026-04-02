@@ -17,7 +17,7 @@ from niveshpy.models.account import Account
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
 from niveshpy.models.transaction import (
     Transaction,
-    TransactionDisplay,
+    TransactionPublicWithRelations,
     TransactionPublicWithRelationsAndCost,
     TransactionType,
 )
@@ -609,7 +609,7 @@ class TestResolveTransaction:
         sample_transactions: Sequence[Transaction],
     ):
         """Test resolving with empty queries when ambiguous is allowed."""
-        candidates: Sequence[TransactionDisplay] = (
+        candidates: Sequence[TransactionPublicWithRelations] = (
             transaction_service.resolve_transaction(
                 queries=(), limit=10, allow_ambiguous=True
             )
@@ -634,7 +634,7 @@ class TestResolveTransaction:
         sample_transactions: Sequence[Transaction],
     ):
         """Test that empty queries resolution respects limit."""
-        resolution: Sequence[TransactionDisplay] = (
+        resolution: Sequence[TransactionPublicWithRelations] = (
             transaction_service.resolve_transaction(
                 queries=(), limit=2, allow_ambiguous=True
             )
@@ -649,7 +649,7 @@ class TestResolveTransaction:
     ):
         """Test resolving by exact transaction id."""
         transaction_id = sample_transactions[0].id
-        resolution: Sequence[TransactionDisplay] = (
+        resolution: Sequence[TransactionPublicWithRelations] = (
             transaction_service.resolve_transaction(
                 queries=(str(transaction_id),), limit=10, allow_ambiguous=True
             )
@@ -665,7 +665,7 @@ class TestResolveTransaction:
     ):
         """Test resolving by id with surrounding whitespace."""
         transaction_id = sample_transactions[0].id
-        resolution: Sequence[TransactionDisplay] = (
+        resolution: Sequence[TransactionPublicWithRelations] = (
             transaction_service.resolve_transaction(
                 queries=(f"  {transaction_id}  ",), limit=10, allow_ambiguous=True
             )
@@ -691,7 +691,7 @@ class TestResolveTransaction:
         sample_transactions: Sequence[Transaction],
     ):
         """Test resolving non-existent id when ambiguous allowed falls back to text search."""
-        resolution: Sequence[TransactionDisplay] = (
+        resolution: Sequence[TransactionPublicWithRelations] = (
             transaction_service.resolve_transaction(
                 queries=("99999",), limit=10, allow_ambiguous=True
             )
@@ -706,7 +706,7 @@ class TestResolveTransaction:
         sample_transactions: Sequence[Transaction],
     ):
         """Test text search with no matches."""
-        resolution: Sequence[TransactionDisplay] = (
+        resolution: Sequence[TransactionPublicWithRelations] = (
             transaction_service.resolve_transaction(
                 queries=("NonExistentTransaction",), limit=10, allow_ambiguous=True
             )
@@ -720,7 +720,7 @@ class TestResolveTransaction:
         sample_transactions: Sequence[Transaction],
     ):
         """Test text search with exactly one match (matches security)."""
-        resolution: Sequence[TransactionDisplay] = (
+        resolution: Sequence[TransactionPublicWithRelations] = (
             transaction_service.resolve_transaction(
                 queries=("Reliance",), limit=10, allow_ambiguous=True
             )
@@ -735,7 +735,7 @@ class TestResolveTransaction:
         sample_transactions: Sequence[Transaction],
     ):
         """Test text search with multiple matches (security)."""
-        resolution: Sequence[TransactionDisplay] = (
+        resolution: Sequence[TransactionPublicWithRelations] = (
             transaction_service.resolve_transaction(
                 queries=("Fund",), limit=10, allow_ambiguous=True
             )
@@ -762,7 +762,7 @@ class TestResolveTransaction:
         sample_transactions: Sequence[Transaction],
     ):
         """Test that text search respects limit parameter."""
-        resolution: Sequence[TransactionDisplay] = (
+        resolution: Sequence[TransactionPublicWithRelations] = (
             transaction_service.resolve_transaction(
                 queries=("Fund",), limit=1, allow_ambiguous=True
             )
@@ -784,7 +784,7 @@ class TestResolveTransaction:
 
     def test_resolve_empty_database(self, transaction_service: TransactionService):
         """Test resolving in empty database."""
-        resolution: Sequence[TransactionDisplay] = (
+        resolution: Sequence[TransactionPublicWithRelations] = (
             transaction_service.resolve_transaction(
                 queries=("test",), limit=10, allow_ambiguous=True
             )

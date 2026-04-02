@@ -14,6 +14,7 @@ from niveshpy.cli.models.report import (
     PerformanceHoldingDisplay,
     SummaryResultDisplay,
 )
+from niveshpy.cli.models.security import format_security_category
 from niveshpy.cli.utils import essentials, flags
 from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
@@ -331,8 +332,6 @@ def summary(
             from rich.panel import Panel
             from rich.table import Table
 
-            from niveshpy.models.security import category_format_map
-
             # Metrics Section
             metrics = Table(show_header=False, box=box.SIMPLE)
             metrics.add_column(min_width=40)
@@ -402,7 +401,7 @@ def summary(
             allocation.add_column("", justify="left", no_wrap=True, width=30)
             for a in display_result.allocation:
                 allocation.add_row(
-                    category_format_map.get(a.security_category.value)
+                    format_security_category(a.security_category)
                     if a.security_category
                     else None,
                     format_percentage(a.allocation),

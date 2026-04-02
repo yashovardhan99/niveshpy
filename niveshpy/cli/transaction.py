@@ -332,7 +332,12 @@ def delete(
         choices: list[Choice] = [
             Choice(
                 txn.id,
-                name=f"{txn.id}: [{txn.transaction_date}] {txn.type} of {txn.security} (Account: {txn.account}) - {txn.description} for {txn.amount} ({txn.units} units)",
+                name=(
+                    f"{txn.id}: [{txn.transaction_date}] {txn.type} of "
+                    f"'{txn.security.name}' for {txn.amount} ({txn.units} units) "
+                    f"(Account: '{txn.account.name}') "
+                    f"- {txn.description}"
+                ),
             )
             for txn in candidates
         ]
@@ -348,7 +353,12 @@ def delete(
         )[0]
 
     if dry_run or not force:
-        display("You have selected the following transaction:", transaction)
+        display("You have selected the following transaction:")
+        table = build_table(
+            [TransactionDisplay.from_domain(transaction)],
+            TransactionDisplay.columns,
+        )
+        display(table)
         if (
             not dry_run
             and not inquirer.confirm(
