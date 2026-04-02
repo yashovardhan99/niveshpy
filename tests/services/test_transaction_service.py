@@ -727,7 +727,7 @@ class TestResolveTransaction:
         )
 
         assert len(resolution) == 1
-        assert "Reliance" in resolution[0].security
+        assert "Reliance" in resolution[0].security.name
 
     def test_resolve_text_search_multiple_matches(
         self,
@@ -743,7 +743,7 @@ class TestResolveTransaction:
 
         assert len(resolution) >= 2
         # security is a formatted string like "name (key)"
-        assert all("Fund" in txn.security for txn in resolution)
+        assert all("Fund" in txn.security.name for txn in resolution)
 
     def test_resolve_text_search_multiple_matches_ambiguous_not_allowed(
         self,
