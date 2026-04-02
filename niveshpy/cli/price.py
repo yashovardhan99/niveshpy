@@ -6,19 +6,21 @@ from collections.abc import MutableMapping
 
 import click
 import click.shell_completion
-import rich
-import rich.progress
 
-import niveshpy.models.output
-from niveshpy.cli.utils import essentials, flags, output, overrides
-from niveshpy.core import providers as provider_registry
+from niveshpy.cli.models.price import PriceDisplay
+from niveshpy.cli.utils import essentials, flags, overrides
+from niveshpy.cli.utils.builders import build_csv, build_table
+from niveshpy.cli.utils.display import (
+    capture_for_pager,
+    display,
+    display_json,
+    display_success,
+    display_warning,
+    loading_spinner,
+)
+from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.core.app import AppState
 from niveshpy.exceptions import InvalidInputError
-from niveshpy.models.price import (
-    PriceDisplay,
-    PricePublic,
-    PricePublicWithRelations,
-)
 from niveshpy.services.result import MergeAction
 
 
@@ -31,6 +33,8 @@ class ProviderType(click.ParamType):
         self, ctx: click.Context, param: click.Parameter, incomplete: str
     ):
         """Provide shell completion for provider names."""
+        from niveshpy.core import providers as provider_registry
+
         if provider_registry.is_empty():
             provider_registry.discover_installed_providers()
         return [
@@ -59,7 +63,7 @@ def list_prices(
     queries: tuple[str, ...],
     limit: int,
     offset: int,
-    format: output.OutputFormat,
+    format: OutputFormat,
 ) -> None:
     """List latest price for all securities.
 
@@ -73,7 +77,7 @@ def list_prices(
     See https://yashovardhan99.github.io/niveshpy/cli/prices for example usage.
     """
     state = ctx.ensure_object(AppState)
-    with output.loading_spinner("Loading prices..."):
+    with loading_spinner("Loading prices..."):
         result = state.app.price.list_prices(
             queries=queries, limit=limit, offset=offset
         )
@@ -83,27 +87,32 @@ def list_prices(
             + ("match your query." if queries else "found in the database.")
             + " Try syncing prices using 'niveshpy prices sync'."
         )
-        output.display_warning(msg)
-    else:
-        fmt_cls = (
-            PricePublicWithRelations
-            if format == output.OutputFormat.JSON
-            else (PricePublic if format == output.OutputFormat.CSV else PriceDisplay)
+        display_warning(msg)
+        ctx.exit()
+    prices = map(PriceDisplay.from_domain, result)
+    extra_message = (
+        f"Showing first {limit:,} prices."
+        if len(result) == limit and offset == 0
+        else (
+            f"Showing prices {offset + 1:,} to {offset + len(result):,}."
+            if offset > 0
+            else None
         )
+    )
 
-        prices = [fmt_cls.model_validate(price) for price in result]
-        output.display_list(
-            fmt_cls,
-            prices,
-            format,
-            extra_message=f"Showing first {limit:,} prices."
-            if len(result) == limit and offset == 0
-            else (
-                f"Showing prices {offset + 1:,} to {offset + len(result):,}."
-                if offset > 0
-                else None
-            ),
-        )
+    with capture_for_pager():
+        if format == OutputFormat.TABLE:
+            table = build_table(prices, PriceDisplay.columns)
+            display(table)
+            if extra_message:
+                display(extra_message)
+        elif format == OutputFormat.CSV:
+            csv = build_csv(
+                map(PriceDisplay.to_csv_dict, prices), fields=PriceDisplay.csv_fields
+            )
+            display(csv)
+        elif format == OutputFormat.JSON:
+            display_json(data=[price.to_json_dict() for price in prices])
 
 
 @overrides.command("update")
@@ -137,7 +146,7 @@ def update_prices(
     result = state.app.price.update_price(key, date, ohlc, source="cli")
 
     action = "added" if result == MergeAction.INSERT else "updated"
-    output.display_success(f"Price was {action} successfully.")
+    display_success(f"Price was {action} successfully.")
 
 
 @overrides.command("sync")
@@ -165,6 +174,11 @@ def sync_prices(
 
     See https://yashovardhan99.github.io/niveshpy/cli/prices for example usage.
     """
+    import rich.progress
+
+    from niveshpy.cli.utils import output
+    from niveshpy.models.output import ProgressUpdate
+
     state = ctx.ensure_object(AppState)
 
     progress_bar = output.get_progress_bar()
@@ -180,7 +194,7 @@ def sync_prices(
         for message in state.app.price.sync_prices(
             queries=queries, force=force, provider_key=provider
         ):
-            if isinstance(message, niveshpy.models.output.ProgressUpdate):
+            if isinstance(message, ProgressUpdate):
                 output.update_progress_bar(progress_bar, progress_tasks, message)
             else:
                 output.handle_niveshpy_message(message, console=progress_bar.console)

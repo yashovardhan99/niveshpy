@@ -28,17 +28,17 @@ from niveshpy.cli.utils import essentials
 @click.pass_context
 def cli(ctx: click.Context, no_color: bool, debug: bool) -> None:
     """Simple CLI command to greet the user."""
-    from niveshpy.cli.utils import output
-    from niveshpy.core.app import Application, AppState
+    if ctx.resilient_parsing:
+        return
+
+    from niveshpy.cli.utils.setup import initialize_app_state
+    from niveshpy.core.app import AppState
 
     state = ctx.ensure_object(AppState)
     state.debug = debug
     state.no_color = no_color
 
-    output.initialize_app_state(state)
-
-    application = Application()
-    state.app = application
+    initialize_app_state(state)
 
 
 @essentials.group(

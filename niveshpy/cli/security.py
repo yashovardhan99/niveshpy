@@ -1,20 +1,27 @@
 """CLI commands for managing securities."""
 
-from collections.abc import Sequence
 from textwrap import dedent
 
 import click
-from InquirerPy import get_style, inquirer
-from InquirerPy.base.control import Choice
-from InquirerPy.validator import EmptyInputValidator
 
-from niveshpy.cli.utils import essentials, flags, output
+from niveshpy.cli.models.security import SecurityDisplay
+from niveshpy.cli.utils import essentials, flags
+from niveshpy.cli.utils.builders import build_csv, build_table
+from niveshpy.cli.utils.display import (
+    capture_for_pager,
+    display,
+    display_error,
+    display_json,
+    display_success,
+    display_warning,
+    loading_spinner,
+)
+from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import InvalidInputError, OperationError, ResourceNotFoundError
 from niveshpy.models.security import (
-    Security,
     SecurityCategory,
     SecurityType,
 )
@@ -37,36 +44,49 @@ def show(
     queries: tuple[str, ...],
     limit: int,
     offset: int,
-    format: output.OutputFormat,
+    format: OutputFormat,
 ) -> None:
     """List all securities.
 
     Optionally provide a text QUERY to filter securities by key or name.
     """
     state = ctx.ensure_object(AppState)
-    with output.loading_spinner("Loading securities..."):
-        securities = state.app.security.list_securities(
+    with loading_spinner("Loading securities..."):
+        result = state.app.security.list_securities(
             queries=queries, limit=limit, offset=offset
         )
 
-    if len(securities) == 0:
-        output.display_warning(
-            "No securities "
-            + ("match your query." if queries else "found in the database.")
+    if len(result) == 0:
+        msg = "No securities " + (
+            "match your query." if queries else "found in the database."
         )
-    else:
-        output.display_list(
-            Security,
-            securities,
-            format,
-            extra_message=f"Showing first {limit:,} securities."
-            if len(securities) == limit and offset == 0
-            else (
-                f"Showing securities {offset + 1:,} to {offset + len(securities):,}."
-                if offset > 0
-                else None
-            ),
+        display_warning(msg)
+        ctx.exit()
+
+    securities = map(SecurityDisplay.from_domain, result)
+    extra_message = (
+        f"Showing first {limit:,} securities."
+        if len(result) == limit and offset == 0
+        else (
+            f"Showing securities {offset + 1:,} to {offset + len(result):,}."
+            if offset > 0
+            else None
         )
+    )
+    with capture_for_pager():
+        if format == OutputFormat.TABLE:
+            if extra_message:
+                display(extra_message)
+            table = build_table(securities, SecurityDisplay.columns)
+            display(table)
+        elif format == OutputFormat.CSV:
+            csv = build_csv(
+                map(SecurityDisplay.to_csv_dict, securities),
+                fields=SecurityDisplay.csv_fields,
+            )
+            display(csv)
+        elif format == OutputFormat.JSON:
+            display_json(data=[sec.to_json_dict() for sec in securities])
 
 
 @command()
@@ -107,6 +127,10 @@ def add(
     * Category: EQUITY, DEBT, COMMODITY, OTHER
     * Type: STOCK, BOND, MUTUAL_FUND, ETF, OTHER
     """  # noqa: D301
+    from InquirerPy import get_style, inquirer
+    from InquirerPy.base.control import Choice
+    from InquirerPy.validator import EmptyInputValidator
+
     state = ctx.ensure_object(AppState)
 
     if state.no_input:
@@ -126,13 +150,11 @@ def add(
         )
 
         action = "added" if result.action == MergeAction.INSERT else "updated"
-        output.display_success(
-            f"Security '{result.data.name}' was {action} successfully."
-        )
+        display_success(f"Security '{result.data.name}' was {action} successfully.")
         return
 
-    output.display_message("Adding a new security.")
-    output.display_message(
+    display("Adding a new security.")
+    display(
         dedent("""
             Any command-line arguments will be used as defaults.
             Use arrow keys to navigate, and [i]Enter[/i] to accept defaults.
@@ -180,7 +202,7 @@ def add(
         ).execute()
 
         # Add the security
-        with output.loading_spinner(f"Adding security '{name}'..."):
+        with loading_spinner(f"Adding security '{name}'..."):
             result = state.app.security.add_security(
                 security_key,
                 name,
@@ -190,16 +212,14 @@ def add(
             )
 
         action = "added" if result.action == MergeAction.INSERT else "updated"
-        output.display_success(
-            f"Security '{result.data.name}' was {action} successfully."
-        )
+        display_success(f"Security '{result.data.name}' was {action} successfully.")
 
         if default_key:
             # If defaults were provided via command-line arguments, exit after one iteration
             break
 
-        output.display_message("Add Next Security")
-        output.display_message("Press [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.")
+        display("Add Next Security")
+        display("Press [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.")
 
 
 @command()
@@ -222,21 +242,23 @@ def delete(
 
     When running in a non-interactive mode, --force must be provided to confirm deletion. Additionally, the <query> must match exactly one security key.
     """
+    from InquirerPy import get_style, inquirer
+    from InquirerPy.base.control import Choice
+    from InquirerPy.validator import EmptyInputValidator
+
     state = ctx.ensure_object(AppState)
 
     if state.no_input and not force:
-        output.display_error(
+        display_error(
             "When running in non-interactive mode, --force must be provided to confirm deletion."
         )
         ctx.exit(1)
 
     inquirer_style = get_style({}, style_override=state.no_color)
 
-    candidates: Sequence[Security] = state.app.security.resolve_security_key(
+    candidates = state.app.security.resolve_security_key(
         queries, limit, allow_ambiguous=not state.no_input
     )
-
-    security: Security
 
     if not candidates:
         raise ResourceNotFoundError("security", " ".join(queries))
@@ -255,7 +277,7 @@ def delete(
         security = candidates[0]
 
     if dry_run or not force:
-        output.display_message("You have selected the following security:", security)
+        display("You have selected the following security:", security)
         if (
             not dry_run
             and not inquirer.confirm(
@@ -268,13 +290,13 @@ def delete(
             ctx.abort()
 
     if dry_run:
-        output.display_message("Dry Run: No changes were made.")
+        display("Dry Run: No changes were made.")
         ctx.exit()
 
-    with output.loading_spinner(f"Deleting security '{security.key}'..."):
+    with loading_spinner(f"Deleting security '{security.key}'..."):
         deleted = state.app.security.delete_security(security.key)
         if deleted:
-            output.display_success(
+            display_success(
                 f"Security '{security.key}' was deleted successfully.",
             )
         else:

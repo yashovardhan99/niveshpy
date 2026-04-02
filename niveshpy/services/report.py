@@ -4,7 +4,7 @@ import datetime
 import decimal
 import heapq
 from collections import defaultdict
-from typing import Literal, overload
+from typing import Literal
 
 from sqlalchemy import CTE, ColumnElement
 from sqlalchemy.orm import aliased
@@ -22,8 +22,6 @@ from niveshpy.models.report import (
     HOLDING_COLUMN_MAPPINGS_PRICE,
     HOLDING_COLUMN_MAPPINGS_TXN,
     Allocation,
-    AllocationByCategory,
-    AllocationByType,
     Holding,
     PerformanceHolding,
     PerformanceResult,
@@ -245,27 +243,9 @@ def get_performance(
     )
 
 
-@overload
-def get_allocation(
-    queries: tuple[str, ...], group_by: Literal["both"]
-) -> list[Allocation]: ...
-
-
-@overload
-def get_allocation(
-    queries: tuple[str, ...], group_by: Literal["type"]
-) -> list[AllocationByType]: ...
-
-
-@overload
-def get_allocation(
-    queries: tuple[str, ...], group_by: Literal["category"]
-) -> list[AllocationByCategory]: ...
-
-
 def get_allocation(
     queries: tuple[str, ...], group_by: Literal["both", "type", "category"]
-) -> list[Allocation] | list[AllocationByCategory] | list[AllocationByType]:
+) -> list[Allocation]:
     """Generate allocation report based on provided queries.
 
     Args:
@@ -362,37 +342,16 @@ def get_allocation(
             .order_by(func.sum(cte_holdings.c.holding_value).desc())
         )
         result = session.exec(stm)
-        if group_by == "both":
-            return [
-                Allocation(
-                    security_category=row[0],
-                    security_type=row[1],
-                    date=row[2],
-                    amount=row[3].quantize(decimal.Decimal("0.01")),
-                    allocation=row[4].quantize(decimal.Decimal("0.0001")),
-                )
-                for row in result
-            ]
-        elif group_by == "category":
-            return [
-                AllocationByCategory(
-                    security_category=row[0],
-                    date=row[2],
-                    amount=row[3].quantize(decimal.Decimal("0.01")),
-                    allocation=row[4].quantize(decimal.Decimal("0.0001")),
-                )
-                for row in result
-            ]
-        else:  # group_by == "type"
-            return [
-                AllocationByType(
-                    security_type=row[1],
-                    date=row[2],
-                    amount=row[3].quantize(decimal.Decimal("0.01")),
-                    allocation=row[4].quantize(decimal.Decimal("0.0001")),
-                )
-                for row in result
-            ]
+        return [
+            Allocation(
+                security_category=row[0],
+                security_type=row[1],
+                date=row[2],
+                amount=row[3].quantize(decimal.Decimal("0.01")),
+                allocation=row[4].quantize(decimal.Decimal("0.0001")),
+            )
+            for row in result
+        ]
 
 
 def compute_portfolio_totals(holdings: list[Holding]) -> PortfolioTotals:

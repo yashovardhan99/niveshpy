@@ -3,12 +3,20 @@
 from collections.abc import Sequence
 
 import click
-import InquirerPy
-import InquirerPy.inquirer
-import InquirerPy.validator
-from InquirerPy.base.control import Choice
 
-from niveshpy.cli.utils import essentials, flags, output
+from niveshpy.cli.models.account import AccountDisplay
+from niveshpy.cli.utils import essentials, flags
+from niveshpy.cli.utils.builders import build_csv, build_table
+from niveshpy.cli.utils.display import (
+    capture_for_pager,
+    display,
+    display_error,
+    display_json,
+    display_success,
+    display_warning,
+    loading_spinner,
+)
+from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
@@ -16,7 +24,6 @@ from niveshpy.exceptions import (
     OperationError,
     ResourceNotFoundError,
 )
-from niveshpy.models.account import AccountPublic
 from niveshpy.services.result import MergeAction
 
 
@@ -36,14 +43,14 @@ def show(
     queries: tuple[str, ...],
     limit: int,
     offset: int,
-    format: output.OutputFormat,
+    format: OutputFormat,
 ) -> None:
     """List all accounts.
 
     An optional QUERY can be provided to filter accounts by name or institution.
     """
     state = ctx.ensure_object(AppState)
-    with output.loading_spinner("Loading accounts..."):
+    with loading_spinner("Loading accounts..."):
         result = state.app.account.list_accounts(
             queries=queries, limit=limit, offset=offset
         )
@@ -52,21 +59,33 @@ def show(
             msg = "No accounts " + (
                 "match your queries." if queries else "found in the database."
             )
-            output.display_warning(msg)
+            display_warning(msg)
             ctx.exit()
 
-    output.display_list(
-        AccountPublic,
-        result,
-        format,
-        extra_message=f"Showing first {limit:,} accounts."
+    accounts = map(AccountDisplay.from_domain, result)
+    extra_message = (
+        f"Showing first {limit:,} accounts."
         if len(result) == limit and offset == 0
         else (
             f"Showing accounts {offset + 1:,} to {offset + len(result):,}."
             if offset > 0
             else None
-        ),
+        )
     )
+    with capture_for_pager():
+        if format == OutputFormat.TABLE:
+            if extra_message:
+                display(extra_message)
+            table = build_table(accounts, AccountDisplay.columns)
+            display(table)
+        elif format == OutputFormat.CSV:
+            csv = build_csv(
+                map(AccountDisplay.to_csv_dict, accounts),
+                fields=AccountDisplay.csv_fields,
+            )
+            display(csv)
+        elif format == OutputFormat.JSON:
+            display_json(data=[acc.to_json_dict() for acc in accounts])
 
 
 @command()
@@ -82,12 +101,15 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
 
     <name> and <institution> are used to uniquely identify the account. If an account with the same name and institution already exists, it will not be added again.
     """
+    from InquirerPy import get_style, inquirer
+    from InquirerPy.validator import EmptyInputValidator
+
     state = ctx.ensure_object(AppState)
 
     if state.no_input:
         # Non-interactive mode
         if not name or not institution:
-            output.display_error(
+            display_error(
                 "Account name and institution must be provided in non-interactive mode."
             )
             ctx.exit(1)
@@ -96,22 +118,22 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
             name=name, institution=institution, source="cli"
         )
         if result.action == MergeAction.NOTHING:
-            output.display_warning(f"Account already exists with ID {result.data.id}.")
+            display_warning(f"Account already exists with ID {result.data.id}.")
         else:
-            output.display_success(
+            display_success(
                 f"Account [b]{name}[/b] added successfully with ID {result.data.id}."
             )
     else:
         # Interactive mode
 
-        inquirer_style = InquirerPy.get_style({}, style_override=state.no_color)
+        inquirer_style = get_style({}, style_override=state.no_color)
 
         while True:
-            output.display_message("Use [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.")
+            display("Use [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.")
             name = (
-                InquirerPy.inquirer.text(
+                inquirer.text(
                     message="Account Name:",
-                    validate=InquirerPy.validator.EmptyInputValidator(),
+                    validate=EmptyInputValidator(),
                     style=inquirer_style,
                     default=name,
                 )
@@ -119,9 +141,9 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
                 .strip()
             )
             institution = (
-                InquirerPy.inquirer.text(
+                inquirer.text(
                     message="Institution Name:",
-                    validate=InquirerPy.validator.EmptyInputValidator(),
+                    validate=EmptyInputValidator(),
                     style=inquirer_style,
                     default=institution,
                 )
@@ -133,11 +155,9 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
                 name=name, institution=institution, source="cli"
             )
             if result.action == MergeAction.NOTHING:
-                output.display_warning(
-                    f"Account already exists with ID {result.data.id}."
-                )
+                display_warning(f"Account already exists with ID {result.data.id}.")
             else:
-                output.display_success(
+                display_success(
                     f"Account [b]{name}[/b] added successfully with ID {result.data.id}."
                 )
 
@@ -166,15 +186,21 @@ def delete(
 
     When running in a non-interactive mode, --force must be provided to confirm deletion. Additionally, the <query> must match exactly one account ID.
     """
+    from InquirerPy import get_style, inquirer
+    from InquirerPy.base.control import Choice
+    from InquirerPy.validator import NumberValidator
+
+    from niveshpy.models.account import AccountPublic
+
     state = ctx.ensure_object(AppState)
 
     if state.no_input and not force:
-        output.display_error(
+        display_error(
             "When running in non-interactive mode, --force must be provided to confirm deletion."
         )
         ctx.exit(1)
 
-    inquirer_style = InquirerPy.get_style({}, style_override=state.no_color)
+    inquirer_style = get_style({}, style_override=state.no_color)
 
     candidates: Sequence[AccountPublic] = state.app.account.resolve_account_id(
         queries, limit, allow_ambiguous=not state.no_input
@@ -189,10 +215,10 @@ def delete(
             Choice(acc.id, name=f"[{acc.id}] {acc.name} ({acc.institution})")
             for acc in candidates
         ]
-        account_id = InquirerPy.inquirer.fuzzy(
+        account_id = inquirer.fuzzy(
             message="Multiple accounts found. Select one to delete:",
             choices=choices,
-            validate=InquirerPy.validator.NumberValidator(),
+            validate=NumberValidator(),
             style=inquirer_style,
         ).execute()
 
@@ -200,10 +226,10 @@ def delete(
     else:
         account = candidates[0]
     if dry_run or not force:
-        output.display_message("The following account will be deleted: ", account)
+        display("The following account will be deleted: ", account)
         if (
             not dry_run
-            and not InquirerPy.inquirer.confirm(
+            and not inquirer.confirm(
                 "Are you sure you want to delete this account?",
                 default=False,
                 style=inquirer_style,
@@ -213,13 +239,13 @@ def delete(
             ctx.abort()
 
     if dry_run:
-        output.display_message("Dry Run: No changes were made.")
+        display("Dry Run: No changes were made.")
         ctx.exit()
 
-    with output.loading_spinner(f"Deleting account with ID {account.id}..."):
+    with loading_spinner(f"Deleting account with ID {account.id}..."):
         deleted = state.app.account.delete_account(account.id)
         if deleted:
-            output.display_success(f"Account ID {account.id} was deleted successfully.")
+            display_success(f"Account ID {account.id} was deleted successfully.")
         else:
             msg = f"Account ID {account.id} could not be deleted."
             raise OperationError(msg)

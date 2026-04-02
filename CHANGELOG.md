@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Performance improvements across the board to reduce cold-start times.
+
+## [1.0.0a3] - 2026-03-26
+
 ### Added
 
 - New holdings report.
@@ -77,7 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pre-built plugin: amfi (Mutual Fund)
 - Documentation
 
-[unreleased]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a2...HEAD
+[unreleased]https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a3...HEAD
+[1.0.0a3]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a2...v1.0.0a3
 [1.0.0a2]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a1...v1.0.0a2
 [1.0.0a1]: https://github.com/yashovardhan99/niveshpy/compare/v0.1.0.dev0...v1.0.0a1
 [0.1.0.dev0]: https://github.com/yashovardhan99/niveshpy/releases/tag/v0.1.0.dev0

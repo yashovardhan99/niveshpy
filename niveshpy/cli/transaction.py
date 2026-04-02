@@ -3,27 +3,27 @@
 import datetime
 import decimal
 import textwrap
-from collections.abc import Sequence
-from typing import Any
 
 import click
-from InquirerPy import get_style, inquirer, validator
-from InquirerPy.base.control import Choice
 
-from niveshpy.cli.utils import essentials, flags, inputs, output
+from niveshpy.cli.models.transaction import TransactionDisplay
+from niveshpy.cli.utils import essentials, flags, inputs
+from niveshpy.cli.utils.builders import build_csv, build_table
+from niveshpy.cli.utils.display import (
+    capture_for_pager,
+    display,
+    display_error,
+    display_json,
+    display_success,
+    display_warning,
+    loading_spinner,
+)
+from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import InvalidInputError, ResourceNotFoundError
-from niveshpy.models.transaction import (
-    TransactionDisplay,
-    TransactionDisplayWithCost,
-    TransactionPublic,
-    TransactionPublicWithCost,
-    TransactionPublicWithRelations,
-    TransactionPublicWithRelationsAndCost,
-    TransactionType,
-)
+from niveshpy.models.transaction import TransactionType
 
 
 @essentials.group()
@@ -48,7 +48,7 @@ def show(
     queries: tuple[str, ...],
     limit: int,
     offset: int,
-    format: output.OutputFormat,
+    format: OutputFormat,
     cost: bool,
 ) -> None:
     """List all transactions.
@@ -58,54 +58,49 @@ def show(
     View the documentation at https://yashovardhan99.github.io/niveshpy/cli/transactions/ for examples.
     """
     state = ctx.ensure_object(AppState)
-    with output.loading_spinner("Loading transactions..."):
-        transactions = state.app.transaction.list_transactions(
+    with loading_spinner("Loading transactions..."):
+        result = state.app.transaction.list_transactions(
             queries=queries, limit=limit, offset=offset, cost=cost
         )
 
-    if len(transactions) == 0:
+    if len(result) == 0:
         msg = "No transactions " + (
             "match your query." if queries else "found in the database."
         )
-        output.display_warning(msg)
-    else:
-        if cost:
-            fmt_cls: Any = (
-                TransactionPublicWithRelationsAndCost
-                if format == output.OutputFormat.JSON
-                else (
-                    TransactionPublicWithCost
-                    if format == output.OutputFormat.CSV
-                    else TransactionDisplayWithCost
-                )
-            )
-        else:
-            fmt_cls = (
-                TransactionPublicWithRelations
-                if format == output.OutputFormat.JSON
-                else (
-                    TransactionPublic
-                    if format == output.OutputFormat.CSV
-                    else TransactionDisplay
-                )
-            )
+        display_warning(msg)
+        ctx.exit()
 
-        transformed_transactions = [
-            fmt_cls.model_validate(transaction) for transaction in transactions
-        ]
-
-        output.display_list(
-            fmt_cls,
-            transformed_transactions,
-            format,
-            extra_message=f"Showing first {limit:,} transactions."
-            if len(transactions) == limit and offset == 0
-            else (
-                f"Showing transactions {offset + 1:,} to {offset + len(transactions):,}."
-                if offset > 0
-                else None
-            ),
+    transactions = map(TransactionDisplay.from_domain, result)
+    extra_message = (
+        f"Showing first {limit:,} transactions."
+        if len(result) == limit and offset == 0
+        else (
+            f"Showing transactions {offset + 1:,} to {offset + len(result):,}."
+            if offset > 0
+            else None
         )
+    )
+    with capture_for_pager():
+        if format == OutputFormat.TABLE:
+            if extra_message:
+                display(extra_message)
+            table = build_table(
+                transactions,
+                TransactionDisplay.columns_with_cost
+                if cost
+                else TransactionDisplay.columns,
+            )
+            display(table)
+        elif format == OutputFormat.CSV:
+            csv = build_csv(
+                (t.to_csv_dict(include_cost=cost) for t in transactions),
+                fields=TransactionDisplay.csv_fields_with_cost
+                if cost
+                else TransactionDisplay.csv_fields,
+            )
+            display(csv)
+        elif format == OutputFormat.JSON:
+            display_json(data=[t.to_json_dict(include_cost=cost) for t in transactions])
 
 
 @command("add")
@@ -154,6 +149,8 @@ def add(
         account_id : ID of the account associated with the transaction.
         security_key : Key of the security involved in the transaction.
     """  # noqa: D301
+    from InquirerPy import inquirer, validator
+
     state = ctx.ensure_object(AppState)
     if state.no_input:
         # Check that all required arguments are provided
@@ -171,7 +168,7 @@ def add(
             if arg_value is None
         ]
         if missing_args:
-            output.display_error(
+            display_error(
                 f"Missing required arguments for non-interactive mode: {missing_args}"
             )
             ctx.exit(1)
@@ -187,10 +184,10 @@ def add(
             security_key=security_key,
             source="cli",
         )
-        output.display_success(f"Transaction added successfully with ID: {result.id}")
+        display_success(f"Transaction added successfully with ID: {result.id}")
     else:
-        output.display_message("Adding a new transaction.")
-        output.display_message(
+        display("Adding a new transaction.")
+        display(
             textwrap.dedent("""
                 Any command-line arguments will be used as defaults.
                 Use arrow keys to navigate, and [i]Enter[/i] to accept defaults.
@@ -244,7 +241,7 @@ def add(
             # Fetch accounts for selection
             accounts = state.app.transaction.get_account_choices()
             if not accounts:
-                output.display_error(
+                display_error(
                     "No accounts found in the database. Please add an account first."
                 )
                 ctx.exit(1)
@@ -261,7 +258,7 @@ def add(
             # Fetch securities for selection
             securities = state.app.transaction.get_security_choices()
             if not securities:
-                output.display_error(
+                display_error(
                     "No securities found in the database. Please add a security first."
                 )
                 ctx.exit(1)
@@ -283,12 +280,10 @@ def add(
                 security_key=security_key,
                 source="cli",
             )
-            output.display_success(
-                f"Transaction added successfully with ID: {result.id}"
-            )
+            display_success(f"Transaction added successfully with ID: {result.id}")
 
-            output.display_message("Adding another transaction...")
-            output.display_message("(Press Ctrl+C or Ctrl+D to exit.)")
+            display("Adding another transaction...")
+            display("(Press Ctrl+C or Ctrl+D to exit.)")
 
 
 @command("delete")
@@ -312,6 +307,9 @@ def delete(
 
     When running in a non-interactive mode, --force must be provided to confirm deletion. Additionally, the <query> must match exactly one transaction ID.
     """
+    from InquirerPy import get_style, inquirer, validator
+    from InquirerPy.base.control import Choice
+
     state = ctx.ensure_object(AppState)
 
     if state.no_input and not force:
@@ -322,13 +320,9 @@ def delete(
 
     inquirer_style = get_style({}, style_override=state.no_color)
 
-    candidates: Sequence[TransactionDisplay] = (
-        state.app.transaction.resolve_transaction(
-            queries, limit, allow_ambiguous=not state.no_input
-        )
+    candidates = state.app.transaction.resolve_transaction(
+        queries, limit, allow_ambiguous=not state.no_input
     )
-
-    transaction: TransactionDisplay
 
     if not candidates:
         raise ResourceNotFoundError("transaction", " ".join(queries))
@@ -338,7 +332,12 @@ def delete(
         choices: list[Choice] = [
             Choice(
                 txn.id,
-                name=f"{txn.id}: [{txn.transaction_date}] {txn.type} of {txn.security} (Account: {txn.account}) - {txn.description} for {txn.amount} ({txn.units} units)",
+                name=(
+                    f"{txn.id}: [{txn.transaction_date}] {txn.type} of "
+                    f"'{txn.security.name}' for {txn.amount} ({txn.units} units) "
+                    f"(Account: '{txn.account.name}') "
+                    f"- {txn.description}"
+                ),
             )
             for txn in candidates
         ]
@@ -354,9 +353,12 @@ def delete(
         )[0]
 
     if dry_run or not force:
-        output.display_message(
-            "You have selected the following transaction:", transaction
+        display("You have selected the following transaction:")
+        table = build_table(
+            [TransactionDisplay.from_domain(transaction)],
+            TransactionDisplay.columns,
         )
+        display(table)
         if (
             not dry_run
             and not inquirer.confirm(
@@ -369,13 +371,13 @@ def delete(
             ctx.abort()
 
     if dry_run:
-        output.display_message("Dry Run: No changes were made.")
+        display("Dry Run: No changes were made.")
         ctx.exit()
 
-    with output.loading_spinner(f"Deleting transaction '{transaction.id}'..."):
+    with loading_spinner(f"Deleting transaction '{transaction.id}'..."):
         deleted = state.app.transaction.delete_transaction(transaction.id)
         if deleted:
-            output.display_success(
+            display_success(
                 f"Transaction with ID {transaction.id} was deleted successfully.",
             )
         else:
