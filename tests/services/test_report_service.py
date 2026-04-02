@@ -93,7 +93,7 @@ def sample_transactions(
             description="Purchase HDFC Fund",
             amount=Decimal("10000.00"),
             units=Decimal("100.000"),
-            account_id=sample_accounts[0].id,
+            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[0].key,
         ),
         Transaction(
@@ -102,7 +102,7 @@ def sample_transactions(
             description="Sold HDFC Fund",
             amount=Decimal("-2000.00"),
             units=Decimal("-20.000"),
-            account_id=sample_accounts[0].id,
+            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[0].key,
         ),
         # Account 1 - ICICI Liquid Fund: Buy 50 units
@@ -112,7 +112,7 @@ def sample_transactions(
             description="Purchase ICICI Fund",
             amount=Decimal("5000.00"),
             units=Decimal("50.000"),
-            account_id=sample_accounts[1].id,
+            account_id=sample_accounts[1].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[1].key,
         ),
         # Account 0 - Reliance Stock: Buy 25 units
@@ -122,7 +122,7 @@ def sample_transactions(
             description="Purchase Reliance",
             amount=Decimal("25000.00"),
             units=Decimal("25.000"),
-            account_id=sample_accounts[0].id,
+            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[2].key,
         ),
         # Account 2 - TCS Stock: Buy 10, Sell 10 = 0 units (should be excluded)
@@ -132,7 +132,7 @@ def sample_transactions(
             description="Purchase TCS",
             amount=Decimal("30000.00"),
             units=Decimal("10.000"),
-            account_id=sample_accounts[2].id,
+            account_id=sample_accounts[2].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[3].key,
         ),
         Transaction(
@@ -141,7 +141,7 @@ def sample_transactions(
             description="Sold all TCS",
             amount=Decimal("-32000.00"),
             units=Decimal("-10.000"),
-            account_id=sample_accounts[2].id,
+            account_id=sample_accounts[2].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[3].key,
         ),
     ]
@@ -646,14 +646,17 @@ class TestGetHoldings:
 
         # HDFC: amount=8800, invested=8000
         hdfc = next(h for h in holdings if h.security.key == "123456")
+        assert hdfc.invested is not None
         assert hdfc.amount - hdfc.invested == Decimal("800.00")
 
         # ICICI: amount=5050, invested=5000
         icici = next(h for h in holdings if h.security.key == "234567")
+        assert icici.invested is not None
         assert icici.amount - icici.invested == Decimal("50.00")
 
         # Reliance: amount=25500, invested=25000
         reli = next(h for h in holdings if h.security.key == "RELI")
+        assert reli.invested is not None
         assert reli.amount - reli.invested == Decimal("500.00")
 
     def test_get_holdings_invested_consistency(

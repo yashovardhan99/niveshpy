@@ -443,7 +443,7 @@ class TestSyncPrices:
 
         # Verify prices were saved to database
         prices = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # type: ignore
+            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
         ).all()
         assert len(prices) > 0
 
@@ -467,7 +467,7 @@ class TestSyncPrices:
         # Verify prices were saved for all securities
         for security in sample_securities:
             prices = session.exec(
-                Price.__table__.select().where(Price.security_key == security.key)  # type: ignore
+                Price.__table__.select().where(Price.security_key == security.key)  # ty:ignore[unresolved-attribute]
             ).all()
             assert len(prices) > 0
 
@@ -496,7 +496,7 @@ class TestSyncPrices:
 
         # Should have fetched prices (even though last_price_date was recent)
         prices = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # type: ignore
+            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
         ).all()
         assert len(prices) > 0
 
@@ -625,7 +625,7 @@ class TestSyncPrices:
 
         # Count existing prices before sync
         prices_before = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # type: ignore
+            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
         ).all()
         count_before = len(prices_before)
 
@@ -638,7 +638,7 @@ class TestSyncPrices:
 
         # Should not fetch new prices (already up to date)
         prices_after = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # type: ignore
+            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
         ).all()
         count_after = len(prices_after)
 
@@ -683,7 +683,7 @@ class TestSyncPrices:
 
         # No prices should be saved for these scenarios
         prices = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # type: ignore
+            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
         ).all()
         assert len(prices) == 0
 
@@ -712,7 +712,7 @@ class TestSyncPrices:
 
         # Verify no prices were saved after all retries failed
         prices = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # type: ignore
+            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
         ).all()
         assert len(prices) == 0
 
@@ -801,7 +801,7 @@ class TestSyncPrices:
 
         # Verify prices were saved
         prices = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # type: ignore
+            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
         ).all()
         # Should have 1500 prices
         assert len(prices) == 1500

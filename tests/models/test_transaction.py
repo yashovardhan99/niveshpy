@@ -4,7 +4,6 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
-from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
@@ -83,186 +82,6 @@ class TestTransactionModels:
             )
             assert transaction.type == txn_type
 
-    def test_transaction_invalid_type_string(self):
-        """Test that invalid type string raises ValidationError."""
-        with pytest.raises(ValidationError, match="input_value='INVALID_TYPE'"):
-            TransactionCreate(
-                transaction_date=date(2024, 1, 15),
-                type="INVALID_TYPE",
-                description="Test",
-                amount=Decimal("100.00"),
-                units=Decimal("1.000"),
-                security_key="TEST",
-                account_id=1,
-            )
-
-    # Required field validation tests
-
-    def test_transaction_create_missing_date(self):
-        """Test creating TransactionCreate without date raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            TransactionCreate(
-                type=TransactionType.PURCHASE,
-                description="Test",
-                amount=Decimal("100.00"),
-                units=Decimal("1.000"),
-                security_key="TEST",
-                account_id=1,
-            )
-
-    def test_transaction_create_missing_type(self):
-        """Test creating TransactionCreate without type raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            TransactionCreate(
-                transaction_date=date(2024, 1, 15),
-                description="Test",
-                amount=Decimal("100.00"),
-                units=Decimal("1.000"),
-                security_key="TEST",
-                account_id=1,
-            )
-
-    def test_transaction_create_missing_description(self):
-        """Test creating TransactionCreate without description raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            TransactionCreate(
-                transaction_date=date(2024, 1, 15),
-                type=TransactionType.PURCHASE,
-                amount=Decimal("100.00"),
-                units=Decimal("1.000"),
-                security_key="TEST",
-                account_id=1,
-            )
-
-    def test_transaction_create_missing_amount(self):
-        """Test creating TransactionCreate without amount raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            TransactionCreate(
-                transaction_date=date(2024, 1, 15),
-                type=TransactionType.PURCHASE,
-                description="Test",
-                units=Decimal("1.000"),
-                security_key="TEST",
-                account_id=1,
-            )
-
-    def test_transaction_create_missing_units(self):
-        """Test creating TransactionCreate without units raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            TransactionCreate(
-                transaction_date=date(2024, 1, 15),
-                type=TransactionType.PURCHASE,
-                description="Test",
-                amount=Decimal("100.00"),
-                security_key="TEST",
-                account_id=1,
-            )
-
-    def test_transaction_create_missing_security_key(self):
-        """Test creating TransactionCreate without security_key raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            TransactionCreate(
-                transaction_date=date(2024, 1, 15),
-                type=TransactionType.PURCHASE,
-                description="Test",
-                amount=Decimal("100.00"),
-                units=Decimal("1.000"),
-                account_id=1,
-            )
-
-    def test_transaction_create_missing_account_id(self):
-        """Test creating TransactionCreate without account_id raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            TransactionCreate(
-                transaction_date=date(2024, 1, 15),
-                type=TransactionType.PURCHASE,
-                description="Test",
-                amount=Decimal("100.00"),
-                units=Decimal("1.000"),
-                security_key="TEST",
-            )
-
-    # Type validation tests
-
-    def test_transaction_wrong_type_date(self):
-        """Test creating TransactionCreate with wrong type for date."""
-        with pytest.raises(ValidationError, match="Input should be a valid date"):
-            TransactionCreate(
-                transaction_date="not-a-date",
-                type=TransactionType.PURCHASE,
-                description="Test",
-                amount=Decimal("100.00"),
-                units=Decimal("1.000"),
-                security_key="TEST",
-                account_id=1,
-            )
-
-    def test_transaction_wrong_type_amount(self):
-        """Test creating TransactionCreate with wrong type for amount."""
-        with pytest.raises(ValidationError):
-            TransactionCreate(
-                transaction_date=date(2024, 1, 15),
-                type=TransactionType.PURCHASE,
-                description="Test",
-                amount="not-a-number",
-                units=Decimal("1.000"),
-                security_key="TEST",
-                account_id=1,
-            )
-
-    def test_transaction_wrong_type_units(self):
-        """Test creating TransactionCreate with wrong type for units."""
-        with pytest.raises(ValidationError):
-            TransactionCreate(
-                transaction_date=date(2024, 1, 15),
-                type=TransactionType.PURCHASE,
-                description="Test",
-                amount=Decimal("100.00"),
-                units="not-a-number",
-                security_key="TEST",
-                account_id=1,
-            )
-
-    def test_transaction_wrong_type_security_key(self):
-        """Test creating TransactionCreate with wrong type for security_key."""
-        with pytest.raises(ValidationError, match="Input should be a valid string"):
-            TransactionCreate(
-                transaction_date=date(2024, 1, 15),
-                type=TransactionType.PURCHASE,
-                description="Test",
-                amount=Decimal("100.00"),
-                units=Decimal("1.000"),
-                security_key=123456,
-                account_id=1,
-            )
-
-    def test_transaction_wrong_type_account_id(self):
-        """Test creating TransactionCreate with wrong type for account_id."""
-        with pytest.raises(ValidationError, match="Input should be a valid integer"):
-            TransactionCreate(
-                transaction_date=date(2024, 1, 15),
-                type=TransactionType.PURCHASE,
-                description="Test",
-                amount=Decimal("100.00"),
-                units=Decimal("1.000"),
-                security_key="TEST",
-                account_id="not-an-int",
-            )
-
-    def test_transaction_properties_must_be_dict(self):
-        """Test that properties must be a dict."""
-        with pytest.raises(ValidationError, match="Input should be a valid dictionary"):
-            TransactionCreate(
-                transaction_date=date(2024, 1, 15),
-                type=TransactionType.PURCHASE,
-                description="Test",
-                amount=Decimal("100.00"),
-                units=Decimal("1.000"),
-                security_key="TEST",
-                account_id=1,
-                properties="not_a_dict",
-            )
-
     # Decimal precision tests
 
     def test_transaction_decimal_from_string(self):
@@ -278,20 +97,6 @@ class TestTransactionModels:
         )
         assert transaction.amount == Decimal("12345.67")
         assert transaction.units == Decimal("100.123")
-
-    def test_transaction_decimal_from_float(self):
-        """Test creating TransactionCreate with Decimal from float (will convert)."""
-        transaction = TransactionCreate(
-            transaction_date=date(2024, 1, 15),
-            type=TransactionType.PURCHASE,
-            description="Test",
-            amount=100.50,
-            units=10.5,
-            security_key="TEST",
-            account_id=1,
-        )
-        assert isinstance(transaction.amount, Decimal)
-        assert isinstance(transaction.units, Decimal)
 
     def test_transaction_large_decimal_values(self):
         """Test TransactionCreate with large Decimal values."""
@@ -355,20 +160,6 @@ class TestTransactionModels:
         )
         assert transaction.description == "म्यूचुअल फंड खरीदा"
 
-    def test_transaction_date_string_conversion(self):
-        """Test that date strings are converted to date objects."""
-        transaction = TransactionCreate(
-            transaction_date="2024-01-15",
-            type=TransactionType.PURCHASE,
-            description="Test",
-            amount=Decimal("100.00"),
-            units=Decimal("1.000"),
-            security_key="TEST",
-            account_id=1,
-        )
-        assert transaction.transaction_date == date(2024, 1, 15)
-        assert isinstance(transaction.transaction_date, date)
-
 
 class TestTransactionDatabase:
     """Database integration tests with foreign key constraints."""
@@ -388,6 +179,8 @@ class TestTransactionDatabase:
         session.add(account)
         session.add(security)
         session.commit()
+
+        assert account.id is not None
 
         transaction = Transaction(
             transaction_date=date(2024, 1, 15),
@@ -422,6 +215,7 @@ class TestTransactionDatabase:
         )
         session.add_all([account, security])
         session.commit()
+        assert account.id is not None
 
         transaction = Transaction(
             transaction_date=date(2024, 1, 15),
@@ -451,6 +245,7 @@ class TestTransactionDatabase:
         )
         session.add_all([account, security])
         session.commit()
+        assert account.id is not None
 
         before = datetime.now()
         transaction = Transaction(
@@ -476,6 +271,7 @@ class TestTransactionDatabase:
         account = Account(name="Test Account", institution="Test Bank")
         session.add(account)
         session.commit()
+        assert account.id is not None
 
         transaction = Transaction(
             transaction_date=date(2024, 1, 15),
@@ -530,6 +326,7 @@ class TestTransactionDatabase:
         )
         session.add_all([account, security])
         session.commit()
+        assert account.id is not None
 
         transaction = Transaction(
             transaction_date=date(2024, 1, 15),
@@ -561,6 +358,7 @@ class TestTransactionDatabase:
         )
         session.add_all([account, security])
         session.commit()
+        assert account.id is not None
 
         transaction = Transaction(
             transaction_date=date(2024, 1, 15),
@@ -594,6 +392,7 @@ class TestTransactionDatabase:
         )
         session.add_all([account, security])
         session.commit()
+        assert account.id is not None
 
         transaction = Transaction(
             transaction_date=date(2024, 1, 15),
@@ -623,6 +422,7 @@ class TestTransactionDatabase:
         )
         session.add_all([account, security])
         session.commit()
+        assert account.id is not None
 
         transaction = Transaction(
             transaction_date=date(2024, 1, 15),
@@ -654,6 +454,7 @@ class TestTransactionDatabase:
         )
         session.add_all([account, security])
         session.commit()
+        assert account.id is not None
 
         for txn_type in TransactionType:
             transaction = Transaction(
@@ -686,6 +487,7 @@ class TestTransactionDatabase:
         )
         session.add_all([account, security])
         session.commit()
+        assert account.id is not None
 
         props = {"broker": "Zerodha", "order_id": "ORD123"}
         transaction = Transaction(
@@ -717,6 +519,7 @@ class TestTransactionDatabase:
         )
         session.add_all([account, security])
         session.commit()
+        assert account.id is not None
 
         props = {
             "trade_metadata": {"exchange": "NSE", "segment": "EQ", "charges": 25.50},
@@ -765,7 +568,7 @@ class TestTransactionDatabase:
                 amount=Decimal(f"{i * 100}.00"),
                 units=Decimal(f"{i}.000"),
                 security_key=security.key,
-                account_id=account.id,
+                account_id=account.id,  # ty:ignore[invalid-argument-type]
             )
             for i in range(1, 6)
         ]

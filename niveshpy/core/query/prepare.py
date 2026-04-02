@@ -78,7 +78,7 @@ def combine_filters(field: Field, filters: Iterable[FilterNode]) -> list[FilterN
             FilterNode(
                 field=field,
                 operator=operator,
-                value=tuple(values),  # type: ignore[arg-type]
+                value=tuple(values),  # ty:ignore[invalid-argument-type]
             )
         )
 

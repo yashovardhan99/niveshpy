@@ -107,7 +107,7 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
                     "holding_value"
                 ),
                 func.max(holding_units.c.last_transaction_date, latest_prices.c.date),
-            )  # type: ignore[call-overload]
+            )  # ty:ignore[no-matching-overload]
             .join(holding_units, col(Security.key) == holding_units.c.security_key)
             .join(Account, col(Account.id) == holding_units.c.account_id)
             .join(latest_prices, col(Security.key) == latest_prices.c.security_key)
@@ -331,7 +331,7 @@ def get_allocation(
                 (
                     func.sum(cte_holdings.c.holding_value) / cte_total.c.total_value
                 ).label("proportion"),
-            )  # type: ignore[call-overload]
+            )  # ty:ignore[no-matching-overload]
             .join(cte_total, literal(True))
             .group_by(
                 col(cte_holdings.c.category)

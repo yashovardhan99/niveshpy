@@ -93,7 +93,7 @@ def sample_transactions(
             description="Purchase HDFC Fund",
             amount=Decimal("10000.00"),
             units=Decimal("100.50"),
-            account_id=sample_accounts[0].id,
+            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[0].key,
         ),
         Transaction(
@@ -102,7 +102,7 @@ def sample_transactions(
             description="Sold ICICI Fund",
             amount=Decimal("5000.00"),
             units=Decimal("50.25"),
-            account_id=sample_accounts[1].id,
+            account_id=sample_accounts[1].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[1].key,
         ),
         Transaction(
@@ -111,7 +111,7 @@ def sample_transactions(
             description="Dividend from Reliance",
             amount=Decimal("500.00"),
             units=Decimal("0.00"),
-            account_id=sample_accounts[0].id,
+            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[2].key,
         ),
         Transaction(
@@ -120,7 +120,7 @@ def sample_transactions(
             description="Additional purchase HDFC",
             amount=Decimal("20000.00"),
             units=Decimal("200.75"),
-            account_id=sample_accounts[0].id,
+            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[0].key,
         ),
     ]
@@ -265,7 +265,7 @@ def cost_basis_transactions(
             description="Purchase HDFC Fund",
             amount=Decimal("10000.00"),
             units=Decimal("100.000"),
-            account_id=sample_accounts[0].id,
+            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[0].key,
         ),
         Transaction(
@@ -274,7 +274,7 @@ def cost_basis_transactions(
             description="Purchase HDFC Fund again",
             amount=Decimal("15000.00"),
             units=Decimal("150.000"),
-            account_id=sample_accounts[0].id,
+            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[0].key,
         ),
         Transaction(
@@ -283,7 +283,7 @@ def cost_basis_transactions(
             description="Sell HDFC Fund",
             amount=Decimal("12000.00"),
             units=Decimal("-120.000"),
-            account_id=sample_accounts[0].id,
+            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[0].key,
         ),
     ]
