@@ -32,7 +32,7 @@ class Application:
         logger.info("Application initialized")
 
     @property
-    def security(self) -> SecurityService:
+    def security(self) -> "SecurityService":
         """Return the security service."""
         if self._security is None:
             from niveshpy.services.security import SecurityService
@@ -41,7 +41,7 @@ class Application:
         return self._security
 
     @property
-    def account(self) -> AccountService:
+    def account(self) -> "AccountService":
         """Return the account service."""
         if self._account is None:
             from niveshpy.services.account import AccountService
@@ -50,7 +50,7 @@ class Application:
         return self._account
 
     @property
-    def transaction(self) -> TransactionService:
+    def transaction(self) -> "TransactionService":
         """Return the transaction service."""
         if self._transaction is None:
             from niveshpy.services.transaction import TransactionService
@@ -60,16 +60,16 @@ class Application:
 
     def get_parsing_service(
         self,
-        parser: Parser,
+        parser: "Parser",
         progress_callback: Callable[[str, int, int], None] | None = None,
-    ) -> ParsingService:
+    ) -> "ParsingService":
         """Get the parsing service for the given parser key."""
         from niveshpy.services.parsing import ParsingService
 
         return ParsingService(parser, progress_callback=progress_callback)
 
     @property
-    def price(self) -> PriceService:
+    def price(self) -> "PriceService":
         """Return the price service."""
         if self._price is None:
             from niveshpy.services.price import PriceService
