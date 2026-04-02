@@ -126,7 +126,7 @@ class TestIregexpInSQL:
             result = session.exec(
                 text("SELECT iregexp(:pattern, :value)"),
                 params={"pattern": "test", "value": "TEST"},
-            ).first()
+            ).first()  # ty:ignore[no-matching-overload]
             assert result[0] == 1  # SQLite returns 1 for True
 
     def test_iregexp_in_where_clause(self, sql_engine):
@@ -154,7 +154,7 @@ class TestIregexpInSQL:
             results = session.exec(
                 text("SELECT * FROM security WHERE iregexp(:pattern, name)"),
                 params={"pattern": "test"},
-            ).all()
+            ).all()  # ty:ignore[no-matching-overload]
 
             # Should match case-insensitively
             assert len(results) == 1
@@ -176,7 +176,7 @@ class TestIregexpInSQL:
             result = session.exec(
                 text("SELECT name FROM account WHERE iregexp(:pattern, name)"),
                 params={"pattern": "savings"},
-            ).all()
+            ).all()  # ty:ignore[no-matching-overload]
 
             assert len(result) == 1
             assert result[0][0] == "Savings Account"
@@ -223,7 +223,7 @@ class TestSetSqlitePragma:
             result = session.exec(
                 text("SELECT iregexp(:pattern, :value)"),
                 params={"pattern": "test", "value": "TEST"},
-            ).first()
+            ).first()  # ty:ignore[no-matching-overload]
             assert result[0] == 1  # SQLite returns 1 for True
 
     def test_pragma_set_on_new_connection(self):
@@ -241,17 +241,18 @@ class TestSetSqlitePragma:
         # Verify PRAGMA is set
         with engine.connect() as conn:
             result = conn.exec_driver_sql("PRAGMA foreign_keys").fetchone()
+            assert result is not None
             assert result[0] == 1  # 1 means ON
 
     def test_multiple_connections_get_pragma(self, engine):
         """Test that PRAGMA is set for multiple connections."""
         # Create two separate sessions
         with Session(engine) as session1:
-            result1 = session1.exec(text("PRAGMA foreign_keys")).first()
+            result1 = session1.exec(text("PRAGMA foreign_keys")).first()  # ty:ignore[no-matching-overload]
             assert result1[0] == 1  # Should be enabled
 
         with Session(engine) as session2:
-            result2 = session2.exec(text("PRAGMA foreign_keys")).first()
+            result2 = session2.exec(text("PRAGMA foreign_keys")).first()  # ty:ignore[no-matching-overload]
             assert result2[0] == 1  # Should still be enabled
 
 
@@ -474,5 +475,5 @@ class TestModuleLevelInit:
             result = session.exec(
                 text("SELECT iregexp(:pattern, :value)"),
                 params={"pattern": "test", "value": "TEST"},
-            ).first()
+            ).first()  # ty:ignore[no-matching-overload]
             assert result[0] == 1  # Should match case-insensitively

@@ -1,5 +1,5 @@
 # This workflow will install Python dependencies, run lint with a variety of Python versions
-# and check for type errors using MyPy.
+# and check for type errors.
 
 name: Lint and Type Checks
 
@@ -48,6 +48,6 @@ jobs:
         run: |
           ruff format --check --diff
 
-      - name: Run MyPy
+      - name: Run ty
         run: |
-          mypy --ignore-missing-imports niveshpy
+          ty check

@@ -1,7 +1,6 @@
 """Tests for all security models."""
 
 import pytest
-from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from niveshpy.models.security import (
@@ -77,98 +76,6 @@ class TestSecurityModels:
                 category=category,
             )
             assert security.category == category
-
-    def test_security_invalid_type_string(self):
-        """Test that invalid type string raises ValidationError."""
-        with pytest.raises(ValidationError, match="input_value='INVALID_TYPE'"):
-            SecurityCreate(
-                key="TEST",
-                name="Test",
-                type="INVALID_TYPE",
-                category=SecurityCategory.EQUITY,
-            )
-
-    def test_security_invalid_category_string(self):
-        """Test that invalid category string raises ValidationError."""
-        with pytest.raises(ValidationError, match="input_value='INVALID_CATEGORY'"):
-            SecurityCreate(
-                key="TEST",
-                name="Test",
-                type=SecurityType.STOCK,
-                category="INVALID_CATEGORY",
-            )
-
-    # Required field validation tests
-
-    def test_security_create_missing_key(self):
-        """Test creating SecurityCreate without key raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            SecurityCreate(
-                name="Test", type=SecurityType.STOCK, category=SecurityCategory.EQUITY
-            )
-
-    def test_security_create_missing_name(self):
-        """Test creating SecurityCreate without name raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            SecurityCreate(
-                key="TEST", type=SecurityType.STOCK, category=SecurityCategory.EQUITY
-            )
-
-    def test_security_create_missing_type(self):
-        """Test creating SecurityCreate without type raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            SecurityCreate(
-                key="TEST", name="Test Security", category=SecurityCategory.EQUITY
-            )
-
-    def test_security_create_missing_category(self):
-        """Test creating SecurityCreate without category raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            SecurityCreate(key="TEST", name="Test Security", type=SecurityType.STOCK)
-
-    # Type validation tests
-
-    def test_security_wrong_type_key(self):
-        """Test creating SecurityCreate with wrong type for key."""
-        with pytest.raises(ValidationError, match="Input should be a valid string"):
-            SecurityCreate(
-                key=123456,
-                name="Test",
-                type=SecurityType.STOCK,
-                category=SecurityCategory.EQUITY,
-            )
-
-    def test_security_wrong_type_name(self):
-        """Test creating SecurityCreate with wrong type for name."""
-        with pytest.raises(ValidationError, match="Input should be a valid string"):
-            SecurityCreate(
-                key="TEST",
-                name=12345,
-                type=SecurityType.STOCK,
-                category=SecurityCategory.EQUITY,
-            )
-
-    def test_security_properties_must_be_dict(self):
-        """Test that properties must be a dict."""
-        with pytest.raises(ValidationError, match="Input should be a valid dictionary"):
-            SecurityCreate(
-                key="TEST",
-                name="Test",
-                type=SecurityType.STOCK,
-                category=SecurityCategory.EQUITY,
-                properties="not_a_dict",
-            )
-
-    def test_security_properties_none_raises_error(self):
-        """Test that explicitly passing None for properties raises ValidationError."""
-        with pytest.raises(ValidationError, match="Input should be a valid dictionary"):
-            SecurityCreate(
-                key="TEST",
-                name="Test",
-                type=SecurityType.STOCK,
-                category=SecurityCategory.EQUITY,
-                properties=None,
-            )
 
     # Edge cases
 

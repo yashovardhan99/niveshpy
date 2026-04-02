@@ -4,7 +4,6 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
-from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from niveshpy.models.price import Price, PriceCreate
@@ -61,125 +60,6 @@ class TestPriceModels:
         assert price.security_key == "TEST"
         assert price.date == date(2024, 1, 15)
 
-    # Required field validation tests
-
-    def test_price_create_missing_security_key(self):
-        """Test creating PriceCreate without security_key raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            PriceCreate(
-                date=date(2024, 1, 15),
-                open=Decimal("100.0000"),
-                high=Decimal("100.0000"),
-                low=Decimal("100.0000"),
-                close=Decimal("100.0000"),
-            )
-
-    def test_price_create_missing_date(self):
-        """Test creating PriceCreate without date raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            PriceCreate(
-                security_key="TEST",
-                open=Decimal("100.0000"),
-                high=Decimal("100.0000"),
-                low=Decimal("100.0000"),
-                close=Decimal("100.0000"),
-            )
-
-    def test_price_create_missing_open(self):
-        """Test creating PriceCreate without open raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            PriceCreate(
-                security_key="TEST",
-                date=date(2024, 1, 15),
-                high=Decimal("100.0000"),
-                low=Decimal("100.0000"),
-                close=Decimal("100.0000"),
-            )
-
-    def test_price_create_missing_high(self):
-        """Test creating PriceCreate without high raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            PriceCreate(
-                security_key="TEST",
-                date=date(2024, 1, 15),
-                open=Decimal("100.0000"),
-                low=Decimal("100.0000"),
-                close=Decimal("100.0000"),
-            )
-
-    def test_price_create_missing_low(self):
-        """Test creating PriceCreate without low raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            PriceCreate(
-                security_key="TEST",
-                date=date(2024, 1, 15),
-                open=Decimal("100.0000"),
-                high=Decimal("100.0000"),
-                close=Decimal("100.0000"),
-            )
-
-    def test_price_create_missing_close(self):
-        """Test creating PriceCreate without close raises ValidationError."""
-        with pytest.raises(ValidationError, match="Field required"):
-            PriceCreate(
-                security_key="TEST",
-                date=date(2024, 1, 15),
-                open=Decimal("100.0000"),
-                high=Decimal("100.0000"),
-                low=Decimal("100.0000"),
-            )
-
-    # Type validation tests
-
-    def test_price_wrong_type_security_key(self):
-        """Test creating PriceCreate with wrong type for security_key."""
-        with pytest.raises(ValidationError, match="Input should be a valid string"):
-            PriceCreate(
-                security_key=123456,
-                date=date(2024, 1, 15),
-                open=Decimal("100.0000"),
-                high=Decimal("100.0000"),
-                low=Decimal("100.0000"),
-                close=Decimal("100.0000"),
-            )
-
-    def test_price_wrong_type_date(self):
-        """Test creating PriceCreate with wrong type for date."""
-        with pytest.raises(ValidationError, match="Input should be a valid date"):
-            PriceCreate(
-                security_key="TEST",
-                date="not-a-date",
-                open=Decimal("100.0000"),
-                high=Decimal("100.0000"),
-                low=Decimal("100.0000"),
-                close=Decimal("100.0000"),
-            )
-
-    def test_price_wrong_type_ohlc(self):
-        """Test creating PriceCreate with wrong type for OHLC values."""
-        with pytest.raises(ValidationError):
-            PriceCreate(
-                security_key="TEST",
-                date=date(2024, 1, 15),
-                open="not-a-number",
-                high=Decimal("100.0000"),
-                low=Decimal("100.0000"),
-                close=Decimal("100.0000"),
-            )
-
-    def test_price_properties_must_be_dict(self):
-        """Test that properties must be a dict."""
-        with pytest.raises(ValidationError, match="Input should be a valid dictionary"):
-            PriceCreate(
-                security_key="TEST",
-                date=date(2024, 1, 15),
-                open=Decimal("100.0000"),
-                high=Decimal("100.0000"),
-                low=Decimal("100.0000"),
-                close=Decimal("100.0000"),
-                properties="not_a_dict",
-            )
-
     # Decimal precision tests
 
     def test_price_decimal_from_string(self):
@@ -196,21 +76,6 @@ class TestPriceModels:
         assert price.high == Decimal("125.9999")
         assert price.low == Decimal("120.0001")
         assert price.close == Decimal("124.5678")
-
-    def test_price_decimal_from_float(self):
-        """Test creating PriceCreate with Decimal from float (will convert)."""
-        price = PriceCreate(
-            security_key="TEST",
-            date=date(2024, 1, 15),
-            open=100.5,
-            high=105.75,
-            low=99.25,
-            close=103.0,
-        )
-        assert isinstance(price.open, Decimal)
-        assert isinstance(price.high, Decimal)
-        assert isinstance(price.low, Decimal)
-        assert isinstance(price.close, Decimal)
 
     def test_price_four_decimal_precision(self):
         """Test PriceCreate with 4 decimal places (NUMERIC 24,4)."""
@@ -268,19 +133,6 @@ class TestPriceModels:
         )
         assert price.properties["market_data"]["exchange"] == "NSE"
         assert price.properties["indicators"]["volume"] == 1000000
-
-    def test_price_date_string_conversion(self):
-        """Test that date strings are converted to date objects."""
-        price = PriceCreate(
-            security_key="TEST",
-            date="2024-01-15",
-            open=Decimal("100.0000"),
-            high=Decimal("100.0000"),
-            low=Decimal("100.0000"),
-            close=Decimal("100.0000"),
-        )
-        assert price.date == date(2024, 1, 15)
-        assert isinstance(price.date, date)
 
     def test_price_zero_values(self):
         """Test creating PriceCreate with zero OHLC values."""

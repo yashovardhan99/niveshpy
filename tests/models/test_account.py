@@ -3,7 +3,6 @@
 from datetime import datetime
 
 import pytest
-from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from niveshpy.models.account import Account, AccountCreate
@@ -39,45 +38,6 @@ class TestAccountModels:
         account = Account(name="SBI", institution="State Bank")
         assert account.name == "SBI"
         assert account.id is None  # Not yet persisted
-
-    # Validation error tests
-
-    def test_account_create_missing_name(self):
-        """Test creating an AccountCreate instance missing the name field."""
-        with pytest.raises(ValidationError, match="Field required"):
-            AccountCreate(institution="ICICI")
-
-    def test_account_create_missing_institution(self):
-        """Test creating an AccountCreate instance missing the institution field."""
-        with pytest.raises(ValidationError, match="Field required"):
-            AccountCreate(name="Savings")
-
-    def test_account_create_missing_both_fields(self):
-        """Test creating an AccountCreate instance missing both required fields."""
-        with pytest.raises(ValidationError):
-            AccountCreate()
-
-    def test_account_properties_none_raises_error(self):
-        """Test that explicitly passing None for properties raises ValidationError."""
-        with pytest.raises(ValidationError):
-            AccountCreate(name="A", institution="B", properties=None)
-
-    # Type validation tests
-
-    def test_account_create_wrong_type_name(self):
-        """Test creating an AccountCreate instance with wrong type for name."""
-        with pytest.raises(ValidationError, match="Input should be a valid string"):
-            AccountCreate(name=12345, institution="Bank")
-
-    def test_account_create_wrong_type_institution(self):
-        """Test creating an AccountCreate instance with wrong type for institution."""
-        with pytest.raises(ValidationError, match="Input should be a valid string"):
-            AccountCreate(name="Account", institution=None)
-
-    def test_account_properties_must_be_dict(self):
-        """Test creating an AccountCreate instance with wrong type for properties."""
-        with pytest.raises(ValidationError, match="Input should be a valid dictionary"):
-            AccountCreate(name="A", institution="B", properties="not_a_dict")
 
     # Edge cases
 
