@@ -38,10 +38,8 @@ jobs:
           version: "0.11.3"
           enable-cache: true
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
-        with:
-          python-version-file: ".python-version"
+      - name: Install python
+        run: uv python install
 
       - name: Install the project
         run: uv sync --locked --all-extras --dev
