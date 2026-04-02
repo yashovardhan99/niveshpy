@@ -54,4 +54,4 @@ jobs:
 
       - name: Run ty type check
         run: |
-          uv run ty check
+          uv run ty check --output-format=github
