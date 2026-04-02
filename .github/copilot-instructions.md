@@ -22,13 +22,13 @@ uv run ruff check .
 uv run ruff format --check .
 
 # Type checking
-uv run mypy --ignore-missing-imports --python-version=3.11 niveshpy
+uv run ty check
 
 # Build docs locally
 uv run mkdocs serve
 ```
 
-Pre-commit hooks run `ruff check`, `ruff format`, and `mypy` automatically.
+Pre-commit hooks run `ruff check`, `ruff format`, and `ty check` automatically.
 
 ## Architecture
 
