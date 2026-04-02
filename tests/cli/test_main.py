@@ -59,7 +59,7 @@ class TestCLIMain:
         """-d flag is accepted and sets debug state."""
         with (
             patch("niveshpy.core.app.Application"),
-            patch("niveshpy.cli.utils.output.initialize_app_state"),
+            patch("niveshpy.cli.utils.setup.initialize_app_state"),
         ):
             result = runner.invoke(cli, ["-d", "--help"])
         assert result.exit_code == 0
@@ -68,7 +68,7 @@ class TestCLIMain:
         """--no-color flag is accepted."""
         with (
             patch("niveshpy.core.app.Application"),
-            patch("niveshpy.cli.utils.output.initialize_app_state"),
+            patch("niveshpy.cli.utils.setup.initialize_app_state"),
         ):
             result = runner.invoke(cli, ["--no-color", "--help"])
         assert result.exit_code == 0
@@ -77,7 +77,7 @@ class TestCLIMain:
         """Invoking an unknown subcommand exits with an error."""
         with (
             patch("niveshpy.core.app.Application"),
-            patch("niveshpy.cli.utils.output.initialize_app_state"),
+            patch("niveshpy.cli.utils.setup.initialize_app_state"),
         ):
             result = runner.invoke(cli, ["nonexistent"])
         assert result.exit_code != 0
@@ -87,7 +87,7 @@ class TestCLIMain:
         """Invoking with no arguments shows help text."""
         with (
             patch("niveshpy.core.app.Application"),
-            patch("niveshpy.cli.utils.output.initialize_app_state"),
+            patch("niveshpy.cli.utils.setup.initialize_app_state"),
         ):
             result = runner.invoke(cli, [])
         assert "Usage:" in result.output
@@ -96,7 +96,7 @@ class TestCLIMain:
         """--verbose is an alias for --debug."""
         with (
             patch("niveshpy.core.app.Application"),
-            patch("niveshpy.cli.utils.output.initialize_app_state"),
+            patch("niveshpy.cli.utils.setup.initialize_app_state"),
         ):
             result = runner.invoke(cli, ["--verbose", "--help"])
         assert result.exit_code == 0

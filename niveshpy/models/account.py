@@ -16,15 +16,9 @@ class AccountBase(SQLModel):
             Defaults to an empty dictionary.
     """
 
-    name: str = Field(schema_extra={"json_schema_extra": {"order": 1}})
-    institution: str = Field(
-        schema_extra={"json_schema_extra": {"style": "bold", "order": 2}}
-    )
-    properties: dict[str, Any] = Field(
-        default_factory=dict,
-        sa_column=Column(JSON),
-        schema_extra={"json_schema_extra": {"style": "dim", "order": 4}},
-    )
+    name: str
+    institution: str
+    properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
 
     def __init_subclass__(cls, **kwargs):
         """Ensure subclasses inherit schema extra metadata."""
@@ -72,13 +66,5 @@ class AccountPublic(AccountBase):
         properties (dict[str, Any]): Additional properties of the account.
     """
 
-    id: int = Field(
-        title="ID",
-        schema_extra={
-            "json_schema_extra": {"style": "dim", "justify": "right", "order": 0}
-        },
-    )
-    created_at: datetime = Field(
-        title="Created",
-        schema_extra={"json_schema_extra": {"style": "dim", "order": 3}},
-    )
+    id: int = Field(title="ID")
+    created_at: datetime = Field(title="Created")

@@ -12,8 +12,6 @@ from niveshpy.models.account import Account
 from niveshpy.models.price import Price
 from niveshpy.models.report import (
     Allocation,
-    AllocationByCategory,
-    AllocationByType,
     Holding,
     PerformanceHolding,
     SummaryResult,
@@ -759,7 +757,7 @@ class TestGetAllocation:
 
         # Should return allocations grouped by type
         assert len(allocations) > 0
-        assert all(isinstance(a, AllocationByType) for a in allocations)
+        assert all(isinstance(a, Allocation) for a in allocations)
         # Total should be 100%
         total_allocation = sum(a.allocation for a in allocations)
         assert abs(total_allocation - Decimal("1.0")) < Decimal("0.0001")
@@ -781,7 +779,7 @@ class TestGetAllocation:
 
         # Should return allocations grouped by category
         assert len(allocations) > 0
-        assert all(isinstance(a, AllocationByCategory) for a in allocations)
+        assert all(isinstance(a, Allocation) for a in allocations)
         # Total should be 100%
         total_allocation = sum(a.allocation for a in allocations)
         assert abs(total_allocation - Decimal("1.0")) < Decimal("0.0001")
@@ -856,7 +854,7 @@ class TestGetAllocation:
         total_value = Decimal("39350.00")
 
         for alloc in allocations:
-            assert isinstance(alloc, AllocationByType)
+            assert isinstance(alloc, Allocation)
 
             if alloc.security_type == SecurityType.MUTUAL_FUND:
                 assert alloc.amount == Decimal("13850.00")
@@ -897,7 +895,7 @@ class TestGetAllocation:
         total_value = Decimal("39350.00")
 
         for alloc in allocations:
-            assert isinstance(alloc, AllocationByCategory)
+            assert isinstance(alloc, Allocation)
 
             if alloc.security_category == SecurityCategory.EQUITY:
                 assert alloc.amount == Decimal("34300.00")

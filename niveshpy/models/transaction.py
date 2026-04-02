@@ -5,8 +5,6 @@ from decimal import Decimal
 from enum import StrEnum, auto
 from typing import Any
 
-from pydantic import Field as PydanticField
-from pydantic import field_validator
 from sqlmodel import JSON, NUMERIC, Column, Field, Relationship, SQLModel
 
 from niveshpy.core.query import ast
@@ -52,46 +50,17 @@ class TransactionBase(SQLModel):
             Defaults to an empty dictionary.
     """
 
-    transaction_date: date = Field(
-        schema_extra={"json_schema_extra": {"order": 1, "style": "cyan"}}
-    )
-    type: TransactionType = Field(
-        schema_extra={
-            "json_schema_extra": {
-                "order": 2,
-                "formatter": lambda type: type_format_map.get(type, "[reverse]Unknown"),
-            }
-        }
-    )
-    description: str = Field(schema_extra={"json_schema_extra": {"order": 3}})
-    amount: Decimal = Field(
-        sa_column=Column(NUMERIC(24, 2)),
-        schema_extra={
-            "json_schema_extra": {"order": 4, "style": "bold", "justify": "right"}
-        },
-    )
-    units: Decimal = Field(
-        sa_column=Column(NUMERIC(24, 3)),
-        schema_extra={
-            "json_schema_extra": {"order": 5, "style": "yellow", "justify": "right"}
-        },
-    )
-    security_key: str = Field(
-        foreign_key="security.key",
-        schema_extra={"json_schema_extra": {"hidden": True, "order": 7}},
-    )
-    account_id: int = Field(
-        foreign_key="account.id",
-        schema_extra={"json_schema_extra": {"hidden": True, "order": 8}},
-    )
-    properties: dict[str, Any] = Field(
-        default_factory=dict,
-        sa_column=Column(JSON),
-        schema_extra={"json_schema_extra": {"style": "dim", "order": 9}},
-    )
+    transaction_date: date
+    type: TransactionType
+    description: str
+    amount: Decimal = Field(sa_column=Column(NUMERIC(24, 2)))
+    units: Decimal = Field(sa_column=Column(NUMERIC(24, 3)))
+    security_key: str = Field(foreign_key="security.key")
+    account_id: int = Field(foreign_key="account.id")
+    properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
 
     def __init_subclass__(cls, **kwargs):
-        """Ensure subclasses are properly initialized."""
+        """Ensure subclasses inherit schema extra metadata."""
         return super().__init_subclass__(**kwargs)
 
 
@@ -151,68 +120,8 @@ class TransactionPublic(TransactionBase):
         created (datetime): Timestamp when the transaction was created.
     """
 
-    id: int = Field(
-        schema_extra={
-            "json_schema_extra": {"style": "dim", "order": 0, "justify": "right"}
-        },
-    )
-    created: datetime = Field(
-        schema_extra={"json_schema_extra": {"style": "dim", "order": 10}},
-    )
-
-
-class TransactionDisplay(TransactionPublic):
-    """Model for displaying transaction with related info.
-
-    Attributes:
-        id (int): Primary key ID of the transaction.
-        transaction_date (date): Date of the transaction.
-        type (TransactionType): Type of the transaction.
-        description (str): Description of the transaction.
-        amount (Decimal): Amount involved in the transaction.
-        units (Decimal): Number of units involved in the transaction.
-        security (str): Formatted security information.
-        account (str): Formatted account information.
-        properties (dict[str, Any]): Additional properties of the transaction.
-        created (datetime): Timestamp when the transaction was created.
-    """
-
-    security: str = PydanticField(
-        json_schema_extra={"order": 7, "justify": "right"},
-    )
-    account: str = PydanticField(
-        json_schema_extra={"order": 8, "justify": "right", "style": "dim"},
-    )
-
-    @field_validator("security", mode="before", json_schema_input_type=str | Security)
-    @classmethod
-    def validate_security(cls, value: str | Security) -> str:
-        """Validate and format the security field.
-
-        Args:
-            value (str | Security): The security value to format.
-
-        Returns:
-            str: Formatted security string.
-        """
-        if isinstance(value, Security):
-            return f"{value.name} ({value.key})"
-        return value
-
-    @field_validator("account", mode="before", json_schema_input_type=str | Account)
-    @classmethod
-    def validate_account(cls, value: str | Account) -> str:
-        """Validate and format the account field.
-
-        Args:
-            value (str | Account): The account value to format.
-
-        Returns:
-            str: Formatted account string.
-        """
-        if isinstance(value, Account):
-            return f"{value.name} ({value.institution})"
-        return value
+    id: int
+    created: datetime
 
 
 class TransactionPublicWithRelations(TransactionPublic):
@@ -231,8 +140,8 @@ class TransactionPublicWithRelations(TransactionPublic):
         created (datetime): Timestamp when the transaction was created.
     """
 
-    security: Security = Field(schema_extra={"json_schema_extra": {"order": 7}})
-    account: Account = Field(schema_extra={"json_schema_extra": {"order": 8}})
+    security: Security
+    account: Account
 
 
 class TransactionPublicWithCost(TransactionPublic):
@@ -252,35 +161,7 @@ class TransactionPublicWithCost(TransactionPublic):
         cost (Decimal | None): Cost basis of the transaction.
     """
 
-    cost: Decimal | None = Field(schema_extra={"json_schema_extra": {"order": 6}})
-
-
-class TransactionDisplayWithCost(TransactionDisplay):
-    """Model for displaying transaction with related info and cost basis.
-
-    Attributes:
-        id (int): Primary key ID of the transaction.
-        transaction_date (date): Date of the transaction.
-        type (TransactionType): Type of the transaction.
-        description (str): Description of the transaction.
-        amount (Decimal): Amount involved in the transaction.
-        units (Decimal): Number of units involved in the transaction.
-        security (str): Formatted security information.
-        account (str): Formatted account information.
-        properties (dict[str, Any]): Additional properties of the transaction.
-        created (datetime): Timestamp when the transaction was created.
-        cost (Decimal | None): Cost basis of the transaction.
-    """
-
-    cost: Decimal | None = Field(
-        schema_extra={
-            "json_schema_extra": {
-                "order": 6,
-                "style": "bold magenta",
-                "justify": "right",
-            }
-        },
-    )
+    cost: Decimal | None = Field()
 
 
 class TransactionPublicWithRelationsAndCost(TransactionPublicWithRelations):
@@ -300,7 +181,7 @@ class TransactionPublicWithRelationsAndCost(TransactionPublicWithRelations):
         cost (Decimal | None): Cost basis of the transaction.
     """
 
-    cost: Decimal | None = Field(schema_extra={"json_schema_extra": {"order": 6}})
+    cost: Decimal | None
 
 
 TRANSACTION_COLUMN_MAPPING: dict[ast.Field, list] = {

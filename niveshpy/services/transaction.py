@@ -21,7 +21,6 @@ from niveshpy.models.transaction import (
     TRANSACTION_COLUMN_MAPPING,
     Transaction,
     TransactionCreate,
-    TransactionDisplay,
     TransactionPublicWithCost,
     TransactionPublicWithRelations,
     TransactionPublicWithRelationsAndCost,
@@ -39,7 +38,9 @@ class TransactionService:
         limit: int = 30,
         offset: int = 0,
         cost: bool = False,
-    ) -> Sequence[TransactionPublicWithRelations]:
+    ) -> Sequence[
+        TransactionPublicWithRelations | TransactionPublicWithRelationsAndCost
+    ]:
         """List transactions matching the query."""
         if limit < 1:
             raise InvalidInputError(limit, "Limit must be positive.")
@@ -169,7 +170,7 @@ class TransactionService:
 
     def resolve_transaction(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
-    ) -> Sequence[TransactionDisplay]:
+    ) -> Sequence[TransactionPublicWithRelations]:
         """Resolve a query to a Transaction object if it exists.
 
         Args:
@@ -201,7 +202,9 @@ class TransactionService:
             with get_session() as session:
                 exact_transaction = session.get(Transaction, transaction_id)
                 if exact_transaction is not None:
-                    return [TransactionDisplay.model_validate(exact_transaction)]
+                    return [
+                        TransactionPublicWithRelations.model_validate(exact_transaction)
+                    ]
 
         # No exact match found by ID
         # If ambiguous results are not allowed, raise error
@@ -209,10 +212,7 @@ class TransactionService:
             raise AmbiguousResourceError("Transaction", " ".join(queries))
 
         # Perform a text search for candidates
-        return [
-            TransactionDisplay.model_validate(t)
-            for t in self.list_transactions(queries, limit=limit)
-        ]
+        return self.list_transactions(queries, limit=limit)
 
     def delete_transaction(self, transaction_id: int) -> bool:
         """Delete a transaction by its ID."""
