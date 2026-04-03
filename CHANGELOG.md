@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Performance improvements across the board to reduce cold-start times.
+- (Internal) Move GitHub Actions workflows to use uv.
+
+### Fixed
+
+- Fix failing documentation build.
 
 ## [1.0.0a3] - 2026-03-26
 
