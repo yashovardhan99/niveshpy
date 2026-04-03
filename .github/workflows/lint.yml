@@ -8,8 +8,10 @@ on:
     branches: ["main"]
     paths:
       - "niveshpy/**"
+      - "tests/**"
       - ".github/workflows/lint.yml"
       - "pyproject.toml"
+      - "uv.lock"
   pull_request:
     branches: ["main"]
 
@@ -24,30 +26,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - name: Install uv and set the Python version
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
+          # Install a specific version of uv.
+          version: "0.11.3"
+          enable-cache: true
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --group dev
-          python -m pip install .
+      - name: Install python
+        run: uv python install
 
-      - name: Ruff check --output-format=github
-        run: |
-          ruff check --no-fix --output-format=github
+      - name: Install the project
+        run: uv sync --locked --all-extras --dev
 
-      - name: Ruff format check
+      - name: Run Ruff lint check
         run: |
-          ruff format --check --diff
+          uv run ruff check --no-fix --output-format=github
 
-      - name: Run ty
+      - name: Run Ruff format check
         run: |
-          ty check
+          uv run ruff format --check
+
+      - name: Run ty type check
+        run: |
+          uv run ty check --output-format=github
