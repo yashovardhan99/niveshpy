@@ -17,11 +17,11 @@ def main(*args) -> int:
     """Main function to update the changelog."""
     version_no = None
     changelog_file_path = "CHANGELOG.md"
-    unreleased_section = "## [Unreleased]"
+    unreleased_section = b"## [Unreleased]"
     unreleased_url = (
         "https://github.com/yashovardhan99/niveshpy/compare/v{version}...HEAD"
     )
-    unreleased_url_label = "[unreleased]: "
+    unreleased_url_label = b"[unreleased]: "
 
     if len(args) > 1:
         for arg in args[1:]:
@@ -35,12 +35,12 @@ def main(*args) -> int:
     if not version_no:
         raise ValueError("Version number must be specified in the format 'v<version>'")
 
-    with open(changelog_file_path, mode="r+") as file:
+    with open(changelog_file_path, mode="rb+") as file:
         # Add new section for the version
         data = file.read()
         start = data.index(unreleased_section) + len(unreleased_section)
         file.seek(start)
-        file.write(f"\n\n## [{version_no}] - {date.today().isoformat()}")
+        file.write(f"\n\n## [{version_no}] - {date.today().isoformat()}".encode())
         file.write(data[start:])
         file.truncate()
 
@@ -49,10 +49,10 @@ def main(*args) -> int:
         data = file.read()
         start = data.index(unreleased_url_label) + len(unreleased_url_label)
         file.seek(start)
-        file.write(unreleased_url.format(version=version_no))
+        file.write(unreleased_url.format(version=version_no).encode())
 
-        file.write(f"\n[{version_no}]: ")
-        file.write(data[start:].replace("...HEAD", f"...v{version_no}"))
+        file.write(f"\n[{version_no}]: ".encode())
+        file.write(data[start:].replace(b"...HEAD", f"...v{version_no}".encode()))
         file.truncate()
 
     return 0
