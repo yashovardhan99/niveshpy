@@ -68,7 +68,7 @@ jobs:
 
       - name: Update Changelog
         run: |
-          uv run .github/scripts/update_changelog.py $TAG
+          uv run --no-project .github/scripts/update_changelog.py $TAG
           git add CHANGELOG.md
           git commit -m "Update changelog for release $TAG"
           git push origin $BRANCH
@@ -79,7 +79,7 @@ jobs:
 
       - name: Create Tag
         run: |
-          CHANGES=$(uv run .github/scripts/get_release_notes.py $TAG)
+          CHANGES=$(uv run --no-project .github/scripts/get_release_notes.py $TAG)
           git tag -a $TAG -m "$TAG" -m "$CHANGES" --cleanup=whitespace
           git push origin $TAG
         env:
