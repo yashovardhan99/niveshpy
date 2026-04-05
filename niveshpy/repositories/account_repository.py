@@ -11,7 +11,7 @@ from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_sqlalchemy_filters
 from niveshpy.database import get_session
-from niveshpy.models.account import Account
+from niveshpy.models.account import Account, AccountBase
 
 
 @dataclass(slots=True, frozen=True)
@@ -70,7 +70,7 @@ class AccountRepository:
 
     # INSERT operations for single account
 
-    def insert_account(self, account: Account) -> int | None:
+    def insert_account(self, account: AccountBase) -> int | None:
         """Insert a new account into the database."""
         with get_session() as session:
             stmt = (
@@ -93,7 +93,7 @@ class AccountRepository:
 
     # INSERT operations for multiple accounts
 
-    def insert_multiple_accounts(self, accounts: Iterable[Account]) -> int:
+    def insert_multiple_accounts(self, accounts: Iterable[AccountBase]) -> int:
         """Insert multiple accounts into the database."""
         account_dicts = [
             {

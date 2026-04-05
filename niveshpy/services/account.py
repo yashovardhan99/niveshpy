@@ -1,33 +1,36 @@
 """Account service for managing investment accounts."""
 
 from collections.abc import Sequence
-
-from sqlmodel import col, select
+from dataclasses import dataclass, field
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import (
-    get_filters_from_queries,
+    get_prepared_filters_from_queries,
 )
-from niveshpy.database import get_session
-from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
-from niveshpy.models.account import Account, AccountCreate, AccountPublic
+from niveshpy.exceptions import (
+    AmbiguousResourceError,
+    InvalidInputError,
+    OperationError,
+    QuerySyntaxError,
+)
+from niveshpy.models.account import Account
+from niveshpy.repositories.account_repository import AccountRepository
 from niveshpy.services.result import (
     InsertResult,
     MergeAction,
 )
 
 
+@dataclass(slots=True, frozen=True)
 class AccountService:
     """Service handler for the accounts command group."""
 
-    _column_mappings: dict[ast.Field, list[str]] = {
-        ast.Field.ACCOUNT: ["name", "institution"],
-    }
+    account_repository: AccountRepository = field(default_factory=AccountRepository)
 
     def list_accounts(
         self, queries: tuple[str, ...], limit: int = 30, offset: int = 0
-    ) -> Sequence[AccountPublic]:
+    ) -> Sequence[Account]:
         """List accounts, optionally filtered by a query string.
 
         Args:
@@ -40,29 +43,27 @@ class AccountService:
 
         Raises:
             InvalidInputError: If limit is less than 1 or offset is negative.
+            QuerySyntaxError: If the query strings cannot be parsed into valid filters.
         """
         if limit < 1:
             raise InvalidInputError(limit, "Limit must be positive.")
         if offset < 0:
             raise InvalidInputError(offset, "Offset cannot be negative.")
 
-        where_clause = get_filters_from_queries(
-            queries, ast.Field.ACCOUNT, self._column_mappings
-        )
+        filters = get_prepared_filters_from_queries(queries, ast.Field.ACCOUNT)
 
-        with get_session() as session:
-            accounts = session.exec(
-                select(Account)
-                .where(*where_clause)
-                .offset(offset)
-                .limit(limit)
-                .order_by(col(Account.id))
-            ).all()
-            return list(map(AccountPublic.model_validate, accounts))
+        try:
+            accounts = self.account_repository.list_accounts(
+                filters, limit=limit, offset=offset
+            )
+            return accounts
+        except QuerySyntaxError as e:
+            e.add_note(f"Caused by input queries: {' '.join(queries)}")
+            raise QuerySyntaxError(" ".join(queries), e.cause) from e
 
     def add_account(
         self, name: str, institution: str, source: str | None = None
-    ) -> InsertResult[Account]:
+    ) -> InsertResult[int]:
         """Add a new account."""
         if not name.strip() or not institution.strip():
             raise InvalidInputError(
@@ -72,31 +73,27 @@ class AccountService:
             properties = {"source": source}
         else:
             properties = {}
-        account = AccountCreate(
+        account = Account(
             name=name.strip(), institution=institution.strip(), properties=properties
         )
-        # Check for existing account
-        query = select(Account).where(
-            (Account.name == account.name)
-            & (Account.institution == account.institution)
-        )
-        with get_session() as session:
-            existing_account = session.exec(query).first()
-            if existing_account is not None:
-                logger.info("Account already exists: %s", existing_account)
-                return InsertResult(MergeAction.NOTHING, existing_account)
-
-            # Otherwise, insert new account
-            new_account = Account.model_validate(account)
-            session.add(new_account)
-            session.commit()
-            session.refresh(new_account)
-            logger.debug("Inserted new account with ID: %s", new_account.id)
-            return InsertResult(MergeAction.INSERT, new_account)
+        account_id = self.account_repository.insert_account(account)
+        if account_id is not None:
+            return InsertResult(MergeAction.INSERT, account_id)
+        else:
+            logger.debug("Account already exists; Fetching existing account ID.")
+            existing_account = (
+                self.account_repository.get_account_by_name_and_institution(
+                    account.name, account.institution
+                )
+            )
+            if existing_account is not None and existing_account.id is not None:
+                return InsertResult(MergeAction.NOTHING, existing_account.id)
+            else:
+                raise OperationError("Failed to insert or fetch existing account ID.")
 
     def resolve_account_id(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
-    ) -> Sequence[AccountPublic]:
+    ) -> Sequence[Account]:
         """Resolve an account id to an Account object if it exists.
 
         Args:
@@ -105,11 +102,12 @@ class AccountService:
             allow_ambiguous (bool): Whether to allow ambiguous results.
 
         Returns:
-            Sequence[AccountPublic]: The resolved account(s).
+            Sequence[Account]: The resolved account(s).
 
         Raises:
             InvalidInputError: If no queries are provided and ambiguous results are not allowed.
             AmbiguousResourceError: If a direct match is not found and ambiguous results are not allowed.
+            QuerySyntaxError: If the query strings cannot be parsed into valid filters.
         """
         # If no queries and ambiguous results not allowed, raise error
         if not queries and not allow_ambiguous:
@@ -127,10 +125,9 @@ class AccountService:
         )
         # If we have a valid account ID
         if account_id is not None:
-            with get_session() as session:
-                exact_account = session.get(Account, account_id)
-                if exact_account is not None:
-                    return [AccountPublic.model_validate(exact_account)]
+            exact_account = self.account_repository.get_account_by_id(account_id)
+            if exact_account is not None:
+                return [exact_account]
 
         # No exact match found by ID
         # If ambiguous results are not allowed, raise error
@@ -142,12 +139,8 @@ class AccountService:
 
     def delete_account(self, account_id: int) -> bool:
         """Delete an account."""
-        with get_session() as session:
-            account = session.get(Account, account_id)
-            if account is None:
-                logger.debug("Account not found for deletion: %s", account_id)
-                return False
-            session.delete(account)
-            session.commit()
-            logger.debug("Deleted account with ID: %s", account_id)
-            return True
+        if account_id < 1:
+            raise InvalidInputError(
+                account_id, "Account ID must be a positive integer."
+            )
+        return self.account_repository.delete_account_by_id(account_id)

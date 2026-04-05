@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from niveshpy.models.account import Account, AccountCreate
+from niveshpy.models.account import Account
 
 
 class TestAccountModels:
@@ -17,15 +17,15 @@ class TestAccountModels:
     # Happy path tests
 
     def test_account_create_with_required_fields(self):
-        """Test creating an AccountCreate instance with required fields only."""
-        account = AccountCreate(name="HDFC Savings", institution="HDFC Bank")
+        """Test creating an Account instance with required fields only."""
+        account = Account(name="HDFC Savings", institution="HDFC Bank")
         assert account.name == "HDFC Savings"
         assert account.institution == "HDFC Bank"
         assert account.properties == {}
 
     def test_account_create_with_properties(self):
-        """Test creating an AccountCreate instance with properties."""
-        account = AccountCreate(
+        """Test creating an Account instance with properties."""
+        account = Account(
             name="Investment Account",
             institution="Zerodha",
             properties={"account_type": "demat", "number": "ZD1234"},
@@ -42,28 +42,28 @@ class TestAccountModels:
     # Edge cases
 
     def test_account_empty_properties_dict(self):
-        """Test creating an AccountCreate instance with empty properties dict."""
-        account = AccountCreate(name="A", institution="B", properties={})
+        """Test creating an Account instance with empty properties dict."""
+        account = Account(name="A", institution="B", properties={})
         assert account.properties == {}
 
     def test_account_nested_properties(self):
-        """Test creating an AccountCreate instance with nested properties."""
+        """Test creating an Account instance with nested properties."""
         props = {
             "details": {"type": "savings", "currency": "INR"},
             "tags": ["primary", "active"],
         }
-        account = AccountCreate(name="A", institution="B", properties=props)
+        account = Account(name="A", institution="B", properties=props)
         assert account.properties["details"]["currency"] == "INR"
         assert "primary" in account.properties["tags"]
 
     def test_account_unicode_characters(self):
-        """Test creating an AccountCreate instance with unicode characters."""
-        account = AccountCreate(name="बचत खाता", institution="भारतीय स्टेट बैंक")
+        """Test creating an Account instance with unicode characters."""
+        account = Account(name="बचत खाता", institution="भारतीय स्टेट बैंक")
         assert account.name == "बचत खाता"
 
     def test_account_special_characters(self):
-        """Test creating an AccountCreate instance with special characters."""
-        account = AccountCreate(name="Account #1", institution="Bank & Co.")
+        """Test creating an Account instance with special characters."""
+        account = Account(name="Account #1", institution="Bank & Co.")
         assert "#1" in account.name
         assert "&" in account.institution
 
