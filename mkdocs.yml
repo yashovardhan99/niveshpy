@@ -85,4 +85,8 @@ nav:
       - Parsers: advanced/parsers.md
       - Providers: advanced/providers.md
 
+  - Architecture:
+      - architecture/index.md
+      - General Direction: architecture/direction.md
+
   - Changelog: changelog.md
