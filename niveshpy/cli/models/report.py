@@ -1,5 +1,7 @@
 """Module for report-related data models used in the CLI."""
 
+from __future__ import annotations
+
 import datetime
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -63,7 +65,7 @@ class HoldingDisplay:
     ]
 
     @classmethod
-    def from_domain(cls, holding: Holding) -> "HoldingDisplay":
+    def from_domain(cls, holding: Holding) -> HoldingDisplay:
         """Create HoldingDisplay from Holding model."""
         return cls(
             account=AccountDisplay.from_domain(holding.account),
@@ -127,7 +129,7 @@ class AllocationDisplay:
     def from_domain(
         cls,
         allocation: Allocation,
-    ) -> "AllocationDisplay":
+    ) -> AllocationDisplay:
         """Create an AllocationDisplay instance from a domain Allocation model."""
         return cls(
             date=allocation.date,
@@ -327,7 +329,7 @@ class SummaryResultDisplay:
     def from_domain(
         cls,
         summary: SummaryResult,
-    ) -> "SummaryResultDisplay":
+    ) -> SummaryResultDisplay:
         """Create SummaryResultDisplay from SummaryResult domain model."""
         return cls(
             date=summary.as_of,

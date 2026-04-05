@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add new CLI integration tests for more robust testing.
+
+### Fixed
+
+- Fix breaking issue with deferred annotations on Python versions 3.11-3.13.
+
 ## [1.0.0a4] - 2026-04-04
 
 ### Changed

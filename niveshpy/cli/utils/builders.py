@@ -1,5 +1,7 @@
 """Output builders for CLI commands."""
 
+from __future__ import annotations
+
 from collections.abc import Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 

@@ -1,5 +1,7 @@
 """Module for transaction-related data models used in the CLI."""
 
+from __future__ import annotations
+
 import datetime
 from collections.abc import Sequence
 from dataclasses import dataclass
