@@ -4,6 +4,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import ClassVar
 
+from sqlalchemy import tuple_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import col, delete, select
 
@@ -11,6 +12,7 @@ from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_sqlalchemy_filters
 from niveshpy.database import get_session
+from niveshpy.exceptions import InvalidInputError
 from niveshpy.models.account import Account, AccountBase
 
 
@@ -50,10 +52,10 @@ class AccountRepository:
 
     # SELECT operations for multiple accounts
 
-    def list_accounts(
+    def find_accounts(
         self, filters: Iterable[FilterNode], limit: int | None = None, offset: int = 0
     ) -> Sequence[Account]:
-        """List accounts with optional filtering, pagination, and sorting."""
+        """Find accounts matching the given filters with optional pagination."""
         where_clause = get_sqlalchemy_filters(
             filters, AccountRepository._column_mappings
         )
@@ -66,6 +68,33 @@ class AccountRepository:
                 .order_by(col(Account.id))
             ).all()
             logger.debug("Fetched %d accounts with filters: %s", len(accounts), filters)
+            return accounts
+
+    def find_accounts_by_name_and_institutions(
+        self, names: Sequence[str], institutions: Sequence[str]
+    ) -> Sequence[Account]:
+        """Find accounts matching the given name-institution pairs."""
+        if not names or not institutions:
+            logger.debug("No names or institutions provided for account search.")
+            return []
+        if len(names) != len(institutions):
+            raise InvalidInputError(
+                (names, institutions),
+                "Names and institutions lists must be of the same length.",
+            )
+        query = select(Account).where(
+            tuple_(col(Account.name), col(Account.institution)).in_(
+                zip(names, institutions, strict=True)
+            )
+        )
+        with get_session() as session:
+            accounts = session.exec(query).all()
+            logger.debug(
+                "Fetched %d accounts with names in %s and institutions in %s",
+                len(accounts),
+                names,
+                institutions,
+            )
             return accounts
 
     # INSERT operations for single account

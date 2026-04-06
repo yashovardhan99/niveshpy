@@ -53,7 +53,7 @@ class AccountService:
         filters = get_prepared_filters_from_queries(queries, ast.Field.ACCOUNT)
 
         try:
-            accounts = self.account_repository.list_accounts(
+            accounts = self.account_repository.find_accounts(
                 filters, limit=limit, offset=offset
             )
             return accounts
