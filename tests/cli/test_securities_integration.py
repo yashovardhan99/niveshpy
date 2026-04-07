@@ -20,10 +20,10 @@ def test_securities_add_list_filter_and_pagination(cli_scenario: CliScenario) ->
     assert paged[0]["key"] == "BBB222"
 
 
-def test_securities_add_existing_key_updates_security(
+def test_securities_add_existing_key_does_nothing(
     cli_scenario: CliScenario,
 ) -> None:
-    """Adding a security with an existing key updates it instead of duplicating."""
+    """Adding a security with an existing key does nothing."""
     cli_scenario.add_security("INF123", "Old Name", "EQUITY", "MUTUAL_FUND")
 
     update_result = cli_scenario.invoke(
@@ -38,12 +38,12 @@ def test_securities_add_existing_key_updates_security(
         ]
     )
 
-    assert "was updated successfully" in update_result.output
+    assert "already exists" in update_result.output
     securities = cli_scenario.invoke_json(["securities", "list"])
     assert len(securities) == 1
-    assert securities[0]["name"] == "New Name"
-    assert securities[0]["category"] == "debt"
-    assert securities[0]["type"] == "bond"
+    assert securities[0]["name"] == "Old Name"
+    assert securities[0]["category"] == "equity"
+    assert securities[0]["type"] == "mutual_fund"
 
 
 def test_securities_delete_success_with_force(cli_scenario: CliScenario) -> None:

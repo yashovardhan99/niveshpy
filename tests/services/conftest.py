@@ -87,3 +87,57 @@ class MockAccountRepository:
             self._accounts.pop(account_id)
             return True
         return False
+
+
+class MockSecurityRepository:
+    """Mock implementation of SecurityRepository for testing purposes."""
+
+    def __init__(self):
+        """Initialize the test security repository."""
+        self._securities = {}
+
+    def get_security_by_key(self, key):
+        """Retrieve a security by its key."""
+        return self._securities.get(key)
+
+    def find_securities(self, filters: Iterable[FilterNode], limit=None, offset=0):
+        """Find securities matching the given filters with optional pagination."""
+        if not filters:
+            return sorted(self._securities.values(), key=lambda a: a.key)[
+                offset : offset + limit if limit else None
+            ]
+        else:
+            raise NotImplementedError(
+                "Filtering securities is not implemented in the mock repository."
+            )
+
+    def find_securities_by_keys(self, keys):
+        """Find securities matching the given keys."""
+        results = []
+        for key in keys:
+            security = self.get_security_by_key(key)
+            if security:
+                results.append(security)
+        return results
+
+    def insert_security(self, security):
+        """Insert a new security into the repository."""
+        if self.get_security_by_key(security.key):
+            return False
+        self._securities[security.key] = security
+        return True
+
+    def insert_multiple_securities(self, securities):
+        """Insert multiple securities into the repository."""
+        count = 0
+        for security in securities:
+            if self.insert_security(security):
+                count += 1
+        return count
+
+    def delete_security_by_key(self, key):
+        """Delete a security by its key."""
+        if key in self._securities:
+            self._securities.pop(key)
+            return True
+        return False
