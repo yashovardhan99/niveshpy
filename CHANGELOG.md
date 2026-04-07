@@ -9,7 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add new CLI integration tests for more robust testing.
+- (Internal) Add new CLI integration tests for more robust testing.
+- (Internal) Add new tests for SQLite Account & Security repositories
+
+### Changed
+
+- `niveshpy securities add` will no longer update existing securities.
+- (Internal) Refactored Account & Security into new repository pattern.
+- (Internal) Refactor Account & Security service tests to use a dummy repository.
 
 ### Fixed
 

@@ -39,7 +39,7 @@ class AccountService:
             offset (int): Number of accounts to skip from the start.
 
         Returns:
-            Sequence[AccountPublic]: List of accounts matching the query.
+            Sequence[Account]: List of accounts matching the query.
 
         Raises:
             InvalidInputError: If limit is less than 1 or offset is negative.
