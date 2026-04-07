@@ -1,21 +1,21 @@
 """Account service for managing investment accounts."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import (
     get_prepared_filters_from_queries,
 )
+from niveshpy.domain.repositories import AccountRepository
 from niveshpy.exceptions import (
     AmbiguousResourceError,
     InvalidInputError,
     OperationError,
     QuerySyntaxError,
 )
-from niveshpy.models.account import Account
-from niveshpy.repositories.account_repository import AccountRepository
+from niveshpy.models.account import Account, AccountCreate
 from niveshpy.services.result import (
     InsertResult,
     MergeAction,
@@ -26,7 +26,7 @@ from niveshpy.services.result import (
 class AccountService:
     """Service handler for the accounts command group."""
 
-    account_repository: AccountRepository = field(default_factory=AccountRepository)
+    account_repository: AccountRepository
 
     def list_accounts(
         self, queries: tuple[str, ...], limit: int = 30, offset: int = 0
@@ -73,7 +73,7 @@ class AccountService:
             properties = {"source": source}
         else:
             properties = {}
-        account = Account(
+        account = AccountCreate(
             name=name.strip(), institution=institution.strip(), properties=properties
         )
         account_id = self.account_repository.insert_account(account)

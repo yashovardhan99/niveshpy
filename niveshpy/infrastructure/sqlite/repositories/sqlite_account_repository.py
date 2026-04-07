@@ -13,11 +13,11 @@ from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_sqlalchemy_filters
 from niveshpy.database import get_session
 from niveshpy.exceptions import InvalidInputError
-from niveshpy.models.account import Account, AccountBase
+from niveshpy.models.account import Account, AccountCreate
 
 
 @dataclass(slots=True, frozen=True)
-class AccountRepository:
+class SqliteAccountRepository:
     """Repository for performing database operations related to accounts."""
 
     _column_mappings: ClassVar[dict[Field, list[str]]] = {
@@ -57,7 +57,7 @@ class AccountRepository:
     ) -> Sequence[Account]:
         """Find accounts matching the given filters with optional pagination."""
         where_clause = get_sqlalchemy_filters(
-            filters, AccountRepository._column_mappings
+            filters, SqliteAccountRepository._column_mappings
         )
         with get_session() as session:
             accounts = session.exec(
@@ -99,7 +99,7 @@ class AccountRepository:
 
     # INSERT operations for single account
 
-    def insert_account(self, account: AccountBase) -> int | None:
+    def insert_account(self, account: AccountCreate) -> int | None:
         """Insert a new account into the database."""
         with get_session() as session:
             stmt = (
@@ -122,7 +122,7 @@ class AccountRepository:
 
     # INSERT operations for multiple accounts
 
-    def insert_multiple_accounts(self, accounts: Iterable[AccountBase]) -> int:
+    def insert_multiple_accounts(self, accounts: Iterable[AccountCreate]) -> int:
         """Insert multiple accounts into the database."""
         account_dicts = [
             {
@@ -132,7 +132,7 @@ class AccountRepository:
             }
             for account in accounts
         ]
-        if len(account_dicts) == 0:
+        if not account_dicts:
             logger.debug("No accounts to insert.")
             return 0
         with get_session() as session:

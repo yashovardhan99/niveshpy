@@ -14,7 +14,7 @@ from niveshpy.models.security import Security, SecurityCreate
 
 
 @dataclass(slots=True, frozen=True)
-class SecurityRepository:
+class SqliteSecurityRepository:
     """Repository for performing database operations related to securities."""
 
     # SELECT operations for single security

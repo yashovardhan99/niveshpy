@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from niveshpy.core.logging import logger
+from niveshpy.domain.repositories import AccountRepository
 
 if TYPE_CHECKING:
     from niveshpy.models.parser import Parser
-    from niveshpy.repositories.account_repository import AccountRepository
     from niveshpy.services.account import AccountService
     from niveshpy.services.parsing import ParsingService
     from niveshpy.services.price import PriceService
@@ -55,9 +55,9 @@ class Application:
     @functools.cached_property
     def account_repository(self) -> AccountRepository:
         """Return the account repository."""
-        from niveshpy.repositories.account_repository import AccountRepository
+        from niveshpy.infrastructure.sqlite.repositories import SqliteAccountRepository
 
-        return AccountRepository()
+        return SqliteAccountRepository()
 
     @property
     def transaction(self) -> TransactionService:

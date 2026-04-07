@@ -1,50 +1,38 @@
 """Tests for AccountService."""
 
 from collections.abc import Sequence
-from unittest.mock import patch
 
 import pytest
 
 from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
-from niveshpy.models.account import Account
-from niveshpy.repositories.account_repository import AccountRepository
+from niveshpy.models.account import Account, AccountCreate
 from niveshpy.services.account import AccountService
 from niveshpy.services.result import InsertResult, MergeAction
+from tests.services.conftest import MockAccountRepository
 
 
 @pytest.fixture
-def account_repository(session):
-    """Create AccountRepository instance with patched session."""
-    with patch(
-        "niveshpy.repositories.account_repository.get_session"
-    ) as mock_get_session:
-        # Make get_session return a context manager that yields the test session
-        mock_get_session.return_value.__enter__.return_value = session
-        mock_get_session.return_value.__exit__.return_value = None
-        yield AccountRepository()
-
-
-@pytest.fixture
-def account_service(account_repository) -> AccountService:
+def account_service() -> AccountService:
     """Create AccountService instance with the mocked AccountRepository."""
-    return AccountService(account_repository=account_repository)
+    return AccountService(account_repository=MockAccountRepository())
 
 
 @pytest.fixture
-def sample_accounts(session):
+def sample_accounts(account_service: AccountService) -> list[Account]:
     """Create sample accounts for testing."""
     accounts = [
-        Account(name="HDFC Savings", institution="HDFC Bank"),
-        Account(name="ICICI Current", institution="ICICI Bank"),
-        Account(name="SBI Savings", institution="State Bank of India"),
-        Account(name="HDFC Current", institution="HDFC Bank"),
-        Account(name="Zerodha Demat", institution="Zerodha"),
+        AccountCreate(name="HDFC Savings", institution="HDFC Bank"),
+        AccountCreate(name="ICICI Current", institution="ICICI Bank"),
+        AccountCreate(name="SBI Savings", institution="State Bank of India"),
+        AccountCreate(name="HDFC Current", institution="HDFC Bank"),
+        AccountCreate(name="Zerodha Demat", institution="Zerodha"),
     ]
-    session.add_all(accounts)
-    session.commit()
+    created_accounts = []
     for account in accounts:
-        session.refresh(account)
-    return accounts
+        created_account_id = account_service.account_repository.insert_account(account)
+        created_account = Account(id=created_account_id, **account.model_dump())
+        created_accounts.append(created_account)
+    return created_accounts
 
 
 class TestListAccounts:
@@ -153,7 +141,7 @@ class TestListAccounts:
 class TestAddAccount:
     """Tests for add_account method."""
 
-    def test_add_account_success(self, account_service: AccountService, session):
+    def test_add_account_success(self, account_service: AccountService):
         """Test successfully adding a new account."""
         result = account_service.add_account(
             name="Test Account", institution="Test Bank", source=None
@@ -163,7 +151,7 @@ class TestAddAccount:
         assert result.action == MergeAction.INSERT
         assert result.data is not None
 
-    def test_add_account_with_source(self, account_service: AccountService, session):
+    def test_add_account_with_source(self, account_service: AccountService):
         """Test adding account with source property."""
         result = account_service.add_account(
             name="Test Account", institution="Test Bank", source="CAS"
@@ -173,7 +161,7 @@ class TestAddAccount:
         assert result.data is not None
 
     def test_add_account_duplicate_returns_existing(
-        self, account_service: AccountService, session
+        self, account_service: AccountService
     ):
         """Test that adding duplicate account returns existing one."""
         # Add first account
@@ -191,7 +179,7 @@ class TestAddAccount:
         assert result2.data == account_id
 
     def test_add_account_same_name_different_institution(
-        self, account_service: AccountService, session
+        self, account_service: AccountService
     ):
         """Test adding accounts with same name but different institutions."""
         result1 = account_service.add_account(
@@ -206,7 +194,7 @@ class TestAddAccount:
         assert result1.data != result2.data
 
     def test_add_account_different_name_same_institution(
-        self, account_service: AccountService, session
+        self, account_service: AccountService
     ):
         """Test adding accounts with different names but same institution."""
         result1 = account_service.add_account(
@@ -220,9 +208,7 @@ class TestAddAccount:
         assert result2.action == MergeAction.INSERT
         assert result1.data != result2.data
 
-    def test_add_account_strips_whitespace(
-        self, account_service: AccountService, session
-    ):
+    def test_add_account_strips_whitespace(self, account_service: AccountService):
         """Test that add_account strips whitespace from name and institution."""
         result = account_service.add_account(
             name="  Test Account  ", institution="  Test Bank  ", source=None
@@ -234,9 +220,7 @@ class TestAddAccount:
         assert account.name == "Test Account"
         assert account.institution == "Test Bank"
 
-    def test_add_account_empty_name_raises_error(
-        self, account_service: AccountService, session
-    ):
+    def test_add_account_empty_name_raises_error(self, account_service: AccountService):
         """Test that empty name raises InvalidInputError."""
         with pytest.raises(
             InvalidInputError, match="Account name and institution cannot be empty"
@@ -244,7 +228,7 @@ class TestAddAccount:
             account_service.add_account(name="", institution="Test Bank", source=None)
 
     def test_add_account_whitespace_only_name_raises_error(
-        self, account_service: AccountService, session
+        self, account_service: AccountService
     ):
         """Test that whitespace-only name raises InvalidInputError."""
         with pytest.raises(
@@ -255,7 +239,7 @@ class TestAddAccount:
             )
 
     def test_add_account_empty_institution_raises_error(
-        self, account_service: AccountService, session
+        self, account_service: AccountService
     ):
         """Test that empty institution raises InvalidInputError."""
         with pytest.raises(
@@ -266,7 +250,7 @@ class TestAddAccount:
             )
 
     def test_add_account_whitespace_only_institution_raises_error(
-        self, account_service: AccountService, session
+        self, account_service: AccountService
     ):
         """Test that whitespace-only institution raises InvalidInputError."""
         with pytest.raises(
@@ -276,18 +260,14 @@ class TestAddAccount:
                 name="Test Account", institution="   ", source=None
             )
 
-    def test_add_account_both_empty_raises_error(
-        self, account_service: AccountService, session
-    ):
+    def test_add_account_both_empty_raises_error(self, account_service: AccountService):
         """Test that both empty name and institution raises InvalidInputError."""
         with pytest.raises(
             InvalidInputError, match="Account name and institution cannot be empty"
         ):
             account_service.add_account(name="", institution="", source=None)
 
-    def test_add_account_special_characters(
-        self, account_service: AccountService, session
-    ):
+    def test_add_account_special_characters(self, account_service: AccountService):
         """Test adding account with special characters."""
         result = account_service.add_account(
             name="Account #1 (Primary)", institution="Bank & Co.", source=None
@@ -296,9 +276,7 @@ class TestAddAccount:
         assert result.action == MergeAction.INSERT
         assert result.data is not None
 
-    def test_add_account_unicode_characters(
-        self, account_service: AccountService, session
-    ):
+    def test_add_account_unicode_characters(self, account_service: AccountService):
         """Test adding account with unicode characters."""
         result = account_service.add_account(
             name="बचत खाता", institution="भारतीय स्टेट बैंक", source=None
