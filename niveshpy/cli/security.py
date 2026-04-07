@@ -20,12 +20,11 @@ from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
-from niveshpy.exceptions import InvalidInputError, OperationError, ResourceNotFoundError
+from niveshpy.exceptions import InvalidInputError, ResourceNotFoundError
 from niveshpy.models.security import (
     SecurityCategory,
     SecurityType,
 )
-from niveshpy.services.result import MergeAction
 
 
 @essentials.group()
@@ -119,7 +118,7 @@ def add(
     To add a single security non-interactively, provide all arguments along with --no-input.
 
     <key> is a unique identifier for the security, e.g., ticker symbol or ISIN. If another
-    security with the same key exists, it will be updated.
+    security with the same key exists, no action will be taken.
 
     category and type should be one of the enum values:
 
@@ -149,8 +148,12 @@ def add(
             source="cli",
         )
 
-        action = "added" if result.action == MergeAction.INSERT else "updated"
-        display_success(f"Security '{result.data.name}' was {action} successfully.")
+        if not result:
+            display_warning(
+                f"Security with key '{default_key}' already exists. No changes were made."
+            )
+        else:
+            display_success("Security was added successfully.")
         return
 
     display("Adding a new security.")
@@ -169,7 +172,7 @@ def add(
             inquirer.text(
                 message="Security Key",
                 instruction="(A unique identifier for the security, e.g., ticker symbol or ISIN)",
-                long_instruction="If another security with the same key exists, it will be updated.",
+                long_instruction="If another security with the same key exists, it will be ignored.",
                 validate=EmptyInputValidator(),
                 default=default_key,
                 style=inquirer_style,
@@ -211,8 +214,12 @@ def add(
                 source="cli",
             )
 
-        action = "added" if result.action == MergeAction.INSERT else "updated"
-        display_success(f"Security '{result.data.name}' was {action} successfully.")
+        if not result:
+            display_warning(
+                f"Security with key '{security_key}' already exists. No changes were made."
+            )
+        else:
+            display_success("Security was added successfully.")
 
         if default_key:
             # If defaults were provided via command-line arguments, exit after one iteration
@@ -300,8 +307,9 @@ def delete(
                 f"Security '{security.key}' was deleted successfully.",
             )
         else:
-            msg = f"Security '{security.key}' could not be deleted."
-            raise OperationError(msg)
+            display_warning(
+                f"Security with key '{security.key}' was not found. No changes were made."
+            )
 
 
 cli.add_command(show)

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from niveshpy.core.logging import logger
-from niveshpy.domain.repositories import AccountRepository
+from niveshpy.domain.repositories import AccountRepository, SecurityRepository
 
 if TYPE_CHECKING:
     from niveshpy.models.parser import Parser
@@ -40,8 +40,15 @@ class Application:
         if self._security is None:
             from niveshpy.services.security import SecurityService
 
-            self._security = SecurityService()
+            self._security = SecurityService(self.security_repository)
         return self._security
+
+    @functools.cached_property
+    def security_repository(self) -> SecurityRepository:
+        """Return the security repository."""
+        from niveshpy.infrastructure.sqlite.repositories import SqliteSecurityRepository
+
+        return SqliteSecurityRepository()
 
     @property
     def account(self) -> AccountService:
