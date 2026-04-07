@@ -4,26 +4,22 @@ from collections.abc import Sequence
 from unittest.mock import patch
 
 import pytest
-from sqlmodel import Session
 
+from niveshpy.core.query.ast import Field, FilterNode, Operator
 from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
-from niveshpy.services.result import InsertResult, MergeAction
 from niveshpy.services.security import SecurityService
+from tests.services.conftest import MockSecurityRepository
 
 
 @pytest.fixture
-def security_service(session):
-    """Create SecurityService instance with patched get_session."""
-    with patch("niveshpy.services.security.get_session") as mock_get_session:
-        # Make get_session return a context manager that yields the test session
-        mock_get_session.return_value.__enter__.return_value = session
-        mock_get_session.return_value.__exit__.return_value = None
-        yield SecurityService()
+def security_service() -> SecurityService:
+    """Create SecurityService instance with mock repository."""
+    return SecurityService(security_repository=MockSecurityRepository())
 
 
 @pytest.fixture
-def sample_securities(session):
+def sample_securities(security_service):
     """Create sample securities for testing."""
     securities = [
         Security(
@@ -57,10 +53,7 @@ def sample_securities(session):
             category=SecurityCategory.COMMODITY,
         ),
     ]
-    session.add_all(securities)
-    session.commit()
-    for security in securities:
-        session.refresh(security)
+    security_service.security_repository.insert_multiple_securities(securities)
     return securities
 
 
@@ -109,22 +102,23 @@ class TestListSecurities:
         self, security_service, sample_securities
     ):
         """Test listing securities with query filter."""
-        securities = security_service.list_securities(
-            queries=("HDFC",), limit=30, offset=0
-        )
+        with patch.object(
+            security_service.security_repository,
+            "find_securities",
+            return_value=[sample_securities[0]],
+        ) as mock:
+            securities = security_service.list_securities(
+                queries=("HDFC",), limit=30, offset=0
+            )
+            mock.assert_called_once()
+            mock.assert_called_with(
+                [FilterNode(Field.SECURITY, Operator.REGEX_MATCH, "HDFC")],
+                limit=30,
+                offset=0,
+            )
 
         assert len(securities) == 1
         assert "HDFC" in securities[0].name
-
-    def test_list_securities_query_no_matches(
-        self, security_service, sample_securities
-    ):
-        """Test listing securities with query that has no matches."""
-        securities = security_service.list_securities(
-            queries=("NonExistent",), limit=30, offset=0
-        )
-
-        assert len(securities) == 0
 
     def test_list_securities_empty_database(self, security_service):
         """Test listing securities when database is empty."""
@@ -153,31 +147,11 @@ class TestListSecurities:
         with pytest.raises(InvalidInputError, match="Offset cannot be negative"):
             security_service.list_securities(queries=(), limit=30, offset=-1)
 
-    def test_list_securities_filter_by_type(self, security_service, sample_securities):
-        """Test listing securities filtered by type."""
-        securities = security_service.list_securities(
-            queries=("type:mutual_fund",), limit=30, offset=0
-        )
-
-        assert len(securities) == 2
-        assert all(sec.type == SecurityType.MUTUAL_FUND for sec in securities)
-
-    def test_list_securities_filter_by_category(
-        self, security_service, sample_securities
-    ):
-        """Test listing securities filtered by category."""
-        securities = security_service.list_securities(
-            queries=("type:equity",), limit=30, offset=0
-        )
-
-        assert len(securities) == 3
-        assert all(sec.category == SecurityCategory.EQUITY for sec in securities)
-
 
 class TestAddSecurity:
     """Tests for add_security method."""
 
-    def test_add_security_success(self, security_service, session):
+    def test_add_security_success(self, security_service):
         """Test successfully adding a new security."""
         result = security_service.add_security(
             key="TEST123",
@@ -187,15 +161,9 @@ class TestAddSecurity:
             source=None,
         )
 
-        assert isinstance(result, InsertResult)
-        assert result.action == MergeAction.INSERT
-        assert result.data.key == "TEST123"
-        assert result.data.name == "Test Mutual Fund"
-        assert result.data.type == SecurityType.MUTUAL_FUND
-        assert result.data.category == SecurityCategory.EQUITY
-        assert result.data.properties == {}
+        assert result is True
 
-    def test_add_security_with_source(self, security_service, session):
+    def test_add_security_with_source(self, security_service):
         """Test adding security with source property."""
         result = security_service.add_security(
             key="TEST123",
@@ -205,15 +173,14 @@ class TestAddSecurity:
             source="AMFI",
         )
 
-        assert result.action == MergeAction.INSERT
-        assert result.data.properties == {"source": "AMFI"}
+        assert result is True
 
-    def test_add_security_duplicate_key_updates(
-        self, security_service: SecurityService, session: Session
+    def test_add_security_duplicate_key_ignored(
+        self, security_service: SecurityService
     ):
         """Test that adding a security with duplicate key updates existing one."""
         # Add first security
-        result1: InsertResult[Security] = security_service.add_security(
+        result1 = security_service.add_security(
             key="DUP123",
             name="Original Name",
             stype=SecurityType.MUTUAL_FUND,
@@ -221,10 +188,10 @@ class TestAddSecurity:
             source=None,
         )
 
-        assert result1.action == MergeAction.INSERT
+        assert result1 is True
 
         # Add with same key but different details
-        result2: InsertResult[Security] = security_service.add_security(
+        result2 = security_service.add_security(
             key="DUP123",
             name="Updated Name",
             stype=SecurityType.STOCK,
@@ -232,39 +199,22 @@ class TestAddSecurity:
             source="Manual",
         )
 
-        assert result2.action == MergeAction.UPDATE
-        assert result2.data.key == "DUP123"
-        assert result2.data.name == "Updated Name"
-        assert result2.data.type == SecurityType.STOCK
-        assert result2.data.category == SecurityCategory.DEBT
-        assert result2.data.properties == {"source": "Manual"}
+        assert result2 is False
+        # Verify original security is unchanged
+        securities = security_service.list_securities(queries=(), limit=30, offset=0)
+        for sec in securities:
+            if sec.key == "DUP123":
+                assert sec.name == "Original Name"
+                assert sec.type == SecurityType.MUTUAL_FUND
+                assert sec.category == SecurityCategory.EQUITY
+                assert sec.properties.get("source") is None
+                break
+        else:
+            pytest.fail(
+                "Security with key 'DUP123' not found after duplicate add attempt."
+            )
 
-    def test_add_security_upsert_preserves_key(self, security_service, session):
-        """Test that upsert operation preserves the primary key."""
-        # Add initial security
-        result1 = security_service.add_security(
-            key="UPSERT",
-            name="Original",
-            stype=SecurityType.MUTUAL_FUND,
-            category=SecurityCategory.EQUITY,
-            source=None,
-        )
-
-        original_key = result1.data.key
-
-        # Update the security
-        result2 = security_service.add_security(
-            key="UPSERT",
-            name="Updated",
-            stype=SecurityType.BOND,
-            category=SecurityCategory.DEBT,
-            source=None,
-        )
-
-        assert result2.data.key == original_key
-        assert result2.action == MergeAction.UPDATE
-
-    def test_add_security_strips_whitespace(self, security_service, session):
+    def test_add_security_strips_whitespace(self, security_service):
         """Test that add_security strips whitespace from key and name."""
         result = security_service.add_security(
             key="  TEST123  ",
@@ -274,10 +224,16 @@ class TestAddSecurity:
             source=None,
         )
 
-        assert result.data.key == "TEST123"
-        assert result.data.name == "Test Fund"
+        assert result is True
+        securities = security_service.list_securities(queries=(), limit=30, offset=0)
+        for sec in securities:
+            if sec.key == "TEST123":
+                assert sec.name == "Test Fund"
+                break
+        else:
+            pytest.fail("Security with key 'TEST123' not found after add attempt.")
 
-    def test_add_security_empty_key_raises_error(self, security_service, session):
+    def test_add_security_empty_key_raises_error(self, security_service):
         """Test that empty key raises InvalidInputError."""
         with pytest.raises(
             InvalidInputError, match="Security key and name cannot be empty"
@@ -290,9 +246,7 @@ class TestAddSecurity:
                 source=None,
             )
 
-    def test_add_security_whitespace_only_key_raises_error(
-        self, security_service, session
-    ):
+    def test_add_security_whitespace_only_key_raises_error(self, security_service):
         """Test that whitespace-only key raises InvalidInputError."""
         with pytest.raises(
             InvalidInputError, match="Security key and name cannot be empty"
@@ -305,7 +259,7 @@ class TestAddSecurity:
                 source=None,
             )
 
-    def test_add_security_empty_name_raises_error(self, security_service, session):
+    def test_add_security_empty_name_raises_error(self, security_service):
         """Test that empty name raises InvalidInputError."""
         with pytest.raises(
             InvalidInputError, match="Security key and name cannot be empty"
@@ -318,9 +272,7 @@ class TestAddSecurity:
                 source=None,
             )
 
-    def test_add_security_whitespace_only_name_raises_error(
-        self, security_service, session
-    ):
+    def test_add_security_whitespace_only_name_raises_error(self, security_service):
         """Test that whitespace-only name raises InvalidInputError."""
         with pytest.raises(
             InvalidInputError, match="Security key and name cannot be empty"
@@ -333,7 +285,7 @@ class TestAddSecurity:
                 source=None,
             )
 
-    def test_add_security_invalid_type_raises_error(self, security_service, session):
+    def test_add_security_invalid_type_raises_error(self, security_service):
         """Test that invalid security type raises InvalidInputError."""
         with pytest.raises(InvalidInputError, match="Invalid security type"):
             security_service.add_security(
@@ -344,9 +296,7 @@ class TestAddSecurity:
                 source=None,
             )
 
-    def test_add_security_invalid_category_raises_error(
-        self, security_service, session
-    ):
+    def test_add_security_invalid_category_raises_error(self, security_service):
         """Test that invalid security category raises InvalidInputError."""
         with pytest.raises(InvalidInputError, match="Invalid security category"):
             security_service.add_security(
@@ -357,7 +307,7 @@ class TestAddSecurity:
                 source=None,
             )
 
-    def test_add_security_all_types_valid(self, security_service, session):
+    def test_add_security_all_types_valid(self, security_service):
         """Test adding securities with all valid SecurityType values."""
         for idx, sec_type in enumerate(SecurityType):
             result = security_service.add_security(
@@ -367,10 +317,9 @@ class TestAddSecurity:
                 category=SecurityCategory.OTHER,
                 source=None,
             )
-            assert result.action == MergeAction.INSERT
-            assert result.data.type == sec_type
+            assert result is True
 
-    def test_add_security_all_categories_valid(self, security_service, session):
+    def test_add_security_all_categories_valid(self, security_service):
         """Test adding securities with all valid SecurityCategory values."""
         for idx, category in enumerate(SecurityCategory):
             result = security_service.add_security(
@@ -380,10 +329,9 @@ class TestAddSecurity:
                 category=category,
                 source=None,
             )
-            assert result.action == MergeAction.INSERT
-            assert result.data.category == category
+            assert result is True
 
-    def test_add_security_special_characters(self, security_service, session):
+    def test_add_security_special_characters(self, security_service):
         """Test adding security with special characters."""
         result = security_service.add_security(
             key="SP&500",
@@ -393,11 +341,9 @@ class TestAddSecurity:
             source=None,
         )
 
-        assert result.action == MergeAction.INSERT
-        assert result.data.key == "SP&500"
-        assert result.data.name == "S&P 500 (Growth)"
+        assert result is True
 
-    def test_add_security_unicode_characters(self, security_service, session):
+    def test_add_security_unicode_characters(self, security_service):
         """Test adding security with unicode characters."""
         result = security_service.add_security(
             key="123456",
@@ -407,8 +353,7 @@ class TestAddSecurity:
             source=None,
         )
 
-        assert result.action == MergeAction.INSERT
-        assert result.data.name == "भारतीय म्यूचुअल फंड"
+        assert result is True
 
 
 class TestResolveSecurityKey:
@@ -479,20 +424,20 @@ class TestResolveSecurityKey:
         self, security_service: SecurityService, sample_securities: list[Security]
     ):
         """Test resolving non-existent key when ambiguous allowed falls back to text search."""
-        securities: Sequence[Security] = security_service.resolve_security_key(
-            queries=("NONEXIST",), limit=10, allow_ambiguous=True
-        )
-
-        # Should fall back to text search and find nothing
-        assert len(securities) == 0
-
-    def test_resolve_text_search_no_matches(
-        self, security_service: SecurityService, sample_securities: list[Security]
-    ):
-        """Test text search with no matches."""
-        securities: Sequence[Security] = security_service.resolve_security_key(
-            queries=("NonExistentFund",), limit=10, allow_ambiguous=True
-        )
+        with patch.object(
+            security_service.security_repository,
+            "find_securities",
+            return_value=[],
+        ) as mock:
+            securities: Sequence[Security] = security_service.resolve_security_key(
+                queries=("NONEXIST",), limit=10, allow_ambiguous=True
+            )
+            mock.assert_called_once()
+            mock.assert_called_with(
+                [FilterNode(Field.SECURITY, Operator.REGEX_MATCH, "NONEXIST")],
+                limit=10,
+                offset=0,
+            )
 
         assert len(securities) == 0
 
@@ -500,23 +445,23 @@ class TestResolveSecurityKey:
         self, security_service: SecurityService, sample_securities: list[Security]
     ):
         """Test text search with exactly one match."""
-        securities: Sequence[Security] = security_service.resolve_security_key(
-            queries=("Reliance",), limit=10, allow_ambiguous=True
-        )
+        with patch.object(
+            security_service.security_repository,
+            "find_securities",
+            return_value=[sample_securities[2]],
+        ) as mock:
+            securities: Sequence[Security] = security_service.resolve_security_key(
+                queries=("Reliance",), limit=10, allow_ambiguous=True
+            )
+            mock.assert_called_once()
+            mock.assert_called_with(
+                [FilterNode(Field.SECURITY, Operator.REGEX_MATCH, "Reliance")],
+                limit=10,
+                offset=0,
+            )
 
         assert len(securities) == 1
         assert securities[0].name == "Reliance Industries"
-
-    def test_resolve_text_search_multiple_matches(
-        self, security_service: SecurityService, sample_securities: list[Security]
-    ):
-        """Test text search with multiple matches."""
-        securities: Sequence[Security] = security_service.resolve_security_key(
-            queries=("Fund",), limit=10, allow_ambiguous=True
-        )
-
-        assert len(securities) == 2
-        assert all("Fund" in sec.name for sec in securities)
 
     def test_resolve_text_search_multiple_matches_ambiguous_not_allowed(
         self, security_service: SecurityService, sample_securities: list[Security]
@@ -526,24 +471,6 @@ class TestResolveSecurityKey:
             security_service.resolve_security_key(
                 queries=("Fund",), limit=10, allow_ambiguous=False
             )
-
-    def test_resolve_text_search_respects_limit(
-        self, security_service: SecurityService, sample_securities: list[Security]
-    ):
-        """Test that text search respects limit parameter."""
-        securities: Sequence[Security] = security_service.resolve_security_key(
-            queries=("Fund",), limit=1, allow_ambiguous=True
-        )
-
-        assert len(securities) == 1
-
-    def test_resolve_empty_database(self, security_service: SecurityService):
-        """Test resolving in empty database."""
-        securities: Sequence[Security] = security_service.resolve_security_key(
-            queries=("test",), limit=10, allow_ambiguous=True
-        )
-
-        assert len(securities) == 0
 
     def test_resolve_returns_security(
         self, security_service: SecurityService, sample_securities: list[Security]

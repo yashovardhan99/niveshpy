@@ -12,7 +12,7 @@ from niveshpy.cli.utils.models import Column
 from niveshpy.exceptions import ResourceError
 
 if TYPE_CHECKING:
-    from niveshpy.models.account import Account, AccountPublic
+    from niveshpy.models.account import Account
 
 
 @dataclass(slots=True, frozen=True)
@@ -40,7 +40,7 @@ class AccountDisplay:
     ]
 
     @classmethod
-    def from_domain(cls, account: AccountPublic | Account) -> Self:
+    def from_domain(cls, account: Account) -> Self:
         """Create an AccountDisplay instance from a domain Account model."""
         if account.id is None:
             msg = f"Invalid account data: missing ID for account '{account.name}'"

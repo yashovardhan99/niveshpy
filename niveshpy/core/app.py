@@ -1,11 +1,14 @@
 """Main application class to hold state for the CLI."""
 
+from __future__ import annotations
+
 import functools
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from niveshpy.core.logging import logger
+from niveshpy.domain.repositories import AccountRepository, SecurityRepository
 
 if TYPE_CHECKING:
     from niveshpy.models.parser import Parser
@@ -32,25 +35,39 @@ class Application:
         logger.info("Application initialized")
 
     @property
-    def security(self) -> "SecurityService":
+    def security(self) -> SecurityService:
         """Return the security service."""
         if self._security is None:
             from niveshpy.services.security import SecurityService
 
-            self._security = SecurityService()
+            self._security = SecurityService(self.security_repository)
         return self._security
 
+    @functools.cached_property
+    def security_repository(self) -> SecurityRepository:
+        """Return the security repository."""
+        from niveshpy.infrastructure.sqlite.repositories import SqliteSecurityRepository
+
+        return SqliteSecurityRepository()
+
     @property
-    def account(self) -> "AccountService":
+    def account(self) -> AccountService:
         """Return the account service."""
         if self._account is None:
             from niveshpy.services.account import AccountService
 
-            self._account = AccountService()
+            self._account = AccountService(self.account_repository)
         return self._account
 
+    @functools.cached_property
+    def account_repository(self) -> AccountRepository:
+        """Return the account repository."""
+        from niveshpy.infrastructure.sqlite.repositories import SqliteAccountRepository
+
+        return SqliteAccountRepository()
+
     @property
-    def transaction(self) -> "TransactionService":
+    def transaction(self) -> TransactionService:
         """Return the transaction service."""
         if self._transaction is None:
             from niveshpy.services.transaction import TransactionService
@@ -60,16 +77,16 @@ class Application:
 
     def get_parsing_service(
         self,
-        parser: "Parser",
+        parser: Parser,
         progress_callback: Callable[[str, int, int], None] | None = None,
-    ) -> "ParsingService":
+    ) -> ParsingService:
         """Get the parsing service for the given parser key."""
         from niveshpy.services.parsing import ParsingService
 
         return ParsingService(parser, progress_callback=progress_callback)
 
     @property
-    def price(self) -> "PriceService":
+    def price(self) -> PriceService:
         """Return the price service."""
         if self._price is None:
             from niveshpy.services.price import PriceService

@@ -1,29 +1,33 @@
 """Security service for managing securities."""
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
-from sqlmodel import select
-
-from niveshpy.core import logging
 from niveshpy.core.query import ast
-from niveshpy.core.query.prepare import get_filters_from_queries
-from niveshpy.database import get_session
-from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
+from niveshpy.core.query.prepare import get_prepared_filters_from_queries
+from niveshpy.domain.repositories import SecurityRepository
+from niveshpy.exceptions import (
+    AmbiguousResourceError,
+    InvalidInputError,
+    QuerySyntaxError,
+)
 from niveshpy.models.security import (
-    SECURITY_COLUMN_MAPPING,
     Security,
     SecurityCategory,
     SecurityCreate,
     SecurityType,
 )
-from niveshpy.services.result import (
-    InsertResult,
-    MergeAction,
-)
 
 
+@dataclass(slots=True, frozen=True)
 class SecurityService:
-    """Service handler for the securities command group."""
+    """Service handler for the securities command group.
+
+    Args:
+        security_repository (SecurityRepository): Repository for managing securities.
+    """
+
+    security_repository: SecurityRepository
 
     def list_securities(
         self,
@@ -31,23 +35,34 @@ class SecurityService:
         limit: int = 30,
         offset: int = 0,
     ) -> Sequence[Security]:
-        """List securities matching the query."""
+        """List securities matching the query.
+
+        Args:
+            queries (tuple[str, ...]): Query strings to filter securities.
+            limit (int): Maximum number of securities to return.
+            offset (int): Number of securities to skip from the start.
+
+        Returns:
+            Sequence[Security]: List of securities matching the query.
+
+        Raises:
+            InvalidInputError: If limit is less than 1 or offset is negative.
+            QuerySyntaxError: If the query strings cannot be parsed into valid filters.
+        """
         if limit < 1:
             raise InvalidInputError(limit, "Limit must be positive.")
         if offset < 0:
             raise InvalidInputError(offset, "Offset cannot be negative.")
 
-        where_clause = get_filters_from_queries(
-            queries, ast.Field.SECURITY, SECURITY_COLUMN_MAPPING
-        )
-        with get_session() as session:
-            return session.exec(
-                select(Security)
-                .where(*where_clause)
-                .offset(offset)
-                .limit(limit)
-                .order_by(Security.key)
-            ).all()
+        filters = get_prepared_filters_from_queries(queries, ast.Field.SECURITY)
+        try:
+            securities = self.security_repository.find_securities(
+                filters, limit=limit, offset=offset
+            )
+            return securities
+        except QuerySyntaxError as e:
+            e.add_note(f"Caused by input queries: {' '.join(queries)}")
+            raise QuerySyntaxError(" ".join(queries), e.cause) from e
 
     def add_security(
         self,
@@ -56,8 +71,21 @@ class SecurityService:
         stype: SecurityType,
         category: SecurityCategory,
         source: str | None = None,
-    ) -> InsertResult[Security]:
-        """Add a single security to the database."""
+    ) -> bool:
+        """Add a single security to the database.
+
+        If a security with the same key already exists, it will be ignored.
+
+        Args:
+            key (str): Unique identifier for the security.
+            name (str): Name of the security.
+            stype (SecurityType): Type of the security.
+            category (SecurityCategory): Category of the security.
+            source (str | None): Optional source information for the security.
+
+        Returns:
+            bool: True if the security was added, False if it already exists.
+        """
         if not key.strip() or not name.strip():
             raise InvalidInputError(
                 (key, name), "Security key and name cannot be empty."
@@ -81,48 +109,16 @@ class SecurityService:
             properties=properties,
         )
 
-        with get_session() as session:
-            # Check existing
-            existing = session.get(Security, security.key)
-
-            if existing is not None:
-                logging.logger.debug("Updating existing security: %s", existing)
-
-                # Update existing security
-                existing.name = security.name
-                existing.type = security.type
-                existing.category = security.category
-                if source:
-                    props = existing.properties.copy()
-                    props.update(security.properties)
-                    existing.properties = props
-                db_security = existing
-            else:
-                db_security = Security.model_validate(security)
-
-            # Insert or update security
-            session.add(db_security)
-            session.commit()
-
-            session.refresh(db_security)
-
-            if existing is not None:
-                return InsertResult(MergeAction.UPDATE, db_security)
-            else:
-                return InsertResult(MergeAction.INSERT, db_security)
+        return self.security_repository.insert_security(security)
 
     def delete_security(self, key: str) -> bool:
         """Delete a security by its key.
 
         Returns True if a security was deleted, False otherwise.
         """
-        with get_session() as session:
-            security = session.get(Security, key)
-            if security is None:
-                return False
-            session.delete(security)
-            session.commit()
-            return True
+        if not key.strip():
+            raise InvalidInputError(key, "Security key cannot be empty.")
+        return self.security_repository.delete_security_by_key(key.strip())
 
     def resolve_security_key(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
@@ -153,10 +149,9 @@ class SecurityService:
 
         # If we have a possible security key
         if security_key is not None:
-            with get_session() as session:
-                exact_security = session.get(Security, security_key)
-                if exact_security is not None:
-                    return [exact_security]
+            exact_security = self.security_repository.get_security_by_key(security_key)
+            if exact_security is not None:
+                return [exact_security]
 
         # No exact match found by key
         # If ambiguous results are not allowed, raise error

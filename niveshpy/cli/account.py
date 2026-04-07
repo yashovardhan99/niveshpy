@@ -1,7 +1,5 @@
 """CLI commands for managing accounts."""
 
-from collections.abc import Sequence
-
 import click
 
 from niveshpy.cli.models.account import AccountDisplay
@@ -22,6 +20,7 @@ from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import (
     OperationError,
+    ResourceError,
     ResourceNotFoundError,
 )
 from niveshpy.services.result import MergeAction
@@ -118,10 +117,10 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
             name=name, institution=institution, source="cli"
         )
         if result.action == MergeAction.NOTHING:
-            display_warning(f"Account already exists with ID {result.data.id}.")
+            display_warning(f"Account already exists with ID {result.data}.")
         else:
             display_success(
-                f"Account [b]{name}[/b] added successfully with ID {result.data.id}."
+                f"Account [b]{name}[/b] added successfully with ID {result.data}."
             )
     else:
         # Interactive mode
@@ -155,10 +154,10 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
                 name=name, institution=institution, source="cli"
             )
             if result.action == MergeAction.NOTHING:
-                display_warning(f"Account already exists with ID {result.data.id}.")
+                display_warning(f"Account already exists with ID {result.data}.")
             else:
                 display_success(
-                    f"Account [b]{name}[/b] added successfully with ID {result.data.id}."
+                    f"Account [b]{name}[/b] added successfully with ID {result.data}."
                 )
 
             # Reset for next iteration
@@ -190,8 +189,6 @@ def delete(
     from InquirerPy.base.control import Choice
     from InquirerPy.validator import NumberValidator
 
-    from niveshpy.models.account import AccountPublic
-
     state = ctx.ensure_object(AppState)
 
     if state.no_input and not force:
@@ -202,11 +199,9 @@ def delete(
 
     inquirer_style = get_style({}, style_override=state.no_color)
 
-    candidates: Sequence[AccountPublic] = state.app.account.resolve_account_id(
+    candidates = state.app.account.resolve_account_id(
         queries, limit, allow_ambiguous=not state.no_input
     )
-
-    account: AccountPublic
 
     if not candidates:
         raise ResourceNotFoundError("account", " ".join(queries))
@@ -243,6 +238,8 @@ def delete(
         ctx.exit()
 
     with loading_spinner(f"Deleting account with ID {account.id}..."):
+        if account.id is None:
+            raise ResourceError("Account ID is missing, cannot proceed with deletion.")
         deleted = state.app.account.delete_account(account.id)
         if deleted:
             display_success(f"Account ID {account.id} was deleted successfully.")

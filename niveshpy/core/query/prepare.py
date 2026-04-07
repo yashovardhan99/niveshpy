@@ -153,24 +153,10 @@ def prepare_expression(filter: FilterNode, column: ColumnClause) -> ColumnElemen
             )
 
 
-def get_filters_from_queries(
-    queries: tuple[str, ...],
-    default_field: Field,
-    column_mappings: dict[Field, list],
-    include_fields: Container[Field] | None = None,
-) -> list[ColumnElement[bool]]:
-    """Convert query strings into a combined SQLAlchemy filter expression.
-
-    Args:
-        queries (tuple): Tuple of query strings.
-        default_field (Field): The default field to use for filters.
-        column_mappings (dict): Mapping of Fields to database column names.
-        include_fields (Container[Field], optional): Set of Fields to include. \
-        If provided, only filters with fields in this set will be included.
-
-    Returns:
-        list: The list of SQLAlchemy filter expressions.
-    """
+def get_prepared_filters_from_queries(
+    queries: tuple[str, ...], default_field: Field
+) -> list[FilterNode]:
+    """Parse query strings into prepared filter nodes."""
     try:
         stripped_queries = map(str.strip, queries)
         lexers = map(QueryLexer, stripped_queries)
@@ -179,14 +165,21 @@ def get_filters_from_queries(
             map(QueryParser.parse, parsers)
         )
         filters = prepare_filters(filters, default_field)
+        logger.debug(
+            "Query parsed: %d filter(s) from %d queries", len(filters), len(queries)
+        )
+        return filters
     except QuerySyntaxError as e:
         e.add_note(f"Error was reported on input: {e.input_value}")
         raise QuerySyntaxError(" ".join(queries), cause=e.cause) from e
 
-    logger.debug(
-        "Query parsed: %d filter(s) from %d queries", len(filters), len(queries)
-    )
 
+def get_sqlalchemy_filters(
+    filters: Iterable[FilterNode],
+    column_mappings: dict[Field, list],
+    include_fields: Container[Field] | None = None,
+) -> list[ColumnElement[bool]]:
+    """Convert prepared filter nodes into SQLAlchemy filter expressions."""
     # Regex expressions for text search
     text_expressions: list[ColumnElement[bool]] = []
 
@@ -202,7 +195,7 @@ def get_filters_from_queries(
 
         if not cols:
             raise QuerySyntaxError(
-                " ".join(queries), f"Field {filter.field} not mapped to any column."
+                str(filter), f"Field {filter.field} not mapped to any column."
             )
 
         col_expressions: list[ColumnElement[bool]] = []
@@ -221,9 +214,36 @@ def get_filters_from_queries(
     return expressions
 
 
-def get_fields_from_queries(
+def get_filters_from_queries(
     queries: tuple[str, ...],
-) -> set[Field]:
+    default_field: Field,
+    column_mappings: dict[Field, list],
+    include_fields: Container[Field] | None = None,
+) -> list[ColumnElement[bool]]:
+    """Convert query strings into a combined SQLAlchemy filter expression.
+
+    Args:
+        queries (tuple): Tuple of query strings.
+        default_field (Field): The default field to use for filters.
+        column_mappings (dict): Mapping of Fields to database column names.
+        include_fields (Container[Field], optional): Set of Fields to include. \
+        If provided, only filters with fields in this set will be included.
+
+    Returns:
+        list: The list of SQLAlchemy filter expressions.
+    """
+    filters = get_prepared_filters_from_queries(queries, default_field)
+    try:
+        sqlalchemy_filters = get_sqlalchemy_filters(
+            filters, column_mappings, include_fields
+        )
+    except QuerySyntaxError as e:
+        e.add_note(f"Error was reported on filter: {e.input_value}")
+        raise QuerySyntaxError(" ".join(queries), cause=e.cause) from e
+    return sqlalchemy_filters
+
+
+def get_fields_from_queries(queries: tuple[str, ...]) -> set[Field]:
     """Extract fields used in the query strings.
 
     Args:
