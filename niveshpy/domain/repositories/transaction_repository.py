@@ -69,11 +69,18 @@ class TransactionRepository(Protocol):
             A sequence of Transaction objects matching the filters and pagination criteria.
         """
 
-    def find_transactions_by_ids(self, ids: Sequence[int]) -> Sequence[Transaction]:
+    def find_transactions_by_ids(
+        self,
+        ids: Sequence[int],
+        fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
+        sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_DESC,
+    ) -> Sequence[Transaction]:
         """Find transactions matching the given list of IDs.
 
         Args:
             ids: A sequence of unique IDs to search for.
+            fetch_profile: The fetch profile to determine how much related data to load.
+            sort_order: The sort order to determine the order of the returned transactions.
 
         Returns:
             A sequence of Transaction objects matching the given IDs.

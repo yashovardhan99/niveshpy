@@ -263,8 +263,19 @@ def get_fields_from_queries(queries: tuple[str, ...]) -> set[Field]:
         e.add_note(f"Error was reported on input: {e.input_value}")
         raise QuerySyntaxError(" ".join(queries), cause=e.cause) from e
 
+    return get_fields_from_filters(filters)
+
+
+def get_fields_from_filters(filters: Iterable[FilterNode]) -> set[Field]:
+    """Extract fields used in the filter nodes.
+
+    Args:
+        filters (Iterable): Iterable of FilterNode objects.
+
+    Returns:
+        set: The set of Fields used in the filters.
+    """
     used_fields: set[Field] = set()
     for filter in filters:
         used_fields.add(filter.field)
-
     return used_fields
