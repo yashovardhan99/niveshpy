@@ -154,7 +154,9 @@ def prepare_expression(filter: FilterNode, column: ColumnClause) -> ColumnElemen
 
 
 def get_prepared_filters_from_queries(
-    queries: tuple[str, ...], default_field: Field
+    queries: tuple[str, ...],
+    default_field: Field,
+    include_fields: Container[Field] | None = None,
 ) -> list[FilterNode]:
     """Parse query strings into prepared filter nodes."""
     try:
@@ -168,6 +170,11 @@ def get_prepared_filters_from_queries(
         logger.debug(
             "Query parsed: %d filter(s) from %d queries", len(filters), len(queries)
         )
+        if include_fields is not None:
+            logger.debug("Included fields: %s", str(include_fields))
+            filters = [f for f in filters if f.field in include_fields]
+            logger.debug("Filters after including fields: %d", len(filters))
+
         return filters
     except QuerySyntaxError as e:
         e.add_note(f"Error was reported on input: {e.input_value}")
@@ -263,8 +270,19 @@ def get_fields_from_queries(queries: tuple[str, ...]) -> set[Field]:
         e.add_note(f"Error was reported on input: {e.input_value}")
         raise QuerySyntaxError(" ".join(queries), cause=e.cause) from e
 
+    return get_fields_from_filters(filters)
+
+
+def get_fields_from_filters(filters: Iterable[FilterNode]) -> set[Field]:
+    """Extract fields used in the filter nodes.
+
+    Args:
+        filters (Iterable): Iterable of FilterNode objects.
+
+    Returns:
+        set: The set of Fields used in the filters.
+    """
     used_fields: set[Field] = set()
     for filter in filters:
         used_fields.add(filter.field)
-
     return used_fields

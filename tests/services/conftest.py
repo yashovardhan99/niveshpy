@@ -1,11 +1,16 @@
 """Pytest fixtures for service tests."""
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 from niveshpy.core.query.ast import Field, FilterNode
+from niveshpy.domain.repositories.transaction_repository import (
+    TransactionFetchProfile,
+    TransactionSortOrder,
+)
 from niveshpy.exceptions import QuerySyntaxError
 from niveshpy.models.account import Account
+from niveshpy.models.transaction import Transaction, TransactionCreate
 
 
 class MockAccountRepository:
@@ -139,5 +144,147 @@ class MockSecurityRepository:
         """Delete a security by its key."""
         if key in self._securities:
             self._securities.pop(key)
+            return True
+        return False
+
+
+class MockTransactionRepository:
+    """Mock implementation of TransactionRepository for testing purposes."""
+
+    def __init__(
+        self,
+        account_repository: MockAccountRepository,
+        security_repository: MockSecurityRepository,
+    ):
+        """Initialize the test transaction repository."""
+        self._transactions: dict[int, Transaction] = {}
+        self._next_id: int = 1
+        self._account_repository: MockAccountRepository = account_repository
+        self._security_repository: MockSecurityRepository = security_repository
+
+    def get_transaction_by_id(
+        self,
+        transaction_id: int,
+        fetch_profile=TransactionFetchProfile.WITH_RELATIONS,
+    ) -> Transaction | None:
+        """Retrieve a transaction by its ID."""
+        if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
+            transaction = self._transactions.get(transaction_id)
+            if transaction is None:
+                return None
+            # Simulate fetching related account and security
+            account = self._account_repository.get_account_by_id(transaction.account_id)
+            security = self._security_repository.get_security_by_key(
+                transaction.security_key
+            )
+            # Return a new object with relations populated (simplified for testing)
+            return transaction.model_copy(
+                update={"account": account, "security": security}
+            )
+        else:
+            return self._transactions.get(transaction_id)
+
+    def find_transactions(
+        self,
+        filters: Iterable[FilterNode],
+        limit=None,
+        offset=0,
+        fetch_profile=TransactionFetchProfile.WITH_RELATIONS,
+        sort_order=TransactionSortOrder.DATE_DESC_ID_ASC,
+    ) -> Sequence[Transaction]:
+        """Find transactions matching the given filters with optional pagination."""
+        if not filters:
+            transaction_ids = self._transactions.keys()
+            transactions = list(
+                filter(
+                    None,
+                    [
+                        self.get_transaction_by_id(tid, fetch_profile)
+                        for tid in transaction_ids
+                    ],
+                )
+            )
+            if sort_order == TransactionSortOrder.DATE_DESC_ID_ASC:
+                transactions.sort(
+                    key=lambda t: (
+                        (t.transaction_date, -t.id)
+                        if t.id is not None
+                        else (t.transaction_date, 0)
+                    ),
+                    reverse=True,
+                )
+            elif sort_order == TransactionSortOrder.DATE_ASC_ID_ASC:
+                transactions.sort(
+                    key=lambda t: (
+                        (t.transaction_date, t.id)
+                        if t.id is not None
+                        else (t.transaction_date, 0)
+                    )
+                )
+            elif sort_order == TransactionSortOrder.ID_ASC:
+                transactions.sort(key=lambda t: t.id if t.id is not None else 0)
+            elif sort_order == TransactionSortOrder.ID_DESC:
+                transactions.sort(
+                    key=lambda t: t.id if t.id is not None else 0, reverse=True
+                )
+            if limit is not None:
+                return transactions[offset : offset + limit]
+            else:
+                return transactions[offset:]
+        else:
+            raise NotImplementedError(
+                "Filtering transactions is not implemented in the mock repository."
+            )
+
+    def find_transactions_by_ids(
+        self,
+        ids: Sequence[int],
+        fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
+        sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
+    ) -> Sequence[Transaction]:
+        """Find transactions matching the given IDs."""
+        results = []
+        for transaction_id in ids:
+            transaction = self.get_transaction_by_id(transaction_id, fetch_profile)
+            if transaction:
+                results.append(transaction)
+
+        if sort_order == TransactionSortOrder.DATE_DESC_ID_ASC:
+            results.sort(
+                key=lambda t: (t.transaction_date, -t.id if t.id is not None else 0),
+                reverse=True,
+            )
+        elif sort_order == TransactionSortOrder.DATE_ASC_ID_ASC:
+            results.sort(
+                key=lambda t: (t.transaction_date, t.id if t.id is not None else 0)
+            )
+        elif sort_order == TransactionSortOrder.ID_ASC:
+            results.sort(key=lambda t: t.id if t.id is not None else 0)
+        elif sort_order == TransactionSortOrder.ID_DESC:
+            results.sort(key=lambda t: t.id if t.id is not None else 0, reverse=True)
+        return results
+
+    def insert_transaction(self, transaction: TransactionCreate) -> int:
+        """Insert a new transaction into the repository."""
+        transaction_id = self._next_id
+        new_transaction = Transaction(id=transaction_id, **transaction.model_dump())
+        self._transactions[transaction_id] = new_transaction
+        self._next_id += 1
+        return transaction_id
+
+    def insert_multiple_transactions(
+        self, transactions: Sequence[TransactionCreate]
+    ) -> int:
+        """Insert multiple transactions into the repository."""
+        count = 0
+        for transaction in transactions:
+            self.insert_transaction(transaction)
+            count += 1
+        return count
+
+    def delete_transaction_by_id(self, transaction_id):
+        """Delete a transaction by its ID."""
+        if transaction_id in self._transactions:
+            self._transactions.pop(transaction_id)
             return True
         return False

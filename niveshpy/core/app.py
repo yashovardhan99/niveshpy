@@ -8,7 +8,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from niveshpy.core.logging import logger
-from niveshpy.domain.repositories import AccountRepository, SecurityRepository
+from niveshpy.domain.repositories import (
+    AccountRepository,
+    SecurityRepository,
+    TransactionRepository,
+)
 
 if TYPE_CHECKING:
     from niveshpy.models.parser import Parser
@@ -72,8 +76,21 @@ class Application:
         if self._transaction is None:
             from niveshpy.services.transaction import TransactionService
 
-            self._transaction = TransactionService()
+            self._transaction = TransactionService(
+                transaction_repository=self.transaction_repository,
+                account_repository=self.account_repository,
+                security_repository=self.security_repository,
+            )
         return self._transaction
+
+    @functools.cached_property
+    def transaction_repository(self) -> TransactionRepository:
+        """Return the transaction repository."""
+        from niveshpy.infrastructure.sqlite.repositories import (
+            SqliteTransactionRepository,
+        )
+
+        return SqliteTransactionRepository()
 
     def get_parsing_service(
         self,
