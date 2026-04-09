@@ -178,7 +178,7 @@ class TransactionService:
             allow_ambiguous (bool): Whether to allow ambiguous results.
 
         Returns:
-            Sequence[TransactionDisplay]: The resolved transaction(s).
+            Sequence[TransactionPublicWithRelations]: The resolved transaction(s).
 
         Raises:
             InvalidInputError: If no queries are provided and ambiguous results are not allowed.

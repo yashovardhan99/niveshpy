@@ -154,15 +154,15 @@ def test_find_transactions_applies_filter_limit_and_offset(
     )
     assert count == 3
 
-    filtered = security_repository.find_securities(
+    filtered = transaction_repository.find_transactions(
         [FilterNode(Field.SECURITY, Operator.REGEX_MATCH, "B")]
     )
     assert len(filtered) == 1
-    assert filtered[0].key == "BBB222"
+    assert filtered[0].security_key == "BBB222"
 
-    paged = security_repository.find_securities([], limit=1, offset=1)
+    paged = transaction_repository.find_transactions([], limit=1, offset=1)
     assert len(paged) == 1
-    assert paged[0].key == "BBB222"
+    assert paged[0].security_key == "BBB222"
 
 
 def test_find_transactions_by_ids_returns_subset_and_empty_input_is_empty(
