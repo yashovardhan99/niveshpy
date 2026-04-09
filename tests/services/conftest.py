@@ -2,13 +2,14 @@
 
 import re
 from collections.abc import Iterable, Sequence
+from typing import Any
 
 from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.domain.repositories.transaction_repository import (
     TransactionFetchProfile,
     TransactionSortOrder,
 )
-from niveshpy.exceptions import QuerySyntaxError
+from niveshpy.exceptions import QuerySyntaxError, ResourceNotFoundError
 from niveshpy.models.account import Account
 from niveshpy.models.transaction import Transaction, TransactionCreate
 
@@ -146,6 +147,26 @@ class MockSecurityRepository:
             self._securities.pop(key)
             return True
         return False
+
+    def update_security_properties(
+        self, security_key: str, *properties: tuple[str, Any]
+    ) -> None:
+        """Update properties of an existing security.
+
+        Args:
+            security_key: The unique key of the security to update.
+            *properties: A variable number of tuples, each containing a property name and its new value.
+
+        Raises:
+            ResourceNotFoundError: If no security with the given key is found.
+        """
+        security = self.get_security_by_key(security_key)
+        if not security:
+            raise ResourceNotFoundError("Security", security_key)
+
+        # Update properties
+        for prop_name, prop_value in properties:
+            security.properties[prop_name] = prop_value
 
 
 class MockTransactionRepository:
