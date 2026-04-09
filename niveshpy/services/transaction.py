@@ -3,23 +3,27 @@
 import datetime
 import decimal
 from collections.abc import Sequence
+from dataclasses import dataclass
 
-from sqlmodel import col, select
-
-from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
-from niveshpy.core.query.prepare import get_filters_from_queries
-from niveshpy.database import get_session
+from niveshpy.core.query.prepare import (
+    get_prepared_filters_from_queries,
+)
+from niveshpy.domain.repositories import (
+    AccountRepository,
+    SecurityRepository,
+    TransactionRepository,
+)
+from niveshpy.domain.repositories.transaction_repository import (
+    TransactionFetchProfile,
+    TransactionSortOrder,
+)
 from niveshpy.exceptions import (
     AmbiguousResourceError,
     InvalidInputError,
     ResourceNotFoundError,
 )
-from niveshpy.models.account import Account
-from niveshpy.models.security import Security
 from niveshpy.models.transaction import (
-    TRANSACTION_COLUMN_MAPPING,
-    Transaction,
     TransactionCreate,
     TransactionPublicWithCost,
     TransactionPublicWithRelations,
@@ -29,8 +33,13 @@ from niveshpy.models.transaction import (
 from niveshpy.services import helpers
 
 
+@dataclass(slots=True, frozen=True)
 class TransactionService:
     """Service handler for the transactions command group."""
+
+    transaction_repository: TransactionRepository
+    account_repository: AccountRepository
+    security_repository: SecurityRepository
 
     def list_transactions(
         self,
@@ -48,58 +57,56 @@ class TransactionService:
             raise InvalidInputError(offset, "Offset cannot be negative.")
 
         if cost:
-            where_clauses_all = get_filters_from_queries(
+            # If cost is requested, we need to fetch all transactions matching the cost-related filters first,
+            # compute their cost basis, and then filter the final results to those matching the original query.
+            # This is necessary because cost basis computation may depend on the full transaction history of
+            # relevant securities and accounts, which cannot be accurately determined from a limited query.
+            cost_query_filters = get_prepared_filters_from_queries(
                 queries,
-                ast.Field.SECURITY,
-                TRANSACTION_COLUMN_MAPPING,
+                default_field=ast.Field.SECURITY,
                 include_fields=[ast.Field.SECURITY, ast.Field.ACCOUNT],
             )
-            with get_session() as session:
-                transactions_all = session.exec(
-                    select(Transaction)
-                    .join(Security)
-                    .join(Account)
-                    .where(*where_clauses_all)
-                    .order_by(
-                        col(Transaction.transaction_date).asc(), col(Transaction.id)
-                    )
-                ).all()
-                transactions_with_cost = helpers.compute_cost_basis(transactions_all)
+            all_transactions_for_cost = self.transaction_repository.find_transactions(
+                cost_query_filters,
+                fetch_profile=TransactionFetchProfile.MINIMAL,
+                sort_order=TransactionSortOrder.DATE_ASC_ID_ASC,
+            )
 
-        where_clause = get_filters_from_queries(
-            queries, ast.Field.SECURITY, TRANSACTION_COLUMN_MAPPING
+            transactions_with_cost = helpers.compute_cost_basis(
+                all_transactions_for_cost
+            )
+
+        filters = get_prepared_filters_from_queries(
+            queries, default_field=ast.Field.SECURITY
         )
-        with get_session() as session:
-            transactions = session.exec(
-                select(Transaction)
-                .join(Security)
-                .join(Account)
-                .where(*where_clause)
-                .offset(offset)
-                .limit(limit)
-                .order_by(col(Transaction.transaction_date).desc(), col(Transaction.id))
-            ).all()
-            if cost:
-                id_to_cost_transaction: dict[int, TransactionPublicWithCost] = {
-                    t.id: t for t in transactions_with_cost if t.id is not None
-                }
-                result: list[TransactionPublicWithRelations] = [
-                    TransactionPublicWithRelationsAndCost.model_validate(
-                        {
-                            **TransactionPublicWithRelations.model_validate(
-                                txn
-                            ).model_dump(),
-                            "cost": id_to_cost_transaction[txn.id].cost,
-                        }
-                    )
-                    for txn in transactions
-                    if txn.id is not None
-                ]
-            else:
-                result = [
-                    TransactionPublicWithRelations.model_validate(txn)
-                    for txn in transactions
-                ]
+        transactions = self.transaction_repository.find_transactions(
+            filters,
+            limit=limit,
+            offset=offset,
+            fetch_profile=TransactionFetchProfile.WITH_RELATIONS,
+            sort_order=TransactionSortOrder.DATE_DESC_ID_ASC,
+        )
+        if cost:
+            id_to_cost_transaction: dict[int, TransactionPublicWithCost] = {
+                t.id: t for t in transactions_with_cost if t.id is not None
+            }
+            result: list[TransactionPublicWithRelations] = [
+                TransactionPublicWithRelationsAndCost.model_validate(
+                    {
+                        **TransactionPublicWithRelations.model_validate(
+                            txn
+                        ).model_dump(),
+                        "cost": id_to_cost_transaction[txn.id].cost,
+                    }
+                )
+                for txn in transactions
+                if txn.id is not None
+            ]
+        else:
+            result = [
+                TransactionPublicWithRelations.model_validate(txn)
+                for txn in transactions
+            ]
         return result
 
     def add_transaction(
@@ -112,7 +119,7 @@ class TransactionService:
         account_id: int,
         security_key: str,
         source: str | None = None,
-    ) -> Transaction:
+    ) -> int:
         """Add a single transaction to the database."""
         if source:
             properties = {"source": source}
@@ -120,37 +127,30 @@ class TransactionService:
             properties = {}
 
         # Validate account and security exists
-        with get_session() as session:
-            account = session.get(Account, account_id)
-            security = session.get(Security, security_key)
+        account = self.account_repository.get_account_by_id(account_id)
         if account is None:
             raise ResourceNotFoundError("Account", account_id)
+        security = self.security_repository.get_security_by_key(security_key)
         if security is None:
             raise ResourceNotFoundError("Security", security_key)
 
-        transaction = Transaction.model_validate(
-            TransactionCreate(
-                transaction_date=transaction_date,
-                type=transaction_type,
-                description=description,
-                amount=amount,
-                units=units,
-                account_id=account_id,
-                security_key=security_key,
-                properties=properties,
-            )
+        transaction = TransactionCreate(
+            transaction_date=transaction_date,
+            type=transaction_type,
+            description=description,
+            amount=amount,
+            units=units,
+            account_id=account_id,
+            security_key=security_key,
+            properties=properties,
         )
 
-        with get_session() as session:
-            session.add(transaction)
-            session.commit()
-            session.refresh(transaction)
-        return transaction
+        transaction_id = self.transaction_repository.insert_transaction(transaction)
+        return transaction_id
 
     def get_account_choices(self) -> list[dict[str, str | int]]:
         """Get a list of accounts for selection."""
-        with get_session() as session:
-            accounts = session.exec(select(Account).limit(10_000)).all()
+        accounts = self.account_repository.find_accounts([])
         return [
             {
                 "value": str(account.id),
@@ -161,8 +161,7 @@ class TransactionService:
 
     def get_security_choices(self) -> list[dict[str, str]]:
         """Get a list of securities for selection."""
-        with get_session() as session:
-            securities = session.exec(select(Security).limit(10_000)).all()
+        securities = self.security_repository.find_securities([])
         return [
             {"value": security.key, "name": f"{security.name} ({security.key})"}
             for security in securities
@@ -199,12 +198,13 @@ class TransactionService:
         )
         # If we have a potential transaction ID, try to fetch it
         if transaction_id is not None:
-            with get_session() as session:
-                exact_transaction = session.get(Transaction, transaction_id)
-                if exact_transaction is not None:
-                    return [
-                        TransactionPublicWithRelations.model_validate(exact_transaction)
-                    ]
+            exact_transaction = self.transaction_repository.get_transaction_by_id(
+                transaction_id
+            )
+            if exact_transaction is not None:
+                return [
+                    TransactionPublicWithRelations.model_validate(exact_transaction)
+                ]
 
         # No exact match found by ID
         # If ambiguous results are not allowed, raise error
@@ -216,14 +216,4 @@ class TransactionService:
 
     def delete_transaction(self, transaction_id: int) -> bool:
         """Delete a transaction by its ID."""
-        with get_session() as session:
-            transaction = session.get(Transaction, transaction_id)
-            if transaction is None:
-                logger.debug(
-                    "Transaction with ID %d does not exist for deletion.",
-                    transaction_id,
-                )
-                return False
-            session.delete(transaction)
-            session.commit()
-            return True
+        return self.transaction_repository.delete_transaction_by_id(transaction_id)

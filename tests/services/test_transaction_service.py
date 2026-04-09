@@ -1,56 +1,80 @@
 """Tests for TransactionService."""
 
 import datetime
-from collections.abc import Generator, Sequence
+from collections.abc import Sequence
 from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
-from sqlmodel import Session
 
+from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.repositories import AccountRepository, SecurityRepository
 from niveshpy.exceptions import (
     AmbiguousResourceError,
     InvalidInputError,
     ResourceNotFoundError,
 )
-from niveshpy.models.account import Account
+from niveshpy.models.account import Account, AccountCreate
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
 from niveshpy.models.transaction import (
     Transaction,
+    TransactionCreate,
     TransactionPublicWithRelations,
     TransactionPublicWithRelationsAndCost,
     TransactionType,
 )
 from niveshpy.services.transaction import TransactionService
+from tests.services.conftest import (
+    MockAccountRepository,
+    MockSecurityRepository,
+    MockTransactionRepository,
+)
 
 
 @pytest.fixture
-def transaction_service(session: Session) -> Generator[TransactionService, None, None]:
-    """Create TransactionService instance with patched get_session."""
-    with patch("niveshpy.services.transaction.get_session") as mock_get_session:
-        # Make get_session return a context manager that yields the test session
-        mock_get_session.return_value.__enter__.return_value = session
-        mock_get_session.return_value.__exit__.return_value = None
-        yield TransactionService()
+def account_repository() -> MockAccountRepository:
+    """Fixture for MockAccountRepository."""
+    return MockAccountRepository()
 
 
 @pytest.fixture
-def sample_accounts(session: Session) -> Sequence[Account]:
+def security_repository() -> MockSecurityRepository:
+    """Fixture for MockSecurityRepository."""
+    return MockSecurityRepository()
+
+
+@pytest.fixture
+def transaction_service(
+    account_repository: MockAccountRepository,
+    security_repository: MockSecurityRepository,
+) -> TransactionService:
+    """Create TransactionService instance with the mocked repositories."""
+    transaction_repo = MockTransactionRepository(
+        account_repository=account_repository, security_repository=security_repository
+    )
+    return TransactionService(
+        transaction_repository=transaction_repo,
+        account_repository=account_repository,
+        security_repository=security_repository,
+    )
+
+
+@pytest.fixture
+def sample_accounts(account_repository: MockAccountRepository) -> Sequence[Account]:
     """Create sample accounts for testing."""
     accounts = [
-        Account(name="Savings", institution="HDFC Bank"),
-        Account(name="Investment", institution="ICICI"),
-        Account(name="Pension", institution="SBI"),
+        AccountCreate(name="Savings", institution="HDFC Bank"),
+        AccountCreate(name="Investment", institution="ICICI"),
+        AccountCreate(name="Pension", institution="SBI"),
     ]
-    session.add_all(accounts)
-    session.commit()
-    for account in accounts:
-        session.refresh(account)
-    return accounts
+    account_repository.insert_multiple_accounts(accounts)
+    return account_repository.find_accounts([])
 
 
 @pytest.fixture
-def sample_securities(session: Session) -> Sequence[Security]:
+def sample_securities(
+    security_repository: MockSecurityRepository,
+) -> Sequence[Security]:
     """Create sample securities for testing."""
     securities = [
         Security(
@@ -72,22 +96,19 @@ def sample_securities(session: Session) -> Sequence[Security]:
             category=SecurityCategory.EQUITY,
         ),
     ]
-    session.add_all(securities)
-    session.commit()
-    for security in securities:
-        session.refresh(security)
-    return securities
+    security_repository.insert_multiple_securities(securities)
+    return security_repository.find_securities([])
 
 
 @pytest.fixture
 def sample_transactions(
-    session: Session,
     sample_accounts: Sequence[Account],
     sample_securities: Sequence[Security],
+    transaction_service: TransactionService,
 ) -> Sequence[Transaction]:
     """Create sample transactions for testing."""
     transactions = [
-        Transaction(
+        TransactionCreate(
             transaction_date=datetime.date(2024, 1, 15),
             type=TransactionType.PURCHASE,
             description="Purchase HDFC Fund",
@@ -96,7 +117,7 @@ def sample_transactions(
             account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[0].key,
         ),
-        Transaction(
+        TransactionCreate(
             transaction_date=datetime.date(2024, 2, 20),
             type=TransactionType.SALE,
             description="Sold ICICI Fund",
@@ -105,7 +126,7 @@ def sample_transactions(
             account_id=sample_accounts[1].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[1].key,
         ),
-        Transaction(
+        TransactionCreate(
             transaction_date=datetime.date(2024, 3, 10),
             type=TransactionType.PURCHASE,
             description="Dividend from Reliance",
@@ -114,7 +135,7 @@ def sample_transactions(
             account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[2].key,
         ),
-        Transaction(
+        TransactionCreate(
             transaction_date=datetime.date(2024, 4, 5),
             type=TransactionType.PURCHASE,
             description="Additional purchase HDFC",
@@ -124,11 +145,10 @@ def sample_transactions(
             security_key=sample_securities[0].key,
         ),
     ]
-    session.add_all(transactions)
-    session.commit()
-    for transaction in transactions:
-        session.refresh(transaction)
-    return transactions
+    transaction_service.transaction_repository.insert_multiple_transactions(
+        transactions
+    )
+    return transaction_service.transaction_repository.find_transactions([])
 
 
 class TestListTransactions:
@@ -190,23 +210,16 @@ class TestListTransactions:
         self, transaction_service, sample_transactions
     ):
         """Test listing transactions with query filter (matches security)."""
-        transactions = transaction_service.list_transactions(
-            queries=("HDFC",), limit=30, offset=0
-        )
-
-        assert len(transactions) >= 1
-        # Default query matches security fields, not description
-        assert any("HDFC" in txn.security.name for txn in transactions)
-
-    def test_list_transactions_query_no_matches(
-        self, transaction_service, sample_transactions
-    ):
-        """Test listing transactions with query that has no matches."""
-        transactions = transaction_service.list_transactions(
-            queries=("NonExistentTransaction",), limit=30, offset=0
-        )
-
-        assert len(transactions) == 0
+        with patch.object(
+            transaction_service.transaction_repository, "find_transactions"
+        ) as mock_find:
+            # Call the method to ensure the mock is used
+            transaction_service.list_transactions(queries=("HDFC",), limit=30, offset=0)
+            # Check that the repository's find_transactions was called with correct filters
+            mock_find.assert_called_once()
+            assert mock_find.call_args[0][0] == [
+                FilterNode(Field.SECURITY, Operator.REGEX_MATCH, "HDFC")
+            ]
 
     def test_list_transactions_empty_database(self, transaction_service):
         """Test listing transactions when database is empty."""
@@ -253,13 +266,13 @@ class TestListTransactions:
 
 @pytest.fixture
 def cost_basis_transactions(
-    session: Session,
     sample_accounts: Sequence[Account],
     sample_securities: Sequence[Security],
+    transaction_service: TransactionService,
 ) -> Sequence[Transaction]:
     """Create transactions with proper buy-before-sell ordering for cost basis tests."""
     transactions = [
-        Transaction(
+        TransactionCreate(
             transaction_date=datetime.date(2024, 1, 15),
             type=TransactionType.PURCHASE,
             description="Purchase HDFC Fund",
@@ -268,7 +281,7 @@ def cost_basis_transactions(
             account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[0].key,
         ),
-        Transaction(
+        TransactionCreate(
             transaction_date=datetime.date(2024, 2, 20),
             type=TransactionType.PURCHASE,
             description="Purchase HDFC Fund again",
@@ -277,7 +290,7 @@ def cost_basis_transactions(
             account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
             security_key=sample_securities[0].key,
         ),
-        Transaction(
+        TransactionCreate(
             transaction_date=datetime.date(2024, 3, 10),
             type=TransactionType.SALE,
             description="Sell HDFC Fund",
@@ -287,11 +300,10 @@ def cost_basis_transactions(
             security_key=sample_securities[0].key,
         ),
     ]
-    session.add_all(transactions)
-    session.commit()
-    for transaction in transactions:
-        session.refresh(transaction)
-    return transactions
+    transaction_service.transaction_repository.insert_multiple_transactions(
+        transactions
+    )
+    return transaction_service.transaction_repository.find_transactions([])
 
 
 class TestListTransactionsWithCost:
@@ -337,14 +349,22 @@ class TestListTransactionsWithCost:
 
     def test_cost_with_query_filter(self, transaction_service, cost_basis_transactions):
         """Test cost computation works with query filters."""
-        transactions = transaction_service.list_transactions(
-            queries=("HDFC",), limit=30, offset=0, cost=True
-        )
-
-        assert len(transactions) == 3
-        assert all(
-            isinstance(t, TransactionPublicWithRelationsAndCost) for t in transactions
-        )
+        with patch.object(
+            transaction_service.transaction_repository, "find_transactions"
+        ) as mock_find:
+            transaction_service.list_transactions(
+                queries=("HDFC", "type:sale"), limit=30, offset=0, cost=True
+            )
+            mock_find.assert_called()
+            # Cost-basis computation should only use security and account filters
+            assert mock_find.call_args_list[0][0][0] == [
+                FilterNode(Field.SECURITY, Operator.REGEX_MATCH, "HDFC")
+            ]
+            # Normal filters should still be passed for the main query
+            assert mock_find.call_args_list[1][0][0] == [
+                FilterNode(Field.SECURITY, Operator.REGEX_MATCH, "HDFC"),
+                FilterNode(Field.TYPE, Operator.REGEX_MATCH, "sale"),
+            ]
 
     def test_cost_with_limit(self, transaction_service, cost_basis_transactions):
         """Test cost computation works with limit."""
@@ -372,7 +392,7 @@ class TestAddTransaction:
     """Tests for add_transaction method."""
 
     def test_add_transaction_success(
-        self, transaction_service, sample_accounts, sample_securities, session
+        self, transaction_service, sample_accounts, sample_securities
     ):
         """Test successfully adding a new transaction."""
         result = transaction_service.add_transaction(
@@ -386,19 +406,22 @@ class TestAddTransaction:
             source=None,
         )
 
-        assert isinstance(result, Transaction)
-        assert result.id is not None
-        assert result.transaction_date == datetime.date(2024, 5, 1)
-        assert result.type == TransactionType.PURCHASE
-        assert result.description == "New purchase"
-        assert result.amount == Decimal("15000.00")
-        assert result.units == Decimal("150.00")
-        assert result.account_id == sample_accounts[0].id
-        assert result.security_key == sample_securities[0].key
-        assert result.properties == {}
+        assert isinstance(result, int)
+        check_transaction = (
+            transaction_service.transaction_repository.get_transaction_by_id(result)
+        )
+        assert check_transaction.id is not None
+        assert check_transaction.transaction_date == datetime.date(2024, 5, 1)
+        assert check_transaction.type == TransactionType.PURCHASE
+        assert check_transaction.description == "New purchase"
+        assert check_transaction.amount == Decimal("15000.00")
+        assert check_transaction.units == Decimal("150.00")
+        assert check_transaction.account_id == sample_accounts[0].id
+        assert check_transaction.security_key == sample_securities[0].key
+        assert check_transaction.properties == {}
 
     def test_add_transaction_with_source(
-        self, transaction_service, sample_accounts, sample_securities, session
+        self, transaction_service, sample_accounts, sample_securities
     ):
         """Test adding transaction with source property."""
         result = transaction_service.add_transaction(
@@ -412,10 +435,14 @@ class TestAddTransaction:
             source="CAS",
         )
 
-        assert result.properties == {"source": "CAS"}
+        check_transaction = (
+            transaction_service.transaction_repository.get_transaction_by_id(result)
+        )
+
+        assert check_transaction.properties == {"source": "CAS"}
 
     def test_add_transaction_invalid_account_id(
-        self, transaction_service, sample_securities, session
+        self, transaction_service, sample_securities
     ):
         """Test that invalid account_id raises ResourceNotFoundError."""
         with pytest.raises(ResourceNotFoundError, match="Account.*99999"):
@@ -431,7 +458,7 @@ class TestAddTransaction:
             )
 
     def test_add_transaction_invalid_security_key(
-        self, transaction_service, sample_accounts, session
+        self, transaction_service, sample_accounts
     ):
         """Test that invalid security_key raises ResourceNotFoundError."""
         with pytest.raises(ResourceNotFoundError, match="Security.*INVALID"):
@@ -447,7 +474,7 @@ class TestAddTransaction:
             )
 
     def test_add_transaction_all_transaction_types(
-        self, transaction_service, sample_accounts, sample_securities, session
+        self, transaction_service, sample_accounts, sample_securities
     ):
         """Test adding transactions with all TransactionType values."""
         for idx, txn_type in enumerate(TransactionType):
@@ -461,10 +488,14 @@ class TestAddTransaction:
                 security_key=sample_securities[0].key,
                 source=None,
             )
-            assert result.type == txn_type
+            check_transaction = (
+                transaction_service.transaction_repository.get_transaction_by_id(result)
+            )
+
+            assert check_transaction.type == txn_type
 
     def test_add_transaction_zero_amount(
-        self, transaction_service, sample_accounts, sample_securities, session
+        self, transaction_service, sample_accounts, sample_securities
     ):
         """Test adding transaction with zero amount."""
         result = transaction_service.add_transaction(
@@ -478,11 +509,15 @@ class TestAddTransaction:
             source=None,
         )
 
-        assert result.amount == Decimal("0.00")
-        assert result.units == Decimal("0.00")
+        check_transaction = (
+            transaction_service.transaction_repository.get_transaction_by_id(result)
+        )
+
+        assert check_transaction.amount == Decimal("0.00")
+        assert check_transaction.units == Decimal("0.00")
 
     def test_add_transaction_large_amounts(
-        self, transaction_service, sample_accounts, sample_securities, session
+        self, transaction_service, sample_accounts, sample_securities
     ):
         """Test adding transaction with large decimal values."""
         result = transaction_service.add_transaction(
@@ -496,11 +531,15 @@ class TestAddTransaction:
             source=None,
         )
 
-        assert result.amount == Decimal("99999999.99")
-        assert result.units == Decimal("12345678.123")
+        check_transaction = (
+            transaction_service.transaction_repository.get_transaction_by_id(result)
+        )
+
+        assert check_transaction.amount == Decimal("99999999.99")
+        assert check_transaction.units == Decimal("12345678.123")
 
     def test_add_transaction_unicode_description(
-        self, transaction_service, sample_accounts, sample_securities, session
+        self, transaction_service, sample_accounts, sample_securities
     ):
         """Test adding transaction with unicode characters in description."""
         result = transaction_service.add_transaction(
@@ -514,7 +553,11 @@ class TestAddTransaction:
             source=None,
         )
 
-        assert result.description == "म्यूचुअल फंड खरीदा"
+        check_transaction = (
+            transaction_service.transaction_repository.get_transaction_by_id(result)
+        )
+
+        assert check_transaction.description == "म्यूचुअल फंड खरीदा"
 
 
 class TestGetAccountChoices:
@@ -691,11 +734,16 @@ class TestResolveTransaction:
         sample_transactions: Sequence[Transaction],
     ):
         """Test resolving non-existent id when ambiguous allowed falls back to text search."""
-        resolution: Sequence[TransactionPublicWithRelations] = (
-            transaction_service.resolve_transaction(
-                queries=("99999",), limit=10, allow_ambiguous=True
+        with patch.object(
+            transaction_service.transaction_repository, "find_transactions"
+        ) as mock_find:
+            mock_find.return_value = []
+            resolution: Sequence[TransactionPublicWithRelations] = (
+                transaction_service.resolve_transaction(
+                    queries=("99999",), limit=10, allow_ambiguous=True
+                )
             )
-        )
+            mock_find.assert_called_once()
 
         # Should fall back to text search and find nothing
         assert len(resolution) == 0
@@ -706,11 +754,16 @@ class TestResolveTransaction:
         sample_transactions: Sequence[Transaction],
     ):
         """Test text search with no matches."""
-        resolution: Sequence[TransactionPublicWithRelations] = (
-            transaction_service.resolve_transaction(
-                queries=("NonExistentTransaction",), limit=10, allow_ambiguous=True
+        with patch.object(
+            transaction_service.transaction_repository, "find_transactions"
+        ) as mock_find:
+            mock_find.return_value = []
+            resolution: Sequence[TransactionPublicWithRelations] = (
+                transaction_service.resolve_transaction(
+                    queries=("NonExistentTransaction",), limit=10, allow_ambiguous=True
+                )
             )
-        )
+            mock_find.assert_called_once()
 
         assert len(resolution) == 0
 
@@ -720,14 +773,21 @@ class TestResolveTransaction:
         sample_transactions: Sequence[Transaction],
     ):
         """Test text search with exactly one match (matches security)."""
-        resolution: Sequence[TransactionPublicWithRelations] = (
-            transaction_service.resolve_transaction(
-                queries=("Reliance",), limit=10, allow_ambiguous=True
+        with patch.object(
+            transaction_service.transaction_repository, "find_transactions"
+        ) as mock_find:
+            # Ensure the mock is used and returns the expected result
+            mock_find.return_value = [
+                txn for txn in sample_transactions if "Reliance" in txn.security.name
+            ]
+            resolution: Sequence[TransactionPublicWithRelations] = (
+                transaction_service.resolve_transaction(
+                    queries=("Reliance",), limit=10, allow_ambiguous=True
+                )
             )
-        )
 
-        assert len(resolution) == 1
-        assert "Reliance" in resolution[0].security.name
+            assert len(resolution) == 1
+            assert "Reliance" in resolution[0].security.name
 
     def test_resolve_text_search_multiple_matches(
         self,
@@ -735,15 +795,23 @@ class TestResolveTransaction:
         sample_transactions: Sequence[Transaction],
     ):
         """Test text search with multiple matches (security)."""
-        resolution: Sequence[TransactionPublicWithRelations] = (
-            transaction_service.resolve_transaction(
-                queries=("Fund",), limit=10, allow_ambiguous=True
+        with patch.object(
+            transaction_service.transaction_repository, "find_transactions"
+        ) as mock_find:
+            # Ensure the mock is used and returns the expected results
+            mock_find.return_value = [
+                txn for txn in sample_transactions if "Fund" in txn.security.name
+            ]
+            resolution: Sequence[TransactionPublicWithRelations] = (
+                transaction_service.resolve_transaction(
+                    queries=("Fund",), limit=10, allow_ambiguous=True
+                )
             )
-        )
+            mock_find.assert_called_once()
 
-        assert len(resolution) >= 2
-        # security is a formatted string like "name (key)"
-        assert all("Fund" in txn.security.name for txn in resolution)
+            assert len(resolution) >= 2
+            # security is a formatted string like "name (key)"
+            assert all("Fund" in txn.security.name for txn in resolution)
 
     def test_resolve_text_search_multiple_matches_ambiguous_not_allowed(
         self,
@@ -762,14 +830,15 @@ class TestResolveTransaction:
         sample_transactions: Sequence[Transaction],
     ):
         """Test that text search respects limit parameter."""
-        resolution: Sequence[TransactionPublicWithRelations] = (
+        with patch.object(
+            transaction_service.transaction_repository, "find_transactions"
+        ) as mock_find:
+            # Ensure the mock is used and returns the expected results
             transaction_service.resolve_transaction(
                 queries=("Fund",), limit=1, allow_ambiguous=True
             )
-        )
-
-        # With limit=1 and exactly 1 result, it should return that one result
-        assert len(resolution) == 1
+            assert mock_find.call_args[1]["limit"] == 1
+            mock_find.assert_called_once()
 
     def test_resolve_non_numeric_query_ambiguous_not_allowed(
         self,
@@ -784,11 +853,16 @@ class TestResolveTransaction:
 
     def test_resolve_empty_database(self, transaction_service: TransactionService):
         """Test resolving in empty database."""
-        resolution: Sequence[TransactionPublicWithRelations] = (
-            transaction_service.resolve_transaction(
-                queries=("test",), limit=10, allow_ambiguous=True
+        with patch.object(
+            transaction_service.transaction_repository,
+            "find_transactions",
+        ) as mock_find:
+            mock_find.return_value = []
+            resolution: Sequence[TransactionPublicWithRelations] = (
+                transaction_service.resolve_transaction(
+                    queries=("test",), limit=10, allow_ambiguous=True
+                )
             )
-        )
 
         assert len(resolution) == 0
 
@@ -862,7 +936,11 @@ class TestDeleteTransaction:
         )
 
     def test_delete_transaction_does_not_cascade_to_account(
-        self, transaction_service, sample_transactions, sample_accounts, session
+        self,
+        transaction_service: TransactionService,
+        account_repository: AccountRepository,
+        sample_transactions,
+        sample_accounts,
     ):
         """Test that deleting a transaction doesn't delete the related account."""
         transaction_id = sample_transactions[0].id
@@ -872,11 +950,15 @@ class TestDeleteTransaction:
         assert result is True
 
         # Verify account still exists
-        account = session.get(Account, account_id)
+        account = account_repository.get_account_by_id(account_id)
         assert account is not None
 
     def test_delete_transaction_does_not_cascade_to_security(
-        self, transaction_service, sample_transactions, sample_securities, session
+        self,
+        transaction_service: TransactionService,
+        security_repository: SecurityRepository,
+        sample_transactions,
+        sample_securities,
     ):
         """Test that deleting a transaction doesn't delete the related security."""
         transaction_id = sample_transactions[0].id
@@ -886,5 +968,5 @@ class TestDeleteTransaction:
         assert result is True
 
         # Verify security still exists
-        security = session.get(Security, security_key)
+        security = security_repository.get_security_by_key(security_key)
         assert security is not None

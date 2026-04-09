@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- (Internal) Refactor Transaction into new repository pattern.
+- (Internal) Refactor Transaction service tests to use a dummy repository.
+
 ## [1.0.0a5] - 2026-04-08
 
 ### Added
@@ -17,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `niveshpy securities add` will no longer update existing securities.
-- (Internal) Refactored Account & Security into new repository pattern.
+- (Internal) Refactor Account & Security into new repository pattern.
 - (Internal) Refactor Account & Security service tests to use a dummy repository.
 
 ### Fixed

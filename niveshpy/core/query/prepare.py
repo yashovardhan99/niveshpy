@@ -154,7 +154,9 @@ def prepare_expression(filter: FilterNode, column: ColumnClause) -> ColumnElemen
 
 
 def get_prepared_filters_from_queries(
-    queries: tuple[str, ...], default_field: Field
+    queries: tuple[str, ...],
+    default_field: Field,
+    include_fields: Container[Field] | None = None,
 ) -> list[FilterNode]:
     """Parse query strings into prepared filter nodes."""
     try:
@@ -168,6 +170,11 @@ def get_prepared_filters_from_queries(
         logger.debug(
             "Query parsed: %d filter(s) from %d queries", len(filters), len(queries)
         )
+        if include_fields is not None:
+            logger.debug("Included fields: %s", str(include_fields))
+            filters = [f for f in filters if f.field in include_fields]
+            logger.debug("Filters after including fields: %d", len(filters))
+
         return filters
     except QuerySyntaxError as e:
         e.add_note(f"Error was reported on input: {e.input_value}")

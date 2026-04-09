@@ -22,8 +22,8 @@ class TransactionSortOrder(Enum):
 
     DATE_ASC_ID_ASC = auto()
     """Sort transactions by date in ascending order and by ID in ascending order."""
-    DATE_DESC_ID_DESC = auto()
-    """Sort transactions by date in descending order and by ID in descending order."""
+    DATE_DESC_ID_ASC = auto()
+    """Sort transactions by date in descending order and by ID in ascending order."""
     ID_ASC = auto()
     """Sort transactions by ID in ascending order."""
     ID_DESC = auto()
@@ -54,7 +54,7 @@ class TransactionRepository(Protocol):
         limit: int | None = None,
         offset: int = 0,
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
-        sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_DESC,
+        sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
     ) -> Sequence[Transaction]:
         """Find transactions matching the given filters with optional pagination.
 
@@ -73,7 +73,7 @@ class TransactionRepository(Protocol):
         self,
         ids: Sequence[int],
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
-        sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_DESC,
+        sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
     ) -> Sequence[Transaction]:
         """Find transactions matching the given list of IDs.
 

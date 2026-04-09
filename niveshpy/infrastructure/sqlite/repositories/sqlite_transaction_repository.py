@@ -44,9 +44,9 @@ class SqliteTransactionRepository:
     def _get_ordered_stmt(
         self, stmt: SelectOfScalar[Transaction], sort_order: TransactionSortOrder
     ) -> SelectOfScalar[Transaction]:
-        if sort_order == TransactionSortOrder.DATE_DESC_ID_DESC:
+        if sort_order == TransactionSortOrder.DATE_DESC_ID_ASC:
             return stmt.order_by(
-                col(Transaction.transaction_date).desc(), col(Transaction.id).desc()
+                col(Transaction.transaction_date).desc(), col(Transaction.id).asc()
             )
         elif sort_order == TransactionSortOrder.DATE_ASC_ID_ASC:
             return stmt.order_by(
@@ -100,7 +100,7 @@ class SqliteTransactionRepository:
         limit: int | None = None,
         offset: int = 0,
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
-        sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_DESC,
+        sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
     ) -> Sequence[Transaction]:
         """Find transactions matching the given filters with optional pagination.
 
@@ -162,7 +162,7 @@ class SqliteTransactionRepository:
         self,
         ids: Sequence[int],
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
-        sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_DESC,
+        sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
     ) -> Sequence[Transaction]:
         """Find transactions matching the given list of IDs.
 

@@ -184,7 +184,7 @@ def add(
             security_key=security_key,
             source="cli",
         )
-        display_success(f"Transaction added successfully with ID: {result.id}")
+        display_success(f"Transaction added successfully with ID: {result}")
     else:
         display("Adding a new transaction.")
         display(
@@ -280,7 +280,7 @@ def add(
                 security_key=security_key,
                 source="cli",
             )
-            display_success(f"Transaction added successfully with ID: {result.id}")
+            display_success(f"Transaction added successfully with ID: {result}")
 
             display("Adding another transaction...")
             display("(Press Ctrl+C or Ctrl+D to exit.)")
