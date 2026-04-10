@@ -6,13 +6,13 @@ from enum import Enum, auto
 from typing import Protocol
 
 from niveshpy.core.query.ast import FilterNode
-from niveshpy.models.price import Price
+from niveshpy.models.price import Price, PriceCreate
 
 
 class PriceFetchProfile(Enum):
     """Enumeration for different price fetch profiles."""
 
-    MIMIMAL = auto()
+    MINIMAL = auto()
     """Fetch only basic price information (security key, date, open, high, low, close)."""
 
     WITH_SECURITY = auto()
@@ -77,11 +77,11 @@ class PriceRepository(Protocol):
             A sequence of the latest Price objects for securities matching the filters and pagination criteria.
         """
 
-    def overwrite_price(self, price: Price) -> None:
+    def overwrite_price(self, price: PriceCreate) -> None:
         """Overwrite an existing price or insert a new one if it doesn't exist.
 
         Args:
-            price: The Price object containing the price information to overwrite or insert.
+            price: The PriceCreate object containing the price information to overwrite or insert.
 
         Raises:
             ResourceNotFoundError: If the associated security for the price does not exist in the database.
@@ -92,7 +92,7 @@ class PriceRepository(Protocol):
         security_key: str,
         start_date: datetime.date,
         end_date: datetime.date,
-        new_prices: Sequence[Price],
+        new_prices: Iterable[PriceCreate],
         batch_size: int | None = None,
     ) -> None:
         """Replace all prices for a given security within a specified date range with new prices.
@@ -101,7 +101,7 @@ class PriceRepository(Protocol):
             security_key: The key of the security for which to replace prices.
             start_date: The start date of the range for which to replace prices (inclusive).
             end_date: The end date of the range for which to replace prices (inclusive).
-            new_prices: A sequence of Price objects containing the new price information to insert.
+            new_prices: An iterable of PriceCreate objects containing the new price information to insert.
             batch_size: Optional batch size for processing the replacement in chunks.
                 If None, the replacement will be processed in a single batch.
 
