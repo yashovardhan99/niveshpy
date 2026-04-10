@@ -92,7 +92,7 @@ class PriceRepository(Protocol):
         security_key: str,
         start_date: datetime.date,
         end_date: datetime.date,
-        new_prices: Iterable[PriceCreate],
+        new_prices: Sequence[PriceCreate],
         batch_size: int | None = None,
     ) -> None:
         """Replace all prices for a given security within a specified date range with new prices.
@@ -101,7 +101,7 @@ class PriceRepository(Protocol):
             security_key: The key of the security for which to replace prices.
             start_date: The start date of the range for which to replace prices (inclusive).
             end_date: The end date of the range for which to replace prices (inclusive).
-            new_prices: An iterable of PriceCreate objects containing the new price information to insert.
+            new_prices: A sequence of PriceCreate objects containing the new price information to insert.
             batch_size: Optional batch size for processing the replacement in chunks.
                 If None, the replacement will be processed in a single batch.
 
