@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.exceptions import InvalidInputError
 from niveshpy.infrastructure.sqlite.repositories import (
     SqlitePriceRepository,
     SqliteSecurityRepository,
@@ -257,3 +258,71 @@ def test_get_price_by_key_and_date(
     assert price.high == Decimal("155.00")
     assert price.low == Decimal("149.00")
     assert price.close == Decimal("154.00")
+
+
+def test_replace_prices_in_range_empty_new_prices(
+    price_repository: SqlitePriceRepository,
+    security_repository: SqliteSecurityRepository,
+) -> None:
+    """Replacing prices in a date range with an empty list deletes existing prices without inserting new ones."""
+    security_repository.insert_security(
+        SecurityCreate(
+            key="AAPL",
+            name="Apple Inc.",
+            type=SecurityType.STOCK,
+            category=SecurityCategory.EQUITY,
+        )
+    )
+    price_repository.overwrite_price(
+        PriceCreate(
+            security_key="AAPL",
+            date=datetime.date(2024, 1, 1),
+            open=Decimal("150.00"),
+            high=Decimal("155.00"),
+            low=Decimal("149.00"),
+            close=Decimal("154.00"),
+        )
+    )
+
+    price_repository.replace_prices_in_range(
+        "AAPL",
+        datetime.date(2024, 1, 1),
+        datetime.date(2024, 1, 31),
+        [],
+        batch_size=2,
+    )
+
+    prices = price_repository.find_all_prices([])
+    assert len(prices) == 0
+
+
+def test_replace_prices_in_range_invalid_batch_size(
+    price_repository: SqlitePriceRepository,
+    security_repository: SqliteSecurityRepository,
+) -> None:
+    """Replacing prices with an invalid batch size raises an error."""
+    security_repository.insert_security(
+        SecurityCreate(
+            key="AAPL",
+            name="Apple Inc.",
+            type=SecurityType.STOCK,
+            category=SecurityCategory.EQUITY,
+        )
+    )
+    price = PriceCreate(
+        security_key="AAPL",
+        date=datetime.date(2024, 1, 1),
+        open=Decimal("150.00"),
+        high=Decimal("155.00"),
+        low=Decimal("149.00"),
+        close=Decimal("154.00"),
+    )
+
+    with pytest.raises(InvalidInputError, match="Batch size"):
+        price_repository.replace_prices_in_range(
+            "AAPL",
+            datetime.date(2024, 1, 1),
+            datetime.date(2024, 1, 31),
+            [price],
+            batch_size=0,
+        )

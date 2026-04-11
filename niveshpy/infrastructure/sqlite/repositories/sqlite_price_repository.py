@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import contains_eager, raiseload, selectinload
 from sqlmodel import col, delete, func, insert, select
 
+from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_fields_from_filters, get_sqlalchemy_filters
 from niveshpy.database import get_session
@@ -249,6 +250,11 @@ class SqlitePriceRepository:
                 "Start date must be less than or equal to end date",
             )
 
+        if batch_size is not None and batch_size < 1:
+            raise InvalidInputError(
+                batch_size, "Batch size must be at least 1 if specified"
+            )
+
         # Create batches of new prices if batch_size is specified, otherwise use a single batch with all new prices
         batches: Iterable[Sequence[PriceCreate]] = (
             batched(new_prices, batch_size) if batch_size is not None else (new_prices,)
@@ -290,6 +296,16 @@ class SqlitePriceRepository:
                     col(Price.date).between(start_date, end_date),
                 )
                 session.exec(delete_stmt)
+
+                if len(new_prices) == 0:
+                    # If there are no new prices to insert, we can return early after deleting the existing prices
+                    logger.debug(
+                        "No new prices to insert for security %s in range %s to %s, so only deleted existing prices",
+                        security_key,
+                        start_date.isoformat(),
+                        end_date.isoformat(),
+                    )
+                    return
 
                 # Then, insert new prices in batches, validating each batch before insertion to ensure data integrity
                 for batch in batches:
