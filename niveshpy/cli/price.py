@@ -21,7 +21,6 @@ from niveshpy.cli.utils.display import (
 from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.core.app import AppState
 from niveshpy.exceptions import InvalidInputError
-from niveshpy.services.result import MergeAction
 
 
 class ProviderType(click.ParamType):
@@ -143,10 +142,9 @@ def update_prices(
             "2 (open, close), or 4 (open, high, low, close) values.",
         )
     state = ctx.ensure_object(AppState)
-    result = state.app.price.update_price(key, date, ohlc, source="cli")
+    state.app.price.update_price(key, date, ohlc, source="cli")
 
-    action = "added" if result == MergeAction.INSERT else "updated"
-    display_success(f"Price was {action} successfully.")
+    display_success("Price was saved successfully.")
 
 
 @overrides.command("sync")

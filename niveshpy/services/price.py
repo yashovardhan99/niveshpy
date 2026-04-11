@@ -3,21 +3,20 @@
 import datetime
 import decimal
 import heapq
-from collections.abc import Generator, Iterable, Sequence
+from collections.abc import Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 
 from pydantic import RootModel
-from sqlalchemy.orm import aliased
-from sqlmodel import col, delete, func, insert, select, update
 
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import (
     get_fields_from_queries,
-    get_filters_from_queries,
+    get_prepared_filters_from_queries,
 )
-from niveshpy.database import get_session
+from niveshpy.domain.repositories import PriceRepository, SecurityRepository
 from niveshpy.exceptions import (
     InvalidInputError,
     NetworkError,
@@ -26,25 +25,20 @@ from niveshpy.exceptions import (
     ResourceNotFoundError,
 )
 from niveshpy.models.output import BaseMessage, ProgressUpdate, Warning
-from niveshpy.models.price import (
-    PRICE_COLUMN_MAPPING,
-    Price,
-    PriceCreate,
-    PricePublicWithRelations,
-)
+from niveshpy.models.price import PriceCreate, PricePublicWithRelations
 from niveshpy.models.provider import Provider, ProviderInfo
-from niveshpy.models.security import (
-    SECURITY_COLUMN_MAPPING,
-    Security,
-)
-from niveshpy.services.result import MergeAction
+from niveshpy.models.security import Security
 
 
+@dataclass(slots=True, frozen=True)
 class PriceService:
     """Service for fetching and processing price data."""
 
     DEFAULT_START_DATE = datetime.date(2000, 1, 1)
     RETRY_COUNT = 3
+
+    price_repository: PriceRepository
+    security_repository: SecurityRepository
 
     def list_prices(
         self,
@@ -63,44 +57,16 @@ class PriceService:
             raise InvalidInputError(limit, "Limit must be positive.")
         if offset < 0:
             raise InvalidInputError(offset, "Offset cannot be negative.")
-        where_clause = get_filters_from_queries(
-            queries, ast.Field.SECURITY, PRICE_COLUMN_MAPPING
-        )
-        with get_session() as session:
-            if ast.Field.DATE not in get_fields_from_queries(queries):
-                # If no date filter, return only the latest price per security
-                row_num = (
-                    func.row_number()
-                    .over(
-                        partition_by=Price.security_key, order_by=col(Price.date).desc()
-                    )
-                    .label("row_num")
-                )
-                cte = (
-                    select(Price, row_num)
-                    .join(Security)
-                    .where(*where_clause)
-                    .cte("cte_1")
-                )
-                aliased_price = aliased(Price, cte)
-                query = (
-                    select(aliased_price)
-                    .where(cte.c.row_num == 1)
-                    .order_by(col(aliased_price.security_key))
-                )
-            else:
-                query = (
-                    select(Price)
-                    .join(Security)
-                    .where(*where_clause)
-                    .order_by(col(Price.security_key), col(Price.date).desc())
-                )
-            prices = session.exec(query.offset(offset).limit(limit)).all()
-            return (
-                RootModel[Sequence[PricePublicWithRelations]]
-                .model_validate(prices)
-                .root
-            )
+
+        filters = get_prepared_filters_from_queries(queries, ast.Field.SECURITY)
+        if ast.Field.DATE not in get_fields_from_queries(queries):
+            # If no date filter, we only want the latest price per security
+            prices = self.price_repository.find_latest_prices(filters, limit, offset)
+        else:
+            # Otherwise, return all prices matching the filters
+            prices = self.price_repository.find_all_prices(filters, limit, offset)
+
+        return RootModel[Sequence[PricePublicWithRelations]].model_validate(prices).root
 
     def update_price(
         self,
@@ -108,17 +74,20 @@ class PriceService:
         date: datetime.date,
         ohlc: tuple[decimal.Decimal, ...],
         source: str | None = None,
-    ) -> MergeAction:
+    ) -> None:
         """Update price for a specific security on a given date.
 
         Args:
             security_key: The key of the security to update.
             date: The date for which to update the price (YYYY-MM-DD).
-            ohlc: A tuple containing OHLC values. Can be 1 (close), 2 (open, close), or 4 (open, high, low, close).
+            ohlc: A tuple containing OHLC values. Can be 1 (close),
+                2 (open, close), or 4 (open, high, low, close).
             source: Optional source of the price data.
 
-        Returns:
-            MergeAction containing the result of the upsert operation.
+        Raises:
+            InvalidInputError: If the number of OHLC values is not 1, 2
+                or 4.
+            ResourceNotFoundError: If the specified security does not exist.
         """
         if len(ohlc) not in (1, 2, 4):
             raise InvalidInputError(ohlc, "OHLC must contain 1, 2, or 4 values.")
@@ -134,33 +103,7 @@ class PriceService:
         if source:
             price_data = self._add_metadata(price_data, source)
 
-        result: MergeAction
-
-        with get_session() as session:
-            # Check if security exists
-            security = session.get(Security, security_key)
-
-            if security is None:
-                raise ResourceNotFoundError("Security", security_key)
-
-            # Check if price already exists
-            existing_price = session.get(Price, (security_key, date))
-            if existing_price is None:
-                price = Price.model_validate(price_data)
-                result = MergeAction.INSERT
-            else:
-                price = existing_price
-                price.open = price_data.open
-                price.high = price_data.high
-                price.low = price_data.low
-                price.close = price_data.close
-                price.properties = price_data.properties
-                result = MergeAction.UPDATE
-
-            session.add(price)
-            session.commit()
-
-        return result
+        self.price_repository.overwrite_price(price_data)
 
     def validate_provider(self, provider_key: str) -> None:
         """Validate if the given provider key is installed.
@@ -228,12 +171,8 @@ class PriceService:
         Raises:
             ResourceNotFoundError: If no securities match the queries.
         """
-        where_clause = get_filters_from_queries(
-            queries, ast.Field.SECURITY, SECURITY_COLUMN_MAPPING
-        )
-
-        with get_session() as session:
-            securities = session.exec(select(Security).where(*where_clause)).all()
+        filters = get_prepared_filters_from_queries(queries, ast.Field.SECURITY)
+        securities = self.security_repository.find_securities(filters)
 
         if len(securities) == 0:
             raise ResourceNotFoundError(
@@ -280,62 +219,6 @@ class PriceService:
                 securities_with_providers.append(security)
 
         return provider_map, securities_with_providers
-
-    def _bulk_insert_prices_streaming(
-        self,
-        prices: Iterable[PriceCreate],
-        security_key: str,
-        start_date: datetime.date,
-        end_date: datetime.date,
-        batch_size: int = 1000,
-    ) -> tuple[int, datetime.date | None]:
-        """Insert prices in batches while tracking max date.
-
-        Args:
-            session: Database session.
-            prices: Iterable of price data to insert.
-            security_key: Key of the security.
-            start_date: Start date for deletion range.
-            end_date: End date for deletion range.
-            batch_size: Number of prices to insert per batch.
-
-        Returns:
-            Tuple of (total_count, max_date).
-        """
-        with get_session() as session:
-            # Delete existing prices in the range first
-            delete_stmt = delete(Price).where(
-                col(Price.security_key) == security_key,
-                col(Price.date) >= start_date,
-                col(Price.date) <= end_date,
-            )
-            session.exec(delete_stmt)
-
-            total_count = 0
-            max_date: datetime.date | None = None
-            batch: list[dict] = []
-
-            for price_data in prices:
-                # Track max date
-                if max_date is None or price_data.date > max_date:
-                    max_date = price_data.date
-
-                batch.append(Price.model_validate(price_data).model_dump())
-
-                # Insert when batch is full
-                if len(batch) >= batch_size:
-                    session.exec(insert(Price), params=batch)
-                    total_count += len(batch)
-                    batch = []
-
-            # Insert remaining items
-            if batch:
-                session.exec(insert(Price), params=batch)
-                total_count += len(batch)
-
-            session.commit()
-
-            return total_count, max_date
 
     def _fetch_prices_for_security(
         self,
@@ -533,24 +416,18 @@ class PriceService:
             end_date,
         ) in fetch_results:
             # Write prices to database
-            count, _ = self._bulk_insert_prices_streaming(
-                iter(prices), security.key, start_date, end_date
+            self.price_repository.replace_prices_in_range(
+                security.key, start_date, end_date, prices, batch_size=500
             )
 
             # Update security metadata
-            security.properties["last_price_date"] = max_date.strftime("%Y-%m-%d")
-            security.properties["price_provider"] = provider_key
+            self.security_repository.update_security_properties(
+                security.key,
+                ("last_price_date", max_date.strftime("%Y-%m-%d")),
+                ("price_provider", provider_key),
+            )
 
-            with get_session() as session:
-                update_stmt = (
-                    update(Security)
-                    .where(col(Security.key) == security.key)
-                    .values(properties=security.properties)
-                )
-                session.exec(update_stmt)
-                session.commit()
-
-            total_count += count
+            total_count += len(prices)
             yield ProgressUpdate(
                 "sync.prices.save",
                 "Saving prices to database",

@@ -6,7 +6,6 @@ from typing import Any
 
 from sqlmodel import JSON, NUMERIC, Column, Field, Relationship, SQLModel
 
-from niveshpy.core.query import ast
 from niveshpy.models.security import Security
 
 
@@ -106,14 +105,3 @@ class PricePublicWithRelations(PricePublic):
     """
 
     security: Security = Field(title="Security")
-
-
-PRICE_COLUMN_MAPPING: dict[ast.Field, list] = {
-    ast.Field.DATE: [Price.date],
-    ast.Field.SECURITY: [
-        Security.key,
-        Security.name,
-        Security.type,
-        Security.category,
-    ],
-}
