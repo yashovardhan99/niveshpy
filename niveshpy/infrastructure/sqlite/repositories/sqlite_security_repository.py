@@ -2,14 +2,18 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import chain
+from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlmodel import col, delete, select
+from sqlmodel import col, delete, select, update
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_sqlalchemy_filters
 from niveshpy.database import get_session
+from niveshpy.exceptions import ResourceNotFoundError
 from niveshpy.models.security import Security, SecurityCreate
 
 
@@ -129,3 +133,48 @@ class SqliteSecurityRepository:
             session.commit()
             logger.debug("Deleted security with key %s.", key)
             return True
+
+    # UPDATE operations
+
+    def update_security_properties(
+        self,
+        security_key: str,
+        *properties: tuple[str, Any],
+    ) -> None:
+        """Update specific properties of an existing security.
+
+        Only the provided properties are updated. Existing properties not
+        included in `properties` are preserved.
+
+        Args:
+            security_key: The unique key of the security to update.
+            *properties: Variable-length `(name, value)` pairs representing
+                the properties to update in the security's JSON properties
+                field.
+
+        Raises:
+            ResourceNotFoundError: If no security exists with the given key.
+        """
+        if not properties:
+            return  # Nothing to update
+
+        # JSON_SET requires keys in the format of "$.propertyName" to update
+        # specific properties within the JSON column
+        # and flatten the list for JSON_SET arguments
+        args = chain.from_iterable((f"$.{name}", value) for name, value in properties)
+
+        stmt = (
+            update(Security)
+            .where(col(Security.key) == security_key)
+            .values(properties=func.json_set(Security.properties, *args))
+        )
+        with get_session() as session:
+            result = session.exec(stmt)
+            if result.rowcount == 0:
+                raise ResourceNotFoundError("Security", security_key)
+            session.commit()
+            logger.debug(
+                "Updated properties %s for security with key %s.",
+                [name for name, _ in properties],
+                security_key,
+            )

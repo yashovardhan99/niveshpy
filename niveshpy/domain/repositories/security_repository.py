@@ -1,7 +1,7 @@
 """Security repository for NiveshPy."""
 
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Any, Protocol
 
 from niveshpy.core.query.ast import FilterNode
 from niveshpy.models.security import Security, SecurityCreate
@@ -72,4 +72,22 @@ class SecurityRepository(Protocol):
 
         Returns:
             True if the security was deleted successfully, False if no security with the given key was found.
+        """
+
+    def update_security_properties(
+        self,
+        security_key: str,
+        *properties: tuple[str, Any],
+    ) -> None:
+        """Update specific properties of an existing security.
+
+        This method will not delete any existing properties that are not included in the update.
+        It will only update the specified properties or add them if they do not already exist.
+
+        Args:
+            security_key: The unique key of the security to update.
+            properties: A variable number of tuples, each containing a property name and its corresponding new value.
+
+        Raises:
+            ResourceNotFoundError: If no security with the given key exists.
         """

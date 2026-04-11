@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from niveshpy.core.logging import logger
 from niveshpy.domain.repositories import (
     AccountRepository,
+    PriceRepository,
     SecurityRepository,
     TransactionRepository,
 )
@@ -102,13 +103,20 @@ class Application:
 
         return ParsingService(parser, progress_callback=progress_callback)
 
+    @functools.cached_property
+    def price_repository(self) -> PriceRepository:
+        """Return the price repository."""
+        from niveshpy.infrastructure.sqlite.repositories import SqlitePriceRepository
+
+        return SqlitePriceRepository()
+
     @property
     def price(self) -> PriceService:
         """Return the price service."""
         if self._price is None:
             from niveshpy.services.price import PriceService
 
-            self._price = PriceService()
+            self._price = PriceService(self.price_repository, self.security_repository)
         return self._price
 
 

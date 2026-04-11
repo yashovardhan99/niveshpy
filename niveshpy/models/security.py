@@ -6,8 +6,6 @@ from typing import Any
 
 from sqlmodel import JSON, Column, Field, SQLModel
 
-from niveshpy.core.query import ast
-
 
 class SecurityType(StrEnum):
     """Enum for security types."""
@@ -88,9 +86,3 @@ class Security(SecurityBase, table=True):
     """
 
     created: datetime = Field(default_factory=datetime.now)
-
-
-SECURITY_COLUMN_MAPPING: dict[ast.Field, list[str]] = {
-    ast.Field.SECURITY: ["key", "name"],
-    ast.Field.TYPE: ["type", "category"],
-}

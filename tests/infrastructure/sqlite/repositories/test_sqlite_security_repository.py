@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.exceptions import ResourceNotFoundError
 from niveshpy.infrastructure.sqlite.repositories import SqliteSecurityRepository
 from niveshpy.models.security import SecurityCategory, SecurityCreate, SecurityType
 
@@ -215,3 +216,45 @@ def test_delete_security_by_key_returns_true_then_false(
 
     second_delete = security_repository.delete_security_by_key("DEL123")
     assert second_delete is False
+
+
+def test_update_security_properties_updates_properties(
+    security_repository: SqliteSecurityRepository,
+) -> None:
+    """Updating security properties updates the specified properties."""
+    security_repository.insert_security(
+        SecurityCreate(
+            key="UPD123",
+            name="Update Me",
+            category=SecurityCategory.EQUITY,
+            type=SecurityType.MUTUAL_FUND,
+            properties={"initial": "value", "not_to_change": "stay_same"},
+        )
+    )
+
+    security_repository.update_security_properties(
+        "UPD123",
+        ("new_property", "new_value"),
+        ("initial", "updated_value"),
+    )
+
+    updated_security = security_repository.get_security_by_key("UPD123")
+    assert updated_security is not None
+
+    # The new property should be added,
+    assert updated_security.properties.get("new_property") == "new_value"
+    # the existing property should be updated,
+    assert updated_security.properties.get("initial") == "updated_value"
+    # and the unchanged property should remain the same
+    assert updated_security.properties.get("not_to_change") == "stay_same"
+
+
+def test_update_security_properties_nonexistent_key_raises(
+    security_repository: SqliteSecurityRepository,
+) -> None:
+    """Updating security properties with a nonexistent key raises ResourceNotFoundError."""
+    with pytest.raises(ResourceNotFoundError):
+        security_repository.update_security_properties(
+            "NONEXISTENT_KEY",
+            ("some_property", "some_value"),
+        )
