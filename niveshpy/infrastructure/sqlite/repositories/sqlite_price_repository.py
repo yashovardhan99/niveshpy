@@ -195,6 +195,7 @@ class SqlitePriceRepository:
                 high=price.high,
                 low=price.low,
                 close=price.close,
+                properties=price.properties,
             )
             .on_conflict_do_update(
                 set_={

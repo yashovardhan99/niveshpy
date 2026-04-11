@@ -7,8 +7,6 @@ from collections.abc import Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
-from pydantic import RootModel
-
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
@@ -66,7 +64,10 @@ class PriceService:
             # Otherwise, return all prices matching the filters
             prices = self.price_repository.find_all_prices(filters, limit, offset)
 
-        return RootModel[Sequence[PricePublicWithRelations]].model_validate(prices).root
+        return [
+            PricePublicWithRelations(**price.model_dump(), security=price.security)
+            for price in prices
+        ]
 
     def update_price(
         self,
@@ -99,9 +100,8 @@ class PriceService:
             high=max(ohlc) if len(ohlc) < 4 else ohlc[1],
             low=min(ohlc) if len(ohlc) < 4 else ohlc[2],
             close=ohlc[-1],
+            properties={"source": source} if source else {},
         )
-        if source:
-            price_data = self._add_metadata(price_data, source)
 
         self.price_repository.overwrite_price(price_data)
 

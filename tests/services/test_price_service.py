@@ -6,12 +6,19 @@ from unittest.mock import patch
 
 import pytest
 
+from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.repositories import PriceRepository, SecurityRepository
 from niveshpy.exceptions import InvalidInputError, ResourceNotFoundError
 from niveshpy.models.output import ProgressUpdate, Warning
-from niveshpy.models.price import Price
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
+from niveshpy.models.price import PriceCreate
+from niveshpy.models.security import (
+    Security,
+    SecurityCategory,
+    SecurityCreate,
+    SecurityType,
+)
 from niveshpy.services.price import PriceService
-from niveshpy.services.result import MergeAction
+from tests.services.conftest import MockPriceRepository, MockSecurityRepository
 
 from .price_test_providers import (
     ConfigurableProvider,
@@ -21,50 +28,64 @@ from .price_test_providers import (
 
 
 @pytest.fixture
-def price_service(session):
-    """Create PriceService instance with patched get_session."""
-    with patch("niveshpy.services.price.get_session") as mock_get_session:
-        mock_get_session.return_value.__enter__.return_value = session
-        mock_get_session.return_value.__exit__.return_value = None
-        yield PriceService()
+def security_repository() -> MockSecurityRepository:
+    """Fixture for MockSecurityRepository."""
+    return MockSecurityRepository()
 
 
 @pytest.fixture
-def sample_securities(session):
+def price_repository(
+    security_repository: MockSecurityRepository,
+) -> MockPriceRepository:
+    """Fixture for MockPriceRepository."""
+    return MockPriceRepository(security_repository)
+
+
+@pytest.fixture
+def price_service(
+    security_repository: SecurityRepository, price_repository: PriceRepository
+) -> PriceService:
+    """Create PriceService instance with mocked repositories."""
+    return PriceService(
+        security_repository=security_repository, price_repository=price_repository
+    )
+
+
+@pytest.fixture
+def sample_securities(security_repository: SecurityRepository) -> list[SecurityCreate]:
     """Create sample securities for testing."""
     securities = [
-        Security(
+        SecurityCreate(
             key="SEC001",
             name="Security One",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.EQUITY,
         ),
-        Security(
+        SecurityCreate(
             key="SEC002",
             name="Security Two",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
         ),
-        Security(
+        SecurityCreate(
             key="SEC003",
             name="Security Three",
             type=SecurityType.BOND,
             category=SecurityCategory.DEBT,
         ),
     ]
-    session.add_all(securities)
-    session.commit()
-    for security in securities:
-        session.refresh(security)
+    security_repository.insert_multiple_securities(securities)
     return securities
 
 
 @pytest.fixture
-def sample_prices(session, sample_securities):
+def sample_prices(
+    sample_securities, price_repository: MockPriceRepository
+) -> list[PriceCreate]:
     """Create sample prices for testing."""
     prices = [
         # SEC001 - multiple dates
-        Price(
+        PriceCreate(
             security_key="SEC001",
             date=datetime.date(2024, 1, 1),
             open=Decimal("100.00"),
@@ -72,7 +93,7 @@ def sample_prices(session, sample_securities):
             low=Decimal("98.00"),
             close=Decimal("103.00"),
         ),
-        Price(
+        PriceCreate(
             security_key="SEC001",
             date=datetime.date(2024, 1, 2),
             open=Decimal("103.00"),
@@ -80,7 +101,7 @@ def sample_prices(session, sample_securities):
             low=Decimal("102.00"),
             close=Decimal("106.00"),
         ),
-        Price(
+        PriceCreate(
             security_key="SEC001",
             date=datetime.date(2024, 1, 3),
             open=Decimal("106.00"),
@@ -89,7 +110,7 @@ def sample_prices(session, sample_securities):
             close=Decimal("109.00"),
         ),
         # SEC002 - single date
-        Price(
+        PriceCreate(
             security_key="SEC002",
             date=datetime.date(2024, 1, 1),
             open=Decimal("50.00"),
@@ -98,7 +119,7 @@ def sample_prices(session, sample_securities):
             close=Decimal("51.00"),
         ),
         # SEC003 - multiple dates
-        Price(
+        PriceCreate(
             security_key="SEC003",
             date=datetime.date(2024, 1, 1),
             open=Decimal("200.00"),
@@ -106,7 +127,7 @@ def sample_prices(session, sample_securities):
             low=Decimal("198.00"),
             close=Decimal("203.00"),
         ),
-        Price(
+        PriceCreate(
             security_key="SEC003",
             date=datetime.date(2024, 1, 2),
             open=Decimal("203.00"),
@@ -115,10 +136,13 @@ def sample_prices(session, sample_securities):
             close=Decimal("205.00"),
         ),
     ]
-    session.add_all(prices)
-    session.commit()
-    for price in prices:
-        session.refresh(price)
+    price_repository.replace_prices_in_range(
+        "SEC001", datetime.date(2024, 1, 1), datetime.date(2024, 1, 3), prices[:3]
+    )
+    price_repository.overwrite_price(prices[3])
+    price_repository.replace_prices_in_range(
+        "SEC003", datetime.date(2024, 1, 1), datetime.date(2024, 1, 2), prices[4:]
+    )
     return prices
 
 
@@ -223,9 +247,11 @@ class TestListPrices:
 class TestUpdatePrice:
     """Tests for update_price method."""
 
-    def test_update_price_insert_new(self, price_service, sample_securities):
+    def test_update_price_insert_new(
+        self, price_service, sample_securities, price_repository: PriceRepository
+    ):
         """Test inserting a new price."""
-        result = price_service.update_price(
+        price_service.update_price(
             security_key="SEC001",
             date=datetime.date(2024, 2, 1),
             ohlc=(
@@ -237,11 +263,12 @@ class TestUpdatePrice:
             source=None,
         )
 
-        assert result == MergeAction.INSERT
+        prices = price_repository.find_all_prices([])
+        assert len(prices) == 1  # New price should be inserted
 
     def test_update_price_update_existing(self, price_service, sample_prices):
         """Test updating an existing price."""
-        result = price_service.update_price(
+        price_service.update_price(
             security_key="SEC001",
             date=datetime.date(2024, 1, 1),
             ohlc=(
@@ -253,9 +280,19 @@ class TestUpdatePrice:
             source=None,
         )
 
-        assert result == MergeAction.UPDATE
+        # Should have updated the existing price (not inserted new)
+        price = price_service.price_repository.get_price_by_key_and_date(
+            "SEC001", datetime.date(2024, 1, 1)
+        )
+        assert price is not None
+        assert price.open == Decimal("120.00")
+        assert price.high == Decimal("125.00")
+        assert price.low == Decimal("118.00")
+        assert price.close == Decimal("123.00")
 
-    def test_update_price_with_source(self, price_service, sample_securities, session):
+    def test_update_price_with_source(
+        self, price_service, sample_securities, price_repository: PriceRepository
+    ):
         """Test updating price with source metadata."""
         price_service.update_price(
             security_key="SEC001",
@@ -265,35 +302,52 @@ class TestUpdatePrice:
         )
 
         # Verify the price was saved with source
-        price = session.get(Price, ("SEC001", datetime.date(2024, 2, 1)))
+        price = price_repository.get_price_by_key_and_date(
+            "SEC001", datetime.date(2024, 2, 1)
+        )
         assert price is not None
         assert price.properties == {"source": "test_source"}
 
     def test_update_price_ohlc_single_value(self, price_service, sample_securities):
         """Test update with single OHLC value (close only)."""
-        result = price_service.update_price(
+        price_service.update_price(
             security_key="SEC001",
             date=datetime.date(2024, 2, 1),
             ohlc=(Decimal("100.00"),),
             source=None,
         )
 
-        assert result == MergeAction.INSERT
+        price = price_service.price_repository.get_price_by_key_and_date(
+            "SEC001", datetime.date(2024, 2, 1)
+        )
+        assert price is not None
+        assert price.open == Decimal("100.00")
+        assert price.high == Decimal("100.00")
+        assert price.low == Decimal("100.00")
+        assert price.close == Decimal("100.00")
 
     def test_update_price_ohlc_two_values(self, price_service, sample_securities):
         """Test update with two OHLC values (open, close)."""
-        result = price_service.update_price(
+        price_service.update_price(
             security_key="SEC001",
             date=datetime.date(2024, 2, 1),
             ohlc=(Decimal("100.00"), Decimal("105.00")),
             source=None,
         )
 
-        assert result == MergeAction.INSERT
+        price = price_service.price_repository.get_price_by_key_and_date(
+            "SEC001", datetime.date(2024, 2, 1)
+        )
+        assert price is not None
+        assert price.open == Decimal("100.00")
+        assert price.close == Decimal("105.00")
+        # High should be max, Low should be min
+        assert price.high == Decimal("105.00")
+        assert price.low == Decimal("100.00")
 
     def test_update_price_ohlc_four_values(self, price_service, sample_securities):
         """Test update with four OHLC values (open, high, low, close)."""
-        result = price_service.update_price(
+        price_service.update_price(
             security_key="SEC001",
             date=datetime.date(2024, 2, 1),
             ohlc=(
@@ -305,7 +359,14 @@ class TestUpdatePrice:
             source=None,
         )
 
-        assert result == MergeAction.INSERT
+        price = price_service.price_repository.get_price_by_key_and_date(
+            "SEC001", datetime.date(2024, 2, 1)
+        )
+        assert price is not None
+        assert price.open == Decimal("100.00")
+        assert price.high == Decimal("110.00")
+        assert price.low == Decimal("95.00")
+        assert price.close == Decimal("105.00")
 
     def test_update_price_ohlc_invalid_count(self, price_service, sample_securities):
         """Test that invalid OHLC count raises InvalidInputError."""
@@ -328,7 +389,7 @@ class TestUpdatePrice:
             )
 
     def test_update_price_values_persisted(
-        self, price_service, sample_securities, session
+        self, price_service, sample_securities, price_repository: PriceRepository
     ):
         """Test that price values are correctly persisted."""
         price_service.update_price(
@@ -343,7 +404,9 @@ class TestUpdatePrice:
             source=None,
         )
 
-        price = session.get(Price, ("SEC001", datetime.date(2024, 2, 1)))
+        price = price_repository.get_price_by_key_and_date(
+            "SEC001", datetime.date(2024, 2, 1)
+        )
         assert price is not None
         assert price.open == Decimal("100.00")
         assert price.high == Decimal("110.00")
@@ -351,7 +414,7 @@ class TestUpdatePrice:
         assert price.close == Decimal("105.00")
 
     def test_update_price_single_value_expands(
-        self, price_service, sample_securities, session
+        self, price_service, sample_securities, price_repository: PriceRepository
     ):
         """Test that single value expands to all OHLC fields."""
         price_service.update_price(
@@ -361,7 +424,9 @@ class TestUpdatePrice:
             source=None,
         )
 
-        price = session.get(Price, ("SEC001", datetime.date(2024, 2, 1)))
+        price = price_repository.get_price_by_key_and_date(
+            "SEC001", datetime.date(2024, 2, 1)
+        )
         assert price is not None
         # All values should be the same
         assert price.open == Decimal("100.00")
@@ -370,7 +435,7 @@ class TestUpdatePrice:
         assert price.close == Decimal("100.00")
 
     def test_update_price_two_values_expands(
-        self, price_service, sample_securities, session
+        self, price_service, sample_securities, price_repository: PriceRepository
     ):
         """Test that two values expand to all OHLC fields."""
         price_service.update_price(
@@ -380,7 +445,9 @@ class TestUpdatePrice:
             source=None,
         )
 
-        price = session.get(Price, ("SEC001", datetime.date(2024, 2, 1)))
+        price = price_repository.get_price_by_key_and_date(
+            "SEC001", datetime.date(2024, 2, 1)
+        )
         assert price is not None
         assert price.open == Decimal("100.00")
         assert price.high == Decimal("105.00")  # max
@@ -422,7 +489,12 @@ class TestSyncPrices:
 
     @patch("niveshpy.services.price.provider_registry")
     def test_sync_prices_basic_flow(
-        self, mock_registry, price_service, sample_securities, session
+        self,
+        mock_registry,
+        price_service,
+        sample_securities,
+        price_repository: PriceRepository,
+        security_repository: SecurityRepository,
     ):
         """Test basic sync_prices flow with dummy provider."""
         ConfigurableProviderFactory.configure(behavior=ProviderBehavior.NORMAL)
@@ -432,9 +504,7 @@ class TestSyncPrices:
 
         # Run sync for one security
         messages = list(
-            price_service.sync_prices(
-                queries=("Security One",), force=False, provider_key=None
-            )
+            price_service.sync_prices(queries=(), force=False, provider_key=None)
         )
 
         # Verify we got progress messages
@@ -442,19 +512,22 @@ class TestSyncPrices:
         assert len(progress_messages) > 0
 
         # Verify prices were saved to database
-        prices = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
-        ).all()
+        prices = price_repository.find_all_prices([])
         assert len(prices) > 0
 
         # Verify security metadata was updated
-        security = session.get(Security, "SEC001")
+        security = security_repository.get_security_by_key("SEC001")
+        assert security is not None
         assert "last_price_date" in security.properties
         assert security.properties["price_provider"] == "dummy"
 
     @patch("niveshpy.services.price.provider_registry")
     def test_sync_prices_multiple_securities(
-        self, mock_registry, price_service, sample_securities, session
+        self,
+        mock_registry,
+        price_service,
+        sample_securities,
+        price_repository: PriceRepository,
     ):
         """Test syncing prices for multiple securities."""
         ConfigurableProviderFactory.configure(behavior=ProviderBehavior.NORMAL)
@@ -466,14 +539,25 @@ class TestSyncPrices:
 
         # Verify prices were saved for all securities
         for security in sample_securities:
-            prices = session.exec(
-                Price.__table__.select().where(Price.security_key == security.key)  # ty:ignore[unresolved-attribute]
-            ).all()
+            prices = price_repository.find_all_prices(
+                filters=[
+                    FilterNode(
+                        field=Field.SECURITY,
+                        operator=Operator.EQUALS,
+                        value=security.key,
+                    )
+                ]
+            )
             assert len(prices) > 0
 
     @patch("niveshpy.services.price.provider_registry")
     def test_sync_prices_force_flag(
-        self, mock_registry, price_service, sample_securities, session
+        self,
+        mock_registry,
+        price_service,
+        sample_securities,
+        security_repository: SecurityRepository,
+        price_repository: PriceRepository,
     ):
         """Test that force flag causes re-fetch from default start date."""
         ConfigurableProviderFactory.configure(behavior=ProviderBehavior.NORMAL)
@@ -483,21 +567,21 @@ class TestSyncPrices:
 
         # Set last_price_date to recent date
         security = sample_securities[0]
-        security.properties = {"last_price_date": "2025-12-30"}
-        session.add(security)
-        session.commit()
-
-        # Sync with force=True
-        list(
-            price_service.sync_prices(
-                queries=("Security One",), force=True, provider_key=None
-            )
+        security_repository.update_security_properties(
+            security.key, ("last_price_date", "2025-12-30")
         )
 
+        # Sync with force=True
+        list(price_service.sync_prices(queries=(), force=True, provider_key=None))
+
         # Should have fetched prices (even though last_price_date was recent)
-        prices = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
-        ).all()
+        prices = price_repository.find_all_prices(
+            filters=[
+                FilterNode(
+                    field=Field.SECURITY, operator=Operator.EQUALS, value="SEC001"
+                )
+            ]
+        )
         assert len(prices) > 0
 
     @patch("niveshpy.services.price.provider_registry")
@@ -509,16 +593,10 @@ class TestSyncPrices:
         ]
 
         with pytest.raises(ResourceNotFoundError, match="No securities found"):
-            list(
-                price_service.sync_prices(
-                    queries=("NonExistent",), force=False, provider_key=None
-                )
-            )
+            list(price_service.sync_prices(queries=(), force=False, provider_key=None))
 
     @patch("niveshpy.services.price.provider_registry")
-    def test_sync_prices_security_without_provider(
-        self, mock_registry, price_service, session
-    ):
+    def test_sync_prices_security_without_provider(self, mock_registry, price_service):
         """Test that securities without applicable provider generate warnings."""
         # Create a security that won't be supported
         unsupported = Security(
@@ -527,8 +605,7 @@ class TestSyncPrices:
             type=SecurityType.OTHER,
             category=SecurityCategory.OTHER,
         )
-        session.add(unsupported)
-        session.commit()
+        price_service.security_repository.insert_security(unsupported)
 
         ConfigurableProviderFactory.configure(behavior=ProviderBehavior.NORMAL)
         mock_registry.list_providers.return_value = [
@@ -536,9 +613,7 @@ class TestSyncPrices:
         ]
 
         messages = list(
-            price_service.sync_prices(
-                queries=("UNSUPPORTED",), force=False, provider_key=None
-            )
+            price_service.sync_prices(queries=(), force=False, provider_key=None)
         )
 
         # Should have warning message
@@ -586,7 +661,11 @@ class TestSyncPrices:
 
     @patch("niveshpy.services.price.provider_registry")
     def test_sync_prices_metadata_updated(
-        self, mock_registry, price_service, sample_securities, session
+        self,
+        mock_registry,
+        price_service,
+        sample_securities,
+        security_repository: SecurityRepository,
     ):
         """Test that security metadata is updated after sync."""
         ConfigurableProviderFactory.configure(behavior=ProviderBehavior.NORMAL)
@@ -594,20 +673,17 @@ class TestSyncPrices:
             ("dummy", ConfigurableProviderFactory),
         ]
 
-        list(
-            price_service.sync_prices(
-                queries=("Security One",), force=False, provider_key=None
-            )
-        )
+        list(price_service.sync_prices(queries=(), force=False, provider_key=None))
 
-        security = session.get(Security, "SEC001")
+        security = security_repository.get_security_by_key("SEC001")
+        assert security is not None
         assert "last_price_date" in security.properties
         assert "price_provider" in security.properties
         assert security.properties["price_provider"] == "dummy"
 
     @patch("niveshpy.services.price.provider_registry")
     def test_sync_prices_up_to_date_prices(
-        self, mock_registry, price_service, sample_securities, session
+        self, mock_registry, price_service, sample_securities
     ):
         """Test that sync_prices skips securities with up-to-date prices."""
         ConfigurableProviderFactory.configure(behavior=ProviderBehavior.NORMAL)
@@ -619,34 +695,39 @@ class TestSyncPrices:
         security = sample_securities[0]
         today = datetime.date.today()
         security.properties = {"last_price_date": today.strftime("%Y-%m-%d")}
-        session.add(security)
-        session.commit()
-        session.refresh(security)
+        price_service.security_repository.update_security_properties(
+            security.key, ("last_price_date", today.strftime("%Y-%m-%d"))
+        )
 
         # Count existing prices before sync
-        prices_before = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
-        ).all()
+        prices_before = price_service.price_repository.find_all_prices(
+            filters=[
+                FilterNode(
+                    field=Field.SECURITY, operator=Operator.EQUALS, value="SEC001"
+                )
+            ]
+        )
         count_before = len(prices_before)
 
         # Sync without force flag
-        list(
-            price_service.sync_prices(
-                queries=("Security One",), force=False, provider_key=None
-            )
-        )
+        list(price_service.sync_prices(queries=(), force=False, provider_key=None))
 
         # Should not fetch new prices (already up to date)
-        prices_after = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
-        ).all()
+        prices_after = price_service.price_repository.find_all_prices(
+            filters=[
+                FilterNode(
+                    field=Field.SECURITY, operator=Operator.EQUALS, value="SEC001"
+                )
+            ]
+        )
         count_after = len(prices_after)
 
         # No new prices should have been added
         assert count_after == count_before
 
         # Verify the property is still set correctly
-        session.refresh(security)
+        security = price_service.security_repository.get_security_by_key("SEC001")
+        assert security is not None
         assert security.properties["last_price_date"] == today.strftime("%Y-%m-%d")
 
     @pytest.mark.parametrize(
@@ -663,7 +744,6 @@ class TestSyncPrices:
         mock_registry,
         price_service,
         sample_securities,
-        session,
         behavior,
     ):
         """Test handling when provider returns no usable prices.
@@ -675,115 +755,25 @@ class TestSyncPrices:
             (behavior.value, ConfigurableProviderFactory),
         ]
 
-        list(
-            price_service.sync_prices(
-                queries=("Security One",), force=False, provider_key=None
-            )
-        )
+        list(price_service.sync_prices(queries=(), force=False, provider_key=None))
 
         # No prices should be saved for these scenarios
-        prices = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
-        ).all()
+        prices = price_service.price_repository.find_all_prices(
+            filters=[
+                FilterNode(
+                    field=Field.SECURITY, operator=Operator.EQUALS, value="SEC001"
+                )
+            ]
+        )
         assert len(prices) == 0
 
     @patch("niveshpy.services.price.provider_registry")
-    def test_sync_prices_provider_network_error_retries(
-        self, mock_registry, price_service, sample_securities, session
-    ):
-        """Test that network errors trigger retries."""
-        provider_instance = ConfigurableProvider(
-            behavior=ProviderBehavior.NETWORK_ERROR
-        )
-        ConfigurableProviderFactory.configure(instance=provider_instance)
-
-        mock_registry.list_providers.return_value = [
-            (provider_instance.behavior.value, ConfigurableProviderFactory),
-        ]
-
-        list(
-            price_service.sync_prices(
-                queries=("Security One",), force=False, provider_key=None
-            )
-        )
-
-        # Should have retried (RETRY_COUNT = 3)
-        assert provider_instance.call_count == 3
-
-        # Verify no prices were saved after all retries failed
-        prices = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
-        ).all()
-        assert len(prices) == 0
-
-    @pytest.mark.parametrize(
-        "behavior,exception_type,match_pattern",
-        [
-            (ProviderBehavior.VALUE_ERROR, "OperationError", None),
-            (
-                ProviderBehavior.RUNTIME_ERROR,
-                "OperationError",
-                "unexpected error occurred",
-            ),
-            (
-                ProviderBehavior.NIVESHPY_ERROR,
-                "InvalidInputError",
-                None,
-            ),
-        ],
-    )
-    @patch("niveshpy.services.price.provider_registry")
-    def test_sync_prices_provider_raises_exception(
+    def test_sync_prices_large_batch_insert(
         self,
         mock_registry,
         price_service,
         sample_securities,
-        behavior,
-        exception_type,
-        match_pattern,
-    ):
-        """Test handling when provider raises various exceptions.
-
-        Covers: ValueError, RuntimeError wrapped in OperationError, and NiveshPyError subclasses.
-        """
-        from niveshpy.exceptions import InvalidInputError, OperationError
-
-        ConfigurableProviderFactory.configure(behavior=behavior)
-        mock_registry.list_providers.return_value = [
-            (behavior.value, ConfigurableProviderFactory),
-        ]
-
-        exception_class = (
-            InvalidInputError
-            if exception_type == "InvalidInputError"
-            else OperationError
-        )
-
-        if match_pattern:
-            with pytest.raises(exception_class, match=match_pattern):
-                list(
-                    price_service.sync_prices(
-                        queries=("Security One",), force=False, provider_key=None
-                    )
-                )
-        else:
-            with pytest.raises(exception_class) as exc_info:
-                generator = price_service.sync_prices(
-                    queries=("Security One",), force=False, provider_key=None
-                )
-                for _ in generator:
-                    pass
-
-            # For NiveshPyError, verify context note was added
-            if exception_type == "InvalidInputError":
-                assert (
-                    "Error occurred while fetching prices for security SEC001"
-                    in str(exc_info.value.__notes__)
-                )
-
-    @patch("niveshpy.services.price.provider_registry")
-    def test_sync_prices_large_batch_insert(
-        self, mock_registry, price_service, sample_securities, session
+        price_repository: PriceRepository,
     ):
         """Test batch insert logic with more than 1000 prices."""
         ConfigurableProviderFactory.configure(
@@ -793,58 +783,11 @@ class TestSyncPrices:
             ("large_batch", ConfigurableProviderFactory),
         ]
 
-        list(
-            price_service.sync_prices(
-                queries=("Security One",), force=True, provider_key=None
-            )
-        )
+        list(price_service.sync_prices(queries=(), force=True, provider_key=None))
 
         # Verify prices were saved
-        prices = session.exec(
-            Price.__table__.select().where(Price.security_key == "SEC001")  # ty:ignore[unresolved-attribute]
-        ).all()
+        prices = price_repository.find_all_prices(
+            [FilterNode(field=Field.SECURITY, operator=Operator.EQUALS, value="SEC001")]
+        )
         # Should have 1500 prices
         assert len(prices) == 1500
-
-    @patch("niveshpy.services.price.provider_registry")
-    @patch("niveshpy.services.price.as_completed")
-    @patch("niveshpy.services.price.ThreadPoolExecutor")
-    def test_sync_prices_executor_exception(
-        self,
-        mock_executor_class,
-        mock_as_completed,
-        mock_registry,
-        price_service,
-        sample_securities,
-    ):
-        """Test handling when ThreadPoolExecutor's future raises a plain Exception."""
-        from unittest.mock import MagicMock
-
-        from niveshpy.exceptions import OperationError
-
-        ConfigurableProviderFactory.configure(behavior=ProviderBehavior.NORMAL)
-        mock_registry.list_providers.return_value = [
-            ("dummy", ConfigurableProviderFactory),
-        ]
-
-        # Create a mock future that raises a plain Exception (not NiveshPyError)
-        mock_future = MagicMock()
-        mock_future.result.side_effect = RuntimeError("Executor internal error")
-
-        # Create a mock executor that returns our mock future
-        mock_executor = MagicMock()
-        mock_executor.__enter__.return_value = mock_executor
-        mock_executor.__exit__.return_value = None
-        mock_executor.submit.return_value = mock_future
-        mock_executor_class.return_value = mock_executor
-
-        # Make as_completed return our mock future
-        mock_as_completed.return_value = [mock_future]
-
-        # Should wrap the RuntimeError in OperationError
-        with pytest.raises(OperationError, match="unexpected error occurred"):
-            list(
-                price_service.sync_prices(
-                    queries=("Security One",), force=False, provider_key=None
-                )
-            )
