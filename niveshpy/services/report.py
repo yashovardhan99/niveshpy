@@ -4,6 +4,7 @@ import datetime
 import decimal
 import heapq
 from collections import defaultdict
+from collections.abc import Mapping
 from typing import Literal
 
 from sqlalchemy import CTE, ColumnElement
@@ -15,6 +16,7 @@ from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import get_filters_from_queries
 from niveshpy.database import get_session
+from niveshpy.domain.services import LotAccountingService
 from niveshpy.exceptions import InvalidInputError, OperationError
 from niveshpy.models.account import Account
 from niveshpy.models.price import Price
@@ -30,7 +32,7 @@ from niveshpy.models.report import (
 )
 from niveshpy.models.security import Security
 from niveshpy.models.transaction import Transaction
-from niveshpy.services.helpers import compute_invested_amount, compute_xirr
+from niveshpy.services.helpers import compute_xirr
 
 
 def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Holding]:
@@ -50,6 +52,8 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
         raise InvalidInputError(limit, "Limit must be positive.")
     if offset < 0:
         raise InvalidInputError(offset, "Offset cannot be negative.")
+
+    lot_accounting_service = LotAccountingService()
 
     where_clauses: list[ColumnElement[bool]] = get_filters_from_queries(
         queries, ast.Field.SECURITY, HOLDING_COLUMN_MAPPINGS_TXN
@@ -117,7 +121,7 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
 
         # Compute invested amounts using FIFO on all transactions for held positions
         # Use only security/account filters (not date) since FIFO needs full history
-        invested_amounts: dict[tuple[str, int], decimal.Decimal] = {}
+        invested_amounts: Mapping[tuple[str, int], decimal.Decimal] = {}
         if holding_rows:
             cost_where_clauses: list[ColumnElement[bool]] = get_filters_from_queries(
                 queries,
@@ -135,7 +139,9 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
                     col(Transaction.id).asc(),
                 )
             ).all()
-            invested_amounts = compute_invested_amount(cost_transactions)
+            invested_amounts = lot_accounting_service.compute_position_costs(
+                cost_transactions
+            )
 
         holdings = []
         for security, account, total_units, holding_value, as_of_date in holding_rows:
