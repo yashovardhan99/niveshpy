@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - (Internal) Add new repository function to update security properties.
+- (Internal) Add new Lot accounting service to simplify computations of investment lots and cost-basis.
 
 ### Changed
 

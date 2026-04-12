@@ -1,8 +1,12 @@
 """Domain model for a lot in niveshpy."""
 
 import datetime
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
+from typing import Self
+
+from niveshpy.exceptions import InvalidInputError
+from niveshpy.models.transaction import Transaction, TransactionType
 
 
 @dataclass(slots=True, frozen=True)
@@ -33,6 +37,46 @@ class OpenLot:
     acquisition_date: datetime.date
     remaining_units: Decimal
     remaining_cost: Decimal
+
+    @classmethod
+    def from_transaction(cls, txn: Transaction) -> Self:
+        """Factory method to create an OpenLot from a purchase Transaction."""
+        if txn.id is None:
+            raise InvalidInputError(
+                txn, "Transaction must have a non-None id to create an OpenLot."
+            )
+        if txn.type != TransactionType.PURCHASE:
+            raise InvalidInputError(
+                txn, "Only transactions of type PURCHASE can be converted to OpenLots."
+            )
+        return cls(
+            security_key=txn.security_key,
+            account_id=txn.account_id,
+            source_transaction_id=txn.id,
+            acquisition_date=txn.transaction_date,
+            remaining_units=txn.units,
+            remaining_cost=txn.amount,
+        )
+
+    def consume(self, units_to_sell: Decimal) -> Self | None:
+        """Return a new OpenLot representing the remaining portion after consuming units_to_sell."""
+        if units_to_sell > self.remaining_units:
+            raise InvalidInputError(
+                units_to_sell,
+                "Cannot consume more units than are remaining in the lot.",
+            )
+
+        if units_to_sell == self.remaining_units:
+            # Entire lot consumed, so no remaining lot to return
+            return None
+
+        cost_per_unit = self.remaining_cost / self.remaining_units
+        matched_cost = cost_per_unit * units_to_sell
+        return replace(
+            self,
+            remaining_units=self.remaining_units - units_to_sell,
+            remaining_cost=self.remaining_cost - matched_cost,
+        )
 
 
 @dataclass(slots=True, frozen=True)
