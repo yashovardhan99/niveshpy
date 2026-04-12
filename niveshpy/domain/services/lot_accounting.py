@@ -102,7 +102,9 @@ class LotAccountingService:
                         open_lots[key][0] = updated_lot
 
                     # Allocate proceeds proportionally to the matched units
-                    proceeds_allocated = (matched_units / total_units_sold) * txn.amount
+                    proceeds_allocated = (matched_units / total_units_sold) * (
+                        -txn.amount  # sale amount is stored negative
+                    )
 
                     realized_events.append(
                         RealizedLotEvent(
