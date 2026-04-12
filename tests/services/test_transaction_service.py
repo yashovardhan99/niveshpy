@@ -9,6 +9,7 @@ import pytest
 
 from niveshpy.core.query.ast import Field, FilterNode, Operator
 from niveshpy.domain.repositories import AccountRepository, SecurityRepository
+from niveshpy.domain.services import LotAccountingService
 from niveshpy.exceptions import (
     AmbiguousResourceError,
     InvalidInputError,
@@ -56,6 +57,7 @@ def transaction_service(
         transaction_repository=transaction_repo,
         account_repository=account_repository,
         security_repository=security_repository,
+        lot_accounting_service=LotAccountingService(),
     )
 
 

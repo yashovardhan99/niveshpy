@@ -18,6 +18,7 @@ from niveshpy.domain.repositories.transaction_repository import (
     TransactionFetchProfile,
     TransactionSortOrder,
 )
+from niveshpy.domain.services import LotAccountingService
 from niveshpy.exceptions import (
     AmbiguousResourceError,
     InvalidInputError,
@@ -30,7 +31,6 @@ from niveshpy.models.transaction import (
     TransactionPublicWithRelationsAndCost,
     TransactionType,
 )
-from niveshpy.services import helpers
 
 
 @dataclass(slots=True, frozen=True)
@@ -40,6 +40,7 @@ class TransactionService:
     transaction_repository: TransactionRepository
     account_repository: AccountRepository
     security_repository: SecurityRepository
+    lot_accounting_service: LotAccountingService
 
     def list_transactions(
         self,
@@ -72,8 +73,10 @@ class TransactionService:
                 sort_order=TransactionSortOrder.DATE_ASC_ID_ASC,
             )
 
-            transactions_with_cost = helpers.compute_cost_basis(
-                all_transactions_for_cost
+            transactions_with_cost = (
+                self.lot_accounting_service.annotate_transactions_with_cost(
+                    all_transactions_for_cost
+                )
             )
 
         filters = get_prepared_filters_from_queries(

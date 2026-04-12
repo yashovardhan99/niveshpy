@@ -14,6 +14,7 @@ from niveshpy.domain.repositories import (
     SecurityRepository,
     TransactionRepository,
 )
+from niveshpy.domain.services import LotAccountingService
 
 if TYPE_CHECKING:
     from niveshpy.models.parser import Parser
@@ -81,6 +82,7 @@ class Application:
                 transaction_repository=self.transaction_repository,
                 account_repository=self.account_repository,
                 security_repository=self.security_repository,
+                lot_accounting_service=LotAccountingService(),
             )
         return self._transaction
 
