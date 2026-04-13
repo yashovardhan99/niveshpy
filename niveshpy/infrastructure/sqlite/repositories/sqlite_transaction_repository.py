@@ -1,5 +1,6 @@
 """Repository module for performing CRUD operations on transactions in a SQLite database."""
 
+import datetime
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import ClassVar
@@ -285,3 +286,53 @@ class SqliteTransactionRepository:
             session.commit()
             logger.debug(f"Deleted transaction with ID {transaction_id}.")
             return True
+
+    def overwrite_transactions_in_date_range_for_accounts(
+        self,
+        transactions: Sequence[TransactionCreate],
+        date_range: tuple[datetime.date, datetime.date],
+        account_ids: Sequence[int],
+    ) -> int:
+        """Bulk insert transactions into the database.
+
+        Delete existing transactions in the date range for specified accounts before inserting.
+
+        Args:
+            transactions: A sequence of TransactionCreate objects to insert.
+            date_range: A tuple containing the start and end dates (inclusive) as datetime.date objects.
+            account_ids: A sequence of account IDs for which to delete existing transactions in the date range before inserting.
+
+        Returns:
+            The number of transactions successfully inserted.
+        """
+        transaction_dicts = [
+            {
+                "transaction_date": transaction.transaction_date,
+                "type": transaction.type,
+                "description": transaction.description,
+                "amount": transaction.amount,
+                "units": transaction.units,
+                "security_key": transaction.security_key,
+                "account_id": transaction.account_id,
+                "properties": transaction.properties,
+            }
+            for transaction in transactions
+        ]
+        with get_session() as session:
+            session.exec(
+                delete(Transaction).where(
+                    col(Transaction.transaction_date) >= date_range[0],
+                    col(Transaction.transaction_date) <= date_range[1],
+                    col(Transaction.account_id).in_(account_ids),
+                )
+            )
+            result = (
+                session.exec(insert(Transaction).values(transaction_dicts)).rowcount
+                if transaction_dicts
+                else 0
+            )
+            session.commit()
+            logger.debug(
+                f"Overwrote transactions in date range {date_range} for accounts {account_ids}. Inserted {result} transactions."
+            )
+            return result

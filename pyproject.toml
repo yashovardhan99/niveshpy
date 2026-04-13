@@ -7,6 +7,7 @@ name = "NiveshPy"
 description = "A simple python library for all your investment needs."
 dynamic = ["version"]
 dependencies = [
+    "attrs>=26.1.0,<27.0.0",
     "casparser>=0.8.1,<0.9.0",
     "click>=8.3.1, < 9.0.0",
     "inquirerpy>=0.3.4, < 1.0.0",

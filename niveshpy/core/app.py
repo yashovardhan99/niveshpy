@@ -103,7 +103,13 @@ class Application:
         """Get the parsing service for the given parser key."""
         from niveshpy.services.parsing import ParsingService
 
-        return ParsingService(parser, progress_callback=progress_callback)
+        return ParsingService(
+            parser,
+            self.account_repository,
+            self.security_repository,
+            self.transaction_repository,
+            progress_callback=progress_callback,
+        )
 
     @functools.cached_property
     def price_repository(self) -> PriceRepository:

@@ -1,5 +1,6 @@
 """Transaction repository for NiveshPy."""
 
+import datetime
 from collections.abc import Iterable, Sequence
 from enum import Enum, auto
 from typing import Protocol
@@ -116,4 +117,23 @@ class TransactionRepository(Protocol):
 
         Returns:
             True if the transaction was deleted successfully, False if no transaction with the given ID was found.
+        """
+
+    def overwrite_transactions_in_date_range_for_accounts(
+        self,
+        transactions: Sequence[TransactionCreate],
+        date_range: tuple[datetime.date, datetime.date],
+        account_ids: Sequence[int],
+    ) -> int:
+        """Bulk insert transactions into the database.
+
+        Delete existing transactions in the date range for specified accounts before inserting.
+
+        Args:
+            transactions: A sequence of TransactionCreate objects to insert.
+            date_range: A tuple containing the start and end dates (inclusive) as datetime.date objects.
+            account_ids: A sequence of account IDs for which to delete existing transactions in the date range before inserting.
+
+        Returns:
+            The number of transactions successfully inserted.
         """
