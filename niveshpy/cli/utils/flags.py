@@ -2,6 +2,7 @@
 
 import functools
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, TypeVar
 
 import click
@@ -138,3 +139,15 @@ def output(
             )
         )
     return functools.partial(functools.reduce, lambda x, opt: opt(x), options)
+
+
+def output_file() -> Callable[[FC], FC]:
+    """Common output-file option for CLI commands."""
+    return click.option(
+        "--output-file",
+        "-o",
+        type=click.Path(
+            dir_okay=False, writable=True, resolve_path=True, path_type=Path
+        ),
+        help="Path to save the output file (when using --csv/--json flag).",
+    )

@@ -1,5 +1,8 @@
 """CLI commands for managing accounts."""
 
+import json
+from pathlib import Path
+
 import click
 
 from niveshpy.cli.models.account import AccountDisplay
@@ -36,6 +39,7 @@ def cli() -> None:
 @flags.limit("accounts", default=30)
 @flags.offset("accounts", default=0)
 @flags.output("format")
+@flags.output_file()
 @click.pass_context
 def show(
     ctx: click.Context,
@@ -43,6 +47,7 @@ def show(
     limit: int,
     offset: int,
     format: OutputFormat,
+    output_file: Path | None,
 ) -> None:
     """List all accounts.
 
@@ -71,20 +76,34 @@ def show(
             else None
         )
     )
-    with capture_for_pager():
+
+    with capture_for_pager(enabled=output_file is None or format == OutputFormat.TABLE):
         if format == OutputFormat.TABLE:
             if extra_message:
                 display(extra_message)
+
+            if output_file:
+                display_warning(
+                    "Output file specified, but table format does not support file output. Ignoring --output-file flag."
+                )
+
             table = build_table(accounts, AccountDisplay.columns)
             display(table)
         elif format == OutputFormat.CSV:
             csv = build_csv(
                 map(AccountDisplay.to_csv_dict, accounts),
                 fields=AccountDisplay.csv_fields,
+                output_file=output_file,
             )
-            display(csv)
+            if csv:
+                display(csv)
         elif format == OutputFormat.JSON:
-            display_json(data=[acc.to_json_dict() for acc in accounts])
+            data = [acc.to_json_dict() for acc in accounts]
+            if output_file:
+                with output_file.open("w") as f:
+                    json.dump(data, f, indent=4)
+            else:
+                display_json(data=data)
 
 
 @command()

@@ -67,14 +67,23 @@ def display_error(
 
 
 @contextmanager
-def capture_for_pager(console: Console | None = None) -> Generator[None, None, None]:
-    """Context manager to capture console output for paging if the console is a terminal."""
+def capture_for_pager(
+    console: Console | None = None, enabled: bool = True
+) -> Generator[None, None, None]:
+    """Capture console output for paging when appropriate.
+
+    Args:
+        console: The console to use. If not provided, the default CLI console is used.
+        enabled: Whether paging is enabled. When `True`, output is captured and sent
+            through the pager if the console is a terminal. When `False`, paging is
+            disabled even if the console is a terminal.
+    """
     if not console:
         from niveshpy.cli.utils.setup import _console
 
         console = _console
 
-    if console.is_terminal:
+    if console.is_terminal and enabled:
         import click
 
         with console.capture() as capture:
