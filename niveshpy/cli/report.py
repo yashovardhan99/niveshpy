@@ -2,8 +2,10 @@
 
 import datetime
 import decimal
+import json
 import textwrap
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Literal
 
 import click
@@ -49,6 +51,7 @@ def cli():
 @flags.limit("securities")
 @flags.offset("securities")
 @flags.output("format")
+@flags.output_file()
 @click.option(
     "--total / --no-total",
     is_flag=True,
@@ -61,6 +64,7 @@ def holdings(
     limit: int,
     offset: int,
     format: OutputFormat,
+    output_file: Path | None,
     total: bool,
 ):
     """Generate holdings report.
@@ -112,7 +116,9 @@ def holdings(
             )
 
         items = [HoldingDisplay.from_domain(h) for h in holdings]
-        with capture_for_pager():
+        with capture_for_pager(
+            enabled=output_file is None or format == OutputFormat.TABLE
+        ):
             if format == OutputFormat.TABLE:
                 table_items: Sequence[HoldingDisplay | TotalRow]
                 if total:
@@ -126,21 +132,33 @@ def holdings(
                 if extra_message:
                     display(extra_message)
 
+                if output_file:
+                    display_warning(
+                        "Output file specified, but table format does not support file output. Ignoring --output-file flag."
+                    )
+
                 table = build_table(table_items, HoldingDisplay.columns)
                 display(table)
             elif format == OutputFormat.CSV:
                 csv = build_csv(
                     map(HoldingDisplay.to_csv_dict, items),
                     fields=HoldingDisplay.csv_fields,
+                    output_file=output_file,
                 )
-                display(csv)
+                if csv:
+                    display(csv)
             elif format == OutputFormat.JSON:
-                json = [h.to_json_dict() for h in items]
-                display_json(data=json)
+                data = [h.to_json_dict() for h in items]
+                if output_file:
+                    with output_file.open("w") as f:
+                        json.dump(data, f, indent=4)
+                else:
+                    display_json(data=data)
 
 
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
 @flags.output("format")
+@flags.output_file()
 @click.option(
     "--type",
     "group_by",
@@ -164,6 +182,7 @@ def holdings(
 def allocation(
     queries: tuple[str, ...],
     format: OutputFormat,
+    output_file: Path | None,
     group_by: Literal["both", "type", "category"],
 ):
     """Generate asset allocation report.
@@ -192,24 +211,40 @@ def allocation(
         display_warning(msg)
     else:
         items = map(AllocationDisplay.from_domain, allocations)
-        with capture_for_pager():
+        with capture_for_pager(
+            enabled=output_file is None or format == OutputFormat.TABLE
+        ):
             if format == OutputFormat.TABLE:
                 table = build_table(items, AllocationDisplay.get_columns(group_by))
+
+                if output_file:
+                    display_warning(
+                        "Output file specified, but table format does not support file output. Ignoring --output-file flag."
+                    )
+
                 display(table)
             elif format == OutputFormat.CSV:
                 csv = build_csv(
                     map(AllocationDisplay.to_csv_dict, items),
                     fields=AllocationDisplay.get_csv_fields(group_by),
+                    output_file=output_file,
                 )
-                display(csv)
+                if csv:
+                    display(csv)
             elif format == OutputFormat.JSON:
-                display_json(data=[a.to_json_dict() for a in items])
+                data = [a.to_json_dict() for a in items]
+                if output_file:
+                    with output_file.open("w") as f:
+                        json.dump(data, f, indent=4)
+                else:
+                    display_json(data=data)
 
 
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
 @flags.limit("securities")
 @flags.offset("securities")
 @flags.output("format")
+@flags.output_file()
 @click.option(
     "--total / --no-total",
     is_flag=True,
@@ -222,6 +257,7 @@ def performance(
     limit: int,
     offset: int,
     format: OutputFormat,
+    output_file: Path | None,
     total: bool,
 ):
     """Generate portfolio performance report.
@@ -258,13 +294,19 @@ def performance(
 
     items = map(PerformanceHoldingDisplay.from_domain, result.holdings)
 
-    with capture_for_pager():
+    with capture_for_pager(enabled=output_file is None or format == OutputFormat.TABLE):
         if format == OutputFormat.TABLE:
             table_items: list[PerformanceHoldingDisplay | SectionBreak | TotalRow] = (
                 list(items)
             )
             if extra_message:
                 display(extra_message)
+
+            if output_file:
+                display_warning(
+                    "Output file specified, but table format does not support file output. Ignoring --output-file flag."
+                )
+
             if total:
                 total_row = TotalRow(
                     total=format_percentage(result.totals.xirr),
@@ -279,18 +321,27 @@ def performance(
             csv = build_csv(
                 map(PerformanceHoldingDisplay.to_csv_dict, items),
                 fields=PerformanceHoldingDisplay.csv_fields,
+                output_file=output_file,
             )
-            display(csv)
+            if csv:
+                display(csv)
         elif format == OutputFormat.JSON:
-            display_json(data=[h.to_json_dict() for h in items])
+            data = [h.to_json_dict() for h in items]
+            if output_file:
+                with output_file.open("w") as f:
+                    json.dump(data, f, indent=4)
+            else:
+                display_json(data=data)
 
 
 @click.argument("queries", default=(), required=False, metavar="[<queries>]", nargs=-1)
 @flags.output("format", allowed=[OutputFormat.TABLE, OutputFormat.JSON])
+@flags.output_file()
 @essentials.command(parent=cli, cls=NiveshPyCommand)
 def summary(
     queries: tuple[str, ...],
     format: Literal[OutputFormat.TABLE, OutputFormat.JSON],
+    output_file: Path | None,
 ):
     """Generate portfolio summary report.
 
@@ -367,10 +418,12 @@ def summary(
             top_panel = Panel.fit(
                 metrics,
                 title="Portfolio Summary",
-                border_style="green"
-                if display_result.metrics.total_gains
-                and display_result.metrics.total_gains >= 0
-                else "red",
+                border_style=(
+                    "green"
+                    if display_result.metrics.total_gains
+                    and display_result.metrics.total_gains >= 0
+                    else "red"
+                ),
                 subtitle=" | ".join(subtitle) if subtitle else None,
             )
 
@@ -401,18 +454,29 @@ def summary(
             allocation.add_column("", justify="left", no_wrap=True, width=30)
             for a in display_result.allocation:
                 allocation.add_row(
-                    format_security_category(a.security_category)
-                    if a.security_category
-                    else None,
+                    (
+                        format_security_category(a.security_category)
+                        if a.security_category
+                        else None
+                    ),
                     format_percentage(a.allocation),
                     Bar(1, 0, float(a.allocation), color="white"),
                 )
 
             # Display group
             with capture_for_pager():
+                if output_file:
+                    display_warning(
+                        "Output file specified, but table format does not support file output. Ignoring --output-file flag."
+                    )
                 display(top_panel)
                 display(Padding(holdings, (2, 0)))
                 display(allocation)
         else:
-            with capture_for_pager():
-                display_json(data=display_result.to_json_dict())
+            with capture_for_pager(enabled=output_file is None):
+                data = display_result.to_json_dict()
+                if output_file:
+                    with output_file.open("w") as f:
+                        json.dump(data, f, indent=4)
+                else:
+                    display_json(data=data)

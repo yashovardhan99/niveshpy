@@ -2,7 +2,9 @@
 
 import datetime
 import decimal
+import json
 import textwrap
+from pathlib import Path
 
 import click
 
@@ -36,6 +38,7 @@ def cli() -> None:
 @flags.limit("accounts", default=30)
 @flags.offset("accounts", default=0)
 @flags.output("format")
+@flags.output_file()
 @click.option(
     "--cost",
     is_flag=True,
@@ -49,6 +52,7 @@ def show(
     limit: int,
     offset: int,
     format: OutputFormat,
+    output_file: Path | None,
     cost: bool,
 ) -> None:
     """List all transactions.
@@ -80,27 +84,42 @@ def show(
             else None
         )
     )
-    with capture_for_pager():
+    with capture_for_pager(enabled=output_file is None or format == OutputFormat.TABLE):
         if format == OutputFormat.TABLE:
+            if output_file:
+                display_warning(
+                    "Output file specified, but table format does not support file output. Ignoring --output-file flag."
+                )
             if extra_message:
                 display(extra_message)
             table = build_table(
                 transactions,
-                TransactionDisplay.columns_with_cost
-                if cost
-                else TransactionDisplay.columns,
+                (
+                    TransactionDisplay.columns_with_cost
+                    if cost
+                    else TransactionDisplay.columns
+                ),
             )
             display(table)
         elif format == OutputFormat.CSV:
             csv = build_csv(
                 (t.to_csv_dict(include_cost=cost) for t in transactions),
-                fields=TransactionDisplay.csv_fields_with_cost
-                if cost
-                else TransactionDisplay.csv_fields,
+                fields=(
+                    TransactionDisplay.csv_fields_with_cost
+                    if cost
+                    else TransactionDisplay.csv_fields
+                ),
+                output_file=output_file,
             )
-            display(csv)
+            if csv:
+                display(csv)
         elif format == OutputFormat.JSON:
-            display_json(data=[t.to_json_dict(include_cost=cost) for t in transactions])
+            data = [t.to_json_dict(include_cost=cost) for t in transactions]
+            if output_file:
+                with output_file.open("w") as f:
+                    json.dump(data, f, indent=4)
+            else:
+                display_json(data=data)
 
 
 @command("add")
@@ -188,20 +207,24 @@ def add(
     else:
         display("Adding a new transaction.")
         display(
-            textwrap.dedent("""
+            textwrap.dedent(
+                """
                 Any command-line arguments will be used as defaults.
                 Use arrow keys to navigate, and [i]Enter[/i] to accept defaults.
                 Use [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.
-            """)
+            """
+            )
         )
         while True:
             transaction_date = datetime.datetime.strptime(
                 inquirer.text(
                     message="Transaction Date (YYYY-MM-DD):",
                     validate=inputs.validate_date,
-                    default=transaction_date.strftime("%Y-%m-%d")
-                    if transaction_date
-                    else "",
+                    default=(
+                        transaction_date.strftime("%Y-%m-%d")
+                        if transaction_date
+                        else ""
+                    ),
                 ).execute(),
                 "%Y-%m-%d",
             ).date()
