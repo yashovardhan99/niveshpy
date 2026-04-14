@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Internal) Add new repository function to update security properties.
 - (Internal) Add new Lot accounting service to simplify computations of investment lots and cost-basis.
+- Add new --output-file flag to redirect csv/json output to a file.
 
 ### Changed
 

@@ -2,7 +2,9 @@
 
 import datetime
 import decimal
+import json
 from collections.abc import MutableMapping
+from pathlib import Path
 
 import click
 import click.shell_completion
@@ -57,12 +59,14 @@ def cli():
 @flags.limit("securities", default=30)
 @flags.offset("securities", default=0)
 @flags.output("format")
+@flags.output_file()
 def list_prices(
     ctx: click.Context,
     queries: tuple[str, ...],
     limit: int,
     offset: int,
     format: OutputFormat,
+    output_file: Path | None,
 ) -> None:
     """List latest price for all securities.
 
@@ -99,19 +103,31 @@ def list_prices(
         )
     )
 
-    with capture_for_pager():
+    with capture_for_pager(enabled=output_file is None or format == OutputFormat.TABLE):
         if format == OutputFormat.TABLE:
             table = build_table(prices, PriceDisplay.columns)
+            if output_file:
+                display_warning(
+                    "Output file specified, but table format does not support file output. Ignoring --output-file flag."
+                )
             display(table)
             if extra_message:
                 display(extra_message)
         elif format == OutputFormat.CSV:
             csv = build_csv(
-                map(PriceDisplay.to_csv_dict, prices), fields=PriceDisplay.csv_fields
+                map(PriceDisplay.to_csv_dict, prices),
+                fields=PriceDisplay.csv_fields,
+                output_file=output_file,
             )
-            display(csv)
+            if csv:
+                display(csv)
         elif format == OutputFormat.JSON:
-            display_json(data=[price.to_json_dict() for price in prices])
+            data = [price.to_json_dict() for price in prices]
+            if output_file:
+                with output_file.open("w") as f:
+                    json.dump(data, f, indent=4)
+            else:
+                display_json(data=data)
 
 
 @overrides.command("update")

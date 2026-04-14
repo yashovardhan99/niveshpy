@@ -1,5 +1,7 @@
 """CLI commands for managing securities."""
 
+import json
+from pathlib import Path
 from textwrap import dedent
 
 import click
@@ -37,6 +39,7 @@ def cli() -> None:
 @flags.limit("securities", default=30)
 @flags.offset("securities", default=0)
 @flags.output("format")
+@flags.output_file()
 @click.pass_context
 def show(
     ctx: click.Context,
@@ -44,6 +47,7 @@ def show(
     limit: int,
     offset: int,
     format: OutputFormat,
+    output_file: Path | None,
 ) -> None:
     """List all securities.
 
@@ -72,20 +76,33 @@ def show(
             else None
         )
     )
-    with capture_for_pager():
+    with capture_for_pager(enabled=output_file is None or format == OutputFormat.TABLE):
         if format == OutputFormat.TABLE:
             if extra_message:
                 display(extra_message)
+
+            if output_file:
+                display_warning(
+                    "Output file specified, but table format does not support file output. Ignoring --output-file flag."
+                )
+
             table = build_table(securities, SecurityDisplay.columns)
             display(table)
         elif format == OutputFormat.CSV:
             csv = build_csv(
                 map(SecurityDisplay.to_csv_dict, securities),
                 fields=SecurityDisplay.csv_fields,
+                output_file=output_file,
             )
-            display(csv)
+            if csv:
+                display(csv)
         elif format == OutputFormat.JSON:
-            display_json(data=[sec.to_json_dict() for sec in securities])
+            data = [sec.to_json_dict() for sec in securities]
+            if output_file:
+                with output_file.open("w") as f:
+                    json.dump(data, f, indent=4)
+            else:
+                display_json(data=data)
 
 
 @command()
@@ -158,11 +175,13 @@ def add(
 
     display("Adding a new security.")
     display(
-        dedent("""
+        dedent(
+            """
             Any command-line arguments will be used as defaults.
             Use arrow keys to navigate, and [i]Enter[/i] to accept defaults.
             Use [i]Ctrl+C[/i] or [i]Ctrl+D[/i] to quit.
-        """)
+        """
+        )
     )
     inquirer_style = get_style({}, style_override=state.no_color)
 

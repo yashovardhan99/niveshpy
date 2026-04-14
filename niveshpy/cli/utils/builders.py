@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -50,13 +51,34 @@ def build_table(
     return table
 
 
-def build_csv(items: Iterable[Mapping[str, Any]], *, fields: Sequence[str]) -> str:
-    """Build a CSV string from an iterable of items."""
+def build_csv(
+    items: Iterable[Mapping[str, Any]],
+    *,
+    fields: Sequence[str],
+    output_file: Path | None = None,
+) -> str | None:
+    """Build CSV output from an iterable of items.
+
+    Args:
+        items: The rows to write to the CSV output.
+        fields: The CSV field names to use for the header and row ordering.
+        output_file: The file path to write the CSV output to. If not provided,
+            the CSV content is built in memory and returned as a string.
+
+    Returns:
+        The CSV content as a string when ``output_file`` is not provided;
+        otherwise, ``None`` after writing the CSV data to ``output_file``.
+    """
     import csv
     from io import StringIO
 
-    f = StringIO()
-    writer = csv.DictWriter(f, fieldnames=fields)
-    writer.writeheader()
-    writer.writerows(items)
-    return f.getvalue()
+    # If output_file is provided, write directly to the file.
+    # Otherwise, build the CSV in memory and return it as a string.
+    with output_file.open("w", newline="") if output_file else StringIO() as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(items)
+        if isinstance(f, StringIO):
+            return f.getvalue()
+
+    return None
