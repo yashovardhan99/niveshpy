@@ -318,6 +318,41 @@ class MockTransactionRepository:
             return True
         return False
 
+    def overwrite_transactions_in_date_range_for_accounts(
+        self,
+        transactions: Sequence[TransactionCreate],
+        date_range: tuple[datetime.date, datetime.date],
+        account_ids: Sequence[int],
+    ) -> int:
+        """Overwrite transactions for given accounts in a specified date range with new transactions."""
+        start_date, end_date = date_range
+        filtered_transactions = [
+            transaction
+            for transaction in transactions
+            if transaction.account_id in account_ids
+            and start_date <= transaction.transaction_date <= end_date
+        ]
+
+        if not filtered_transactions:
+            return 0
+
+        affected_account_ids = {
+            transaction.account_id for transaction in filtered_transactions
+        }
+        transaction_ids_to_delete = [
+            existing_transaction.id
+            for existing_transaction in self._transactions.values()
+            if existing_transaction.account_id in affected_account_ids
+            and start_date <= existing_transaction.transaction_date <= end_date
+        ]
+        for transaction_id in transaction_ids_to_delete:
+            self.delete_transaction_by_id(transaction_id)
+
+        for transaction in filtered_transactions:
+            self.insert_transaction(transaction)
+
+        return len(filtered_transactions)
+
 
 class MockPriceRepository:
     """Mock repository implementation for managing price data."""
