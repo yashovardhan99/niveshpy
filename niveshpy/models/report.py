@@ -135,7 +135,7 @@ class PerformanceHolding:
 class PerformanceResult:
     """Result of portfolio performance computation."""
 
-    holdings: list[PerformanceHolding]
+    holdings: Sequence[PerformanceHolding]
     totals: PortfolioTotals
 
 

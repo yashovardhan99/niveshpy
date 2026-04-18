@@ -1,9 +1,12 @@
 """Service layer for generating financial reports."""
 
+import datetime
+import heapq
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 
+from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field
 from niveshpy.core.query.prepare import get_prepared_filters_from_queries
 from niveshpy.domain.repositories import (
@@ -18,8 +21,16 @@ from niveshpy.domain.repositories.transaction_repository import (
     TransactionSortOrder,
 )
 from niveshpy.domain.services import LotAccountingService
-from niveshpy.exceptions import InvalidInputError
-from niveshpy.models.report import Holding
+from niveshpy.exceptions import InvalidInputError, OperationError
+from niveshpy.models.report import (
+    Holding,
+    PerformanceHolding,
+    PerformanceResult,
+    PortfolioTotals,
+    SummaryResult,
+)
+from niveshpy.services.helpers import compute_xirr
+from niveshpy.services.report import get_allocation
 
 
 @dataclass(slots=True, frozen=True)
@@ -35,11 +46,11 @@ class ReportService:
     def get_holdings(
         self,
         queries: tuple[str, ...],
-        limit: int,
+        limit: int | None = None,
         offset: int = 0,
     ) -> Sequence[Holding]:
         """Get a list of holdings based on the provided queries and pagination parameters."""
-        if not limit >= 1:
+        if limit is not None and not limit >= 1:
             raise InvalidInputError(limit, "Limit must be at least 1")
         if not offset >= 0:
             raise InvalidInputError(offset, "Offset cannot be negative")
@@ -96,4 +107,149 @@ class ReportService:
             )
         # Sort by amount desc, then account id asc, then security key asc for deterministic pagination
         holdings.sort(key=lambda h: (-h.amount, h.account.id, h.security.key))
-        return holdings[offset : offset + limit]
+        return (
+            holdings[offset : offset + limit]
+            if limit is not None
+            else holdings[offset:]
+        )
+
+    def get_performance(
+        self, queries: tuple[str, ...], limit: int | None = None, offset: int = 0
+    ) -> PerformanceResult:
+        """Get a list of holdings with performance metrics based on the provided queries and pagination parameters."""
+        holdings = self.get_holdings(
+            queries, limit=None
+        )  # Get all holdings matching filters without pagination
+        if not holdings:
+            # Return empty performance result if there are no holdings -
+            # this avoids unnecessary calculations and also ensures
+            # we return zero totals instead of None for an empty portfolio
+            return PerformanceResult(
+                holdings=[],
+                totals=PortfolioTotals(
+                    Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0"), None, None
+                ),
+            )
+
+        totals = self._compute_portfolio_totals(holdings)
+        # We can apply pagination after computing totals since performance metrics
+        # are based on the entire portfolio, not just the paginated subset
+
+        holdings = (
+            holdings[offset : offset + limit]
+            if limit is not None
+            else holdings[offset:]
+        )
+        if not holdings:
+            return PerformanceResult(holdings=[], totals=totals)
+            # If pagination parameters result in no holdings, return empty list
+            # but still include totals for the entire portfolio
+
+        filters = get_prepared_filters_from_queries(queries, Field.SECURITY)
+        transactions = self.transaction_repository.find_transactions(
+            filters,
+            fetch_profile=TransactionFetchProfile.MINIMAL,
+            sort_order=TransactionSortOrder.DATE_ASC_ID_ASC,
+        )
+        txn_groups = {}
+        for txn in transactions:
+            key = (txn.security_key, txn.account_id)
+            txn_groups.setdefault(key, []).append(txn)
+
+        totals.xirr = (
+            compute_xirr(transactions, totals.total_current_value, totals.last_updated)
+            if transactions
+            else None
+        )
+
+        performance_holdings = []
+        for holding in holdings:
+            key = (holding.security.key, holding.account.id)
+            holding_transactions = txn_groups.get(key, [])
+            xirr = compute_xirr(holding_transactions, holding.amount, holding.date)
+            performance_holdings.append(PerformanceHolding.from_holding(holding, xirr))
+
+        return PerformanceResult(holdings=performance_holdings, totals=totals)
+
+    def get_summary(self, queries: tuple[str, ...], top_n: int = 5) -> SummaryResult:
+        """Generate portfolio summary combining metrics, top holdings, and allocation."""
+        logger.info("Generating portfolio summary (top_n=%d)", top_n)
+        # Get all holdings and compute totals for summary metrics
+        result = self.get_performance(queries)
+
+        # Get top N holdings by current value for summary display
+        top_holdings = heapq.nlargest(
+            top_n, result.holdings, key=lambda h: h.current_value
+        )
+
+        # Get allocation by category for summary display (could also do by type or both if desired)
+        allocation = get_allocation(queries, group_by="category")
+
+        return SummaryResult(
+            as_of=result.holdings[0].date if result.holdings else None,
+            metrics=result.totals,  # PortfolioTotals already has everything
+            top_holdings=top_holdings,
+            allocation=allocation,
+        )
+
+    def _compute_portfolio_totals(self, holdings: Sequence[Holding]) -> PortfolioTotals:
+        """Compute portfolio-level aggregate totals from holdings.
+
+        Args:
+            holdings: List of Holding models with amount and invested.
+
+        Returns:
+            PortfolioTotals with aggregated values.
+
+        Raises:
+            OperationError: If no holdings are provided.
+        """
+        logger.debug("Computing portfolio totals for %d holdings", len(holdings))
+        if not holdings:
+            raise OperationError("No holdings available for portfolio totals")
+
+        quantize_amt = Decimal("0.01")
+
+        total_current_value = sum((h.amount for h in holdings), Decimal(0)).quantize(
+            quantize_amt
+        )
+
+        known_invested = [h.invested for h in holdings if h.invested is not None]
+        total_invested: Decimal | None = (
+            sum(known_invested, Decimal(0)).quantize(quantize_amt)
+            if known_invested
+            else None
+        )
+
+        # Compute gains only from holdings with known cost basis
+        known_holdings = [h for h in holdings if h.invested is not None]
+        total_gains: Decimal | None = None
+        if total_invested is not None:
+            known_current = sum(
+                (h.amount for h in known_holdings), Decimal(0)
+            ).quantize(quantize_amt)
+            total_gains = (known_current - total_invested).quantize(quantize_amt)
+
+        gains_percentage: Decimal | None = (
+            (total_gains / total_invested).quantize(Decimal("0.0001"))
+            if total_gains is not None
+            and total_invested is not None
+            and total_invested > 0
+            else None
+        )
+
+        last_update: datetime.date = max(h.date for h in holdings)
+
+        totals = PortfolioTotals(
+            total_current_value=total_current_value,
+            total_invested=total_invested,
+            total_gains=total_gains,
+            gains_percentage=gains_percentage,
+            last_updated=last_update,
+        )
+        logger.debug(
+            "Portfolio totals: invested=%s, current=%s",
+            totals.total_invested,
+            totals.total_current_value,
+        )
+        return totals
