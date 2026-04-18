@@ -55,7 +55,9 @@ class ReportService:
         if not offset >= 0:
             raise InvalidInputError(offset, "Offset cannot be negative")
 
-        filters = get_prepared_filters_from_queries(queries, Field.SECURITY)
+        filters = get_prepared_filters_from_queries(
+            queries, Field.SECURITY, include_fields={Field.SECURITY, Field.ACCOUNT}
+        )
         holding_unit_rows = self.transaction_repository.find_holding_units(filters)
         holding_unit_map = {
             (row.security_key, row.account_id): row for row in holding_unit_rows
@@ -145,7 +147,9 @@ class ReportService:
             # If pagination parameters result in no holdings, return empty list
             # but still include totals for the entire portfolio
 
-        filters = get_prepared_filters_from_queries(queries, Field.SECURITY)
+        filters = get_prepared_filters_from_queries(
+            queries, Field.SECURITY, include_fields={Field.SECURITY, Field.ACCOUNT}
+        )
         transactions = self.transaction_repository.find_transactions(
             filters,
             fetch_profile=TransactionFetchProfile.MINIMAL,
@@ -156,17 +160,32 @@ class ReportService:
             key = (txn.security_key, txn.account_id)
             txn_groups.setdefault(key, []).append(txn)
 
-        totals.xirr = (
-            compute_xirr(transactions, totals.total_current_value, totals.last_updated)
-            if transactions
-            else None
-        )
+        try:
+            totals.xirr = (
+                compute_xirr(
+                    transactions, totals.total_current_value, totals.last_updated
+                )
+                if transactions
+                else None
+            )
+        except OperationError as exc:
+            logger.warning("Could not compute portfolio XIRR: %s", exc)
+            totals.xirr = None
 
         performance_holdings = []
         for holding in holdings:
             key = (holding.security.key, holding.account.id)
             holding_transactions = txn_groups.get(key, [])
-            xirr = compute_xirr(holding_transactions, holding.amount, holding.date)
+            try:
+                xirr = compute_xirr(holding_transactions, holding.amount, holding.date)
+            except OperationError as exc:
+                logger.warning(
+                    "Could not compute XIRR for holding %s in account %s: %s",
+                    holding.security.key,
+                    holding.account.name,
+                    exc,
+                )
+                xirr = None
             performance_holdings.append(PerformanceHolding.from_holding(holding, xirr))
 
         return PerformanceResult(holdings=performance_holdings, totals=totals)
