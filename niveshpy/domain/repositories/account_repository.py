@@ -47,6 +47,16 @@ class AccountRepository(Protocol):
             A sequence of Account objects matching the filters and pagination criteria.
         """
 
+    def find_accounts_by_ids(self, account_ids: Sequence[int]) -> Sequence[Account]:
+        """Find accounts matching the given sequence of IDs.
+
+        Args:
+            account_ids: A sequence of account IDs to search for.
+
+        Returns:
+            A sequence of Account objects matching the given IDs.
+        """
+
     def find_accounts_by_name_and_institutions(
         self, names: Sequence[str], institutions: Sequence[str]
     ) -> Sequence[Account]:

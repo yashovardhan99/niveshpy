@@ -69,6 +69,22 @@ class MockAccountRepository:
         account_ids = sorted(result)[offset : offset + limit if limit else None]
         return [self._accounts[account_id] for account_id in account_ids]
 
+    def find_accounts_by_ids(self, account_ids: Sequence[int]) -> Sequence[Account]:
+        """Find accounts matching the given sequence of IDs.
+
+        Args:
+            account_ids: A sequence of account IDs to search for.
+
+        Returns:
+            A sequence of Account objects matching the given IDs.
+        """
+        results = []
+        for account_id in account_ids:
+            account = self.get_account_by_id(account_id)
+            if account:
+                results.append(account)
+        return results
+
     def find_accounts_by_name_and_institutions(self, names, institutions):
         """Find accounts matching the given name-institution pairs."""
         results = []
