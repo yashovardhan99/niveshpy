@@ -155,7 +155,7 @@ def get_holdings(queries: tuple[str, ...], limit: int, offset: int) -> list[Hold
                     date=as_of_date,
                     units=total_units.quantize(decimal.Decimal("0.001")),
                     amount=current_value,
-                    invested=invested,
+                    invested=invested if invested is not None else current_value,
                 )
             )
 

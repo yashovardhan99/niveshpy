@@ -29,6 +29,7 @@ from niveshpy.cli.utils.display import (
 from niveshpy.cli.utils.formatters import format_decimal, format_percentage
 from niveshpy.cli.utils.models import OutputFormat, SectionBreak, TotalRow
 from niveshpy.cli.utils.overrides import NiveshPyCommand
+from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.core.query import tokens
 from niveshpy.core.query.tokenizer import QueryLexer
@@ -59,7 +60,9 @@ def cli():
     default=True,
 )
 @essentials.command(parent=cli, cls=NiveshPyCommand)
+@click.pass_context
 def holdings(
+    ctx: click.Context,
     queries: tuple[str, ...],
     limit: int,
     offset: int,
@@ -77,9 +80,10 @@ def holdings(
 
     # Generate report
     with loading_spinner("Generating holdings report..."):
-        from niveshpy.services.report import get_holdings
-
-        holdings = get_holdings(queries, limit, offset)
+        state = ctx.ensure_object(AppState)
+        holdings = state.app.report_service.get_holdings(
+            queries, limit=limit, offset=offset
+        )
 
     # Warn if date filter is used — invested amounts don't respect date filters
     if _has_date_query(queries):

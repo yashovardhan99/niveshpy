@@ -1112,8 +1112,8 @@ def _make_holding(
         type=SecurityType.MUTUAL_FUND,
         category=SecurityCategory.EQUITY,
     )
-    inv = Decimal(invested) if invested is not None else None
     amt = Decimal(amount)
+    inv = Decimal(invested) if invested is not None else amt
     return Holding(
         account=account,
         security=security,
@@ -1147,9 +1147,15 @@ class TestComputePortfolioTotals:
         ]
         result = compute_portfolio_totals(holdings)
         assert result.total_current_value == Decimal("23000.00")
-        assert result.total_invested is None
-        assert result.total_gains is None
-        assert result.gains_percentage is None
+        assert result.total_invested == Decimal(
+            "23000.00"
+        )  # Should default to amount when invested is None
+        assert result.total_gains == Decimal(
+            "0.00"
+        )  # Gains should be 0 when invested defaults to amount
+        assert result.gains_percentage == Decimal(
+            "0.0000"
+        )  # Gains percentage should be 0 when gains are 0
 
     def test_mixed_invested(self):
         """Mix of holdings with and without invested computes gains from known only."""
@@ -1159,8 +1165,10 @@ class TestComputePortfolioTotals:
         ]
         result = compute_portfolio_totals(holdings)
         assert result.total_current_value == Decimal("23000.00")
-        assert result.total_invested == Decimal("10000.00")
-        # gains computed only from SEC1 (known invested): 15000 - 10000 = 5000
+        assert result.total_invested == Decimal(
+            "18000.00"
+        )  # 10000 from SEC1 + 8000 from SEC2 (defaulted)
+        # gains computed only from SEC1 (known invested): 23000 - 18000 = 5000
         assert result.total_gains == Decimal("5000.00")
 
     def test_empty_holdings_raises(self):

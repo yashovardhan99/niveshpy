@@ -24,7 +24,7 @@ class Holding:
     security: Security
     date: datetime.date
     units: decimal.Decimal
-    invested: decimal.Decimal | None
+    invested: decimal.Decimal
     amount: decimal.Decimal
 
 

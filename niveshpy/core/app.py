@@ -15,6 +15,7 @@ from niveshpy.domain.repositories import (
     TransactionRepository,
 )
 from niveshpy.domain.services import LotAccountingService
+from niveshpy.services.report_service import ReportService
 
 if TYPE_CHECKING:
     from niveshpy.models.parser import Parser
@@ -126,6 +127,17 @@ class Application:
 
             self._price = PriceService(self.price_repository, self.security_repository)
         return self._price
+
+    @functools.cached_property
+    def report_service(self) -> ReportService:
+        """Return the report service."""
+        return ReportService(
+            transaction_repository=self.transaction_repository,
+            price_repository=self.price_repository,
+            security_repository=self.security_repository,
+            account_repository=self.account_repository,
+            lot_accounting_service=LotAccountingService(),
+        )
 
 
 @dataclass
