@@ -3,11 +3,12 @@
 import datetime
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import ClassVar
 
 from sqlalchemy.orm import contains_eager, joinedload, raiseload, selectinload
 from sqlalchemy.sql.dml import ReturningInsert
-from sqlmodel import col, delete, insert, select
+from sqlmodel import col, delete, func, insert, select
 from sqlmodel.sql._expression_select_cls import SelectOfScalar
 
 from niveshpy.core.logging import logger
@@ -20,6 +21,7 @@ from niveshpy.domain.repositories.transaction_repository import (
 )
 from niveshpy.exceptions import DatabaseError, OperationError
 from niveshpy.models.account import Account
+from niveshpy.models.report import HoldingUnitRow
 from niveshpy.models.security import Security
 from niveshpy.models.transaction import Transaction, TransactionCreate
 
@@ -336,3 +338,55 @@ class SqliteTransactionRepository:
                 f"Overwrote transactions in date range {date_range} for accounts {account_ids}. Inserted {result} transactions."
             )
             return result
+
+    def find_holding_units(
+        self, filters: Iterable[FilterNode]
+    ) -> Sequence[HoldingUnitRow]:
+        """Find holding units matching the given filters.
+
+        Args:
+            filters: An iterable of FilterNode objects to filter holding units.
+
+        Returns:
+            A sequence of HoldingUnitRow objects matching the given filters.
+        """
+        where_clauses = get_sqlalchemy_filters(
+            filters,
+            {
+                Field.ACCOUNT: [Account.name, Account.institution],
+                Field.SECURITY: [
+                    Security.key,
+                    Security.name,
+                    Security.type,
+                    Security.category,
+                ],
+            },
+        )
+        filter_fields = get_fields_from_filters(filters)
+
+        holding_units_stmt = select(
+            col(Transaction.security_key),
+            col(Transaction.account_id),
+            col(func.sum(Transaction.units).label("total_units")),
+            col(func.max(Transaction.transaction_date).label("last_transaction_date")),
+        )
+        if Field.SECURITY in filter_fields:
+            holding_units_stmt = holding_units_stmt.join(
+                Security, col(Security.key) == col(Transaction.security_key)
+            )
+        if Field.ACCOUNT in filter_fields:
+            holding_units_stmt = holding_units_stmt.join(
+                Account, col(Account.id) == col(Transaction.account_id)
+            )
+        holding_units_stmt = (
+            holding_units_stmt.where(*where_clauses)
+            .group_by(col(Transaction.account_id), col(Transaction.security_key))
+            .having(func.sum(Transaction.units) >= Decimal("0.001"))
+        )
+        with get_session() as session:
+            results = session.exec(holding_units_stmt).all()
+            holding_unit_rows = [HoldingUnitRow(*result) for result in results]
+            logger.debug(
+                f"Found {len(holding_unit_rows)} holding unit rows matching filters."
+            )
+            return holding_unit_rows

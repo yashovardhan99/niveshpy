@@ -6,6 +6,7 @@ from enum import Enum, auto
 from typing import Protocol
 
 from niveshpy.core.query.ast import FilterNode
+from niveshpy.models.report import HoldingUnitRow
 from niveshpy.models.transaction import Transaction, TransactionCreate
 
 
@@ -136,4 +137,16 @@ class TransactionRepository(Protocol):
 
         Returns:
             The number of transactions successfully inserted.
+        """
+
+    def find_holding_units(
+        self, filters: Iterable[FilterNode]
+    ) -> Sequence[HoldingUnitRow]:
+        """Find holding units matching the given filters.
+
+        Args:
+            filters: An iterable of FilterNode objects to filter holding units.
+
+        Returns:
+            A sequence of HoldingUnitRow objects matching the filters.
         """

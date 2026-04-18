@@ -36,6 +36,17 @@ HOLDING_COLUMN_MAPPINGS_PRICE: dict[ast.Field, list] = {
     ast.Field.SECURITY: [Security.key, Security.name, Security.category, Security.type],
 }
 
+
+@dataclass(slots=True, frozen=True)
+class HoldingUnitRow:
+    """Data class for a single row of holding units used in report computations."""
+
+    security_key: str
+    account_id: int
+    total_units: decimal.Decimal
+    last_transaction_date: datetime.date
+
+
 # Portfolio Totals
 
 

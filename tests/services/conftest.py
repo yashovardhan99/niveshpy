@@ -18,6 +18,7 @@ from niveshpy.exceptions import (
 )
 from niveshpy.models.account import Account
 from niveshpy.models.price import Price, PriceCreate
+from niveshpy.models.report import HoldingUnitRow
 from niveshpy.models.security import Security
 from niveshpy.models.transaction import Transaction, TransactionCreate
 
@@ -352,6 +353,14 @@ class MockTransactionRepository:
             self.insert_transaction(transaction)
 
         return len(filtered_transactions)
+
+    def find_holding_units(
+        self, filters: Iterable[FilterNode]
+    ) -> Sequence[HoldingUnitRow]:
+        """Find holding units matching the given filters."""
+        raise NotImplementedError(
+            "Finding holding units is not implemented in the mock repository."
+        )
 
 
 class MockPriceRepository:
