@@ -367,8 +367,8 @@ class SqliteTransactionRepository:
         holding_units_stmt = select(
             col(Transaction.security_key),
             col(Transaction.account_id),
-            col(func.sum(Transaction.units).label("total_units")),
-            col(func.max(Transaction.transaction_date).label("last_transaction_date")),
+            func.sum(Transaction.units).label("total_units"),
+            func.max(Transaction.transaction_date).label("last_transaction_date"),
         )
         if Field.SECURITY in filter_fields:
             holding_units_stmt = holding_units_stmt.join(
