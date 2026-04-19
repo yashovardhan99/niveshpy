@@ -2,6 +2,7 @@
 
 import datetime
 import decimal
+import math
 from collections.abc import Sequence
 from decimal import Decimal
 
@@ -128,5 +129,10 @@ def compute_xirr(
         rate = float(newton(_xnpv, x0=0.1, tol=1e-12, maxiter=1000))
     except (RuntimeError, ValueError, ZeroDivisionError, OverflowError) as exc:
         raise OperationError("Could not compute XIRR — no solution found") from exc
+
+    if not math.isfinite(rate):
+        raise OperationError(
+            "Could not compute XIRR — solver returned non-finite result"
+        )
 
     return Decimal(str(rate)).quantize(Decimal("0.0001"))

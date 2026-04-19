@@ -5,6 +5,7 @@ import heapq
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Literal
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field
@@ -23,6 +24,7 @@ from niveshpy.domain.repositories.transaction_repository import (
 from niveshpy.domain.services import LotAccountingService
 from niveshpy.exceptions import InvalidInputError, OperationError
 from niveshpy.models.report import (
+    Allocation,
     Holding,
     PerformanceHolding,
     PerformanceResult,
@@ -30,7 +32,6 @@ from niveshpy.models.report import (
     SummaryResult,
 )
 from niveshpy.services.helpers import compute_xirr
-from niveshpy.services.report import get_allocation
 
 
 @dataclass(slots=True, frozen=True)
@@ -129,7 +130,7 @@ class ReportService:
             return PerformanceResult(
                 holdings=[],
                 totals=PortfolioTotals(
-                    Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0"), None, None
+                    Decimal("0"), Decimal("0"), Decimal("0"), None, None, None
                 ),
             )
 
@@ -202,7 +203,7 @@ class ReportService:
         )
 
         # Get allocation by category for summary display (could also do by type or both if desired)
-        allocation = get_allocation(queries, group_by="category")
+        allocation = self.get_allocation(queries, group_by="category")
 
         return SummaryResult(
             as_of=result.holdings[0].date if result.holdings else None,
@@ -210,6 +211,15 @@ class ReportService:
             top_holdings=top_holdings,
             allocation=allocation,
         )
+
+    def get_allocation(
+        self,
+        queries: tuple[str, ...],
+        group_by: Literal["both", "type", "category"] = "category",
+    ) -> Sequence[Allocation]:
+        """Get allocation breakdown grouped by type, category, or both."""
+        filters = get_prepared_filters_from_queries(queries, Field.SECURITY)
+        return self.transaction_repository.find_allocation(filters, group_by)
 
     def _compute_portfolio_totals(self, holdings: Sequence[Holding]) -> PortfolioTotals:
         """Compute portfolio-level aggregate totals from holdings.

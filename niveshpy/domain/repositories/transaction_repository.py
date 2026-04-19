@@ -3,10 +3,10 @@
 import datetime
 from collections.abc import Iterable, Sequence
 from enum import Enum, auto
-from typing import Protocol
+from typing import Literal, Protocol
 
 from niveshpy.core.query.ast import FilterNode
-from niveshpy.models.report import HoldingUnitRow
+from niveshpy.models.report import Allocation, HoldingUnitRow
 from niveshpy.models.transaction import Transaction, TransactionCreate
 
 
@@ -149,4 +149,19 @@ class TransactionRepository(Protocol):
 
         Returns:
             A sequence of HoldingUnitRow objects matching the filters.
+        """
+
+    def find_allocation(
+        self,
+        filters: Iterable[FilterNode],
+        group_by: Literal["category", "type", "both"],
+    ) -> Sequence[Allocation]:
+        """Find allocations matching the given filters.
+
+        Args:
+            filters: An iterable of FilterNode objects to filter allocations.
+            group_by: A string indicating how to group the allocations ("category", "type", or "both").
+
+        Returns:
+            A sequence of Allocation objects matching the filters and grouped according to the specified criteria.
         """

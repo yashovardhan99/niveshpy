@@ -183,7 +183,9 @@ def holdings(
     hidden=True,
 )
 @essentials.command(parent=cli, cls=NiveshPyCommand)
+@click.pass_context
 def allocation(
+    ctx: click.Context,
     queries: tuple[str, ...],
     format: OutputFormat,
     output_file: Path | None,
@@ -203,9 +205,10 @@ def allocation(
     )
     # Generate report
     with loading_spinner("Generating allocation report..."):
-        from niveshpy.services.report import get_allocation
-
-        allocations = get_allocation(queries, group_by=group_by)
+        state = ctx.ensure_object(AppState)
+        allocations = state.app.report_service.get_allocation(
+            queries, group_by=group_by
+        )
     if len(allocations) == 0:
         msg = (
             "No allocations found.\n"
