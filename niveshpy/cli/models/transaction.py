@@ -12,6 +12,7 @@ from niveshpy.cli.models.account import AccountDisplay
 from niveshpy.cli.models.security import SecurityDisplay
 from niveshpy.cli.utils.formatters import format_date, format_datetime, format_decimal
 from niveshpy.cli.utils.models import Column
+from niveshpy.models.account import AccountPublic
 
 if TYPE_CHECKING:
     from niveshpy.models.transaction import (
@@ -113,7 +114,9 @@ class TransactionDisplay:
             amount=transaction.amount,
             units=transaction.units,
             security=SecurityDisplay.from_domain(transaction.security),
-            account=AccountDisplay.from_domain(transaction.account),
+            account=AccountDisplay.from_domain(
+                AccountPublic(**transaction.account.model_dump())
+            ),
             created=transaction.created,
             source=transaction.properties.get("source"),
             cost=getattr(transaction, "cost", None),

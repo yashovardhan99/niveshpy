@@ -5,8 +5,7 @@ import decimal
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from niveshpy.core.query import ast
-from niveshpy.models.account import Account
+from niveshpy.models.account import AccountPublic
 from niveshpy.models.security import (
     Security,
     SecurityCategory,
@@ -20,21 +19,12 @@ from niveshpy.models.security import (
 class Holding:
     """Data class for a single holding used in report computations."""
 
-    account: Account
+    account: AccountPublic
     security: Security
     date: datetime.date
     units: decimal.Decimal
     invested: decimal.Decimal
     amount: decimal.Decimal
-
-
-HOLDING_COLUMN_MAPPINGS_TXN: dict[ast.Field, list] = {
-    ast.Field.SECURITY: [Security.key, Security.name, Security.category, Security.type],
-    ast.Field.ACCOUNT: [Account.name, Account.institution],
-}
-HOLDING_COLUMN_MAPPINGS_PRICE: dict[ast.Field, list] = {
-    ast.Field.SECURITY: [Security.key, Security.name, Security.category, Security.type],
-}
 
 
 @dataclass(slots=True, frozen=True)
@@ -90,7 +80,7 @@ class Allocation:
 class PerformanceHolding:
     """Data class for per-holding performance data used in reports."""
 
-    account: Account
+    account: AccountPublic
     security: Security
     date: datetime.date
     current_value: decimal.Decimal

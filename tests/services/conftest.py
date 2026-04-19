@@ -16,7 +16,7 @@ from niveshpy.exceptions import (
     QuerySyntaxError,
     ResourceNotFoundError,
 )
-from niveshpy.models.account import Account
+from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.models.price import Price, PriceCreate
 from niveshpy.models.report import Allocation, HoldingUnitRow
 from niveshpy.models.security import Security
@@ -28,24 +28,28 @@ class MockAccountRepository:
 
     def __init__(self):
         """Initialize the test account repository."""
-        self._accounts = {}
+        self._accounts: dict[int, AccountPublic] = {}
         self._next_id = 1
 
-    def get_account_by_id(self, account_id):
+    def get_account_by_id(self, account_id: int) -> AccountPublic | None:
         """Retrieve an account by its ID."""
         return self._accounts.get(account_id)
 
-    def get_account_by_name_and_institution(self, name, institution):
+    def get_account_by_name_and_institution(
+        self, name: str, institution: str
+    ) -> AccountPublic | None:
         """Retrieve an account by its name and institution."""
         for account in self._accounts.values():
             if account.name == name and account.institution == institution:
                 return account
         return None
 
-    def find_accounts(self, filters: Iterable[FilterNode], limit=None, offset=0):
+    def find_accounts(
+        self, filters: Iterable[FilterNode], limit: int | None = None, offset: int = 0
+    ) -> Sequence[AccountPublic]:
         """Find accounts matching the given filters with optional pagination."""
         if not filters:
-            return sorted(self._accounts.values(), key=lambda a: a.id)[
+            return sorted(self._accounts.values(), key=lambda account: account.id)[
                 offset : offset + limit if limit else None
             ]
         for filter in filters:
@@ -66,10 +70,14 @@ class MockAccountRepository:
             ]
             result.update(matching_accounts)
 
-        account_ids = sorted(result)[offset : offset + limit if limit else None]
-        return [self._accounts[account_id] for account_id in account_ids]
+        accounts = sorted(result, key=lambda account_id: account_id)[
+            offset : offset + limit if limit else None
+        ]
+        return self.find_accounts_by_ids(accounts)
 
-    def find_accounts_by_ids(self, account_ids: Sequence[int]) -> Sequence[Account]:
+    def find_accounts_by_ids(
+        self, account_ids: Sequence[int]
+    ) -> Sequence[AccountPublic]:
         """Find accounts matching the given sequence of IDs.
 
         Args:
@@ -85,7 +93,9 @@ class MockAccountRepository:
                 results.append(account)
         return results
 
-    def find_accounts_by_name_and_institutions(self, names, institutions):
+    def find_accounts_by_name_and_institutions(
+        self, names: Sequence[str], institutions: Sequence[str]
+    ) -> Sequence[AccountPublic]:
         """Find accounts matching the given name-institution pairs."""
         results = []
         pairs = set(zip(names, institutions, strict=True))
@@ -94,18 +104,22 @@ class MockAccountRepository:
                 results.append(account)
         return results
 
-    def insert_account(self, account):
+    def insert_account(self, account: AccountCreate) -> int | None:
         """Insert a new account into the repository."""
         if self.get_account_by_name_and_institution(account.name, account.institution):
             return None  # Simulate unique constraint violation by returning None
         account_id = self._next_id
-        self._accounts[account_id] = Account(
-            id=account_id, **account.model_dump(exclude={"id"})
+        self._accounts[account_id] = AccountPublic(
+            id=account_id,
+            name=account.name,
+            institution=account.institution,
+            properties=account.properties,
+            created_at=datetime.datetime.now(),
         )
         self._next_id += 1
         return account_id
 
-    def insert_multiple_accounts(self, accounts):
+    def insert_multiple_accounts(self, accounts: Iterable[AccountCreate]) -> int:
         """Insert multiple accounts into the repository."""
         count = 0
         for account in accounts:
@@ -114,7 +128,7 @@ class MockAccountRepository:
                 count += 1
         return count
 
-    def delete_account_by_id(self, account_id):
+    def delete_account_by_id(self, account_id: int) -> bool:
         """Delete an account by its ID."""
         if account_id in self._accounts:
             self._accounts.pop(account_id)

@@ -8,7 +8,7 @@ import pytest
 
 from niveshpy.domain.services import LotAccountingService
 from niveshpy.exceptions import InvalidInputError, OperationError
-from niveshpy.models.account import Account
+from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.models.price import Price, PriceCreate
 from niveshpy.models.report import (
     Allocation,
@@ -78,12 +78,14 @@ def report_service(
 
 
 @pytest.fixture
-def sample_accounts(account_repository: MockAccountRepository) -> list[Account]:
+def sample_accounts(
+    account_repository: MockAccountRepository,
+) -> Sequence[AccountPublic]:
     """Create sample accounts for testing."""
     accounts = [
-        Account(name="Savings Account", institution="HDFC Bank"),
-        Account(name="Investment Account", institution="ICICI"),
-        Account(name="Pension Account", institution="SBI"),
+        AccountCreate(name="Savings Account", institution="HDFC Bank"),
+        AccountCreate(name="Investment Account", institution="ICICI"),
+        AccountCreate(name="Pension Account", institution="SBI"),
     ]
     account_repository.insert_multiple_accounts(accounts)
     return account_repository.find_accounts([])
@@ -125,7 +127,7 @@ def sample_securities(security_repository: MockSecurityRepository) -> list[Secur
 @pytest.fixture
 def sample_transactions(
     transaction_repository: MockTransactionRepository,
-    sample_accounts: list[Account],
+    sample_accounts: Sequence[AccountPublic],
     sample_securities: list[Security],
 ) -> Sequence[Transaction]:
     """Create sample transactions for testing."""
@@ -137,7 +139,7 @@ def sample_transactions(
             description="Purchase HDFC Fund",
             amount=Decimal("10000.00"),
             units=Decimal("100.000"),
-            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[0].id,
             security_key=sample_securities[0].key,
         ),
         TransactionCreate(
@@ -146,7 +148,7 @@ def sample_transactions(
             description="Sold HDFC Fund",
             amount=Decimal("-2000.00"),
             units=Decimal("-20.000"),
-            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[0].id,
             security_key=sample_securities[0].key,
         ),
         # Account 1 - ICICI Liquid Fund: Buy 50 units
@@ -156,7 +158,7 @@ def sample_transactions(
             description="Purchase ICICI Fund",
             amount=Decimal("5000.00"),
             units=Decimal("50.000"),
-            account_id=sample_accounts[1].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[1].id,
             security_key=sample_securities[1].key,
         ),
         # Account 0 - Reliance Stock: Buy 25 units
@@ -166,7 +168,7 @@ def sample_transactions(
             description="Purchase Reliance",
             amount=Decimal("25000.00"),
             units=Decimal("25.000"),
-            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[0].id,
             security_key=sample_securities[2].key,
         ),
         # Account 2 - TCS Stock: Buy 10, Sell 10 = 0 units (should be excluded)
@@ -176,7 +178,7 @@ def sample_transactions(
             description="Purchase TCS",
             amount=Decimal("30000.00"),
             units=Decimal("10.000"),
-            account_id=sample_accounts[2].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[2].id,
             security_key=sample_securities[3].key,
         ),
         TransactionCreate(
@@ -185,7 +187,7 @@ def sample_transactions(
             description="Sold all TCS",
             amount=Decimal("-32000.00"),
             units=Decimal("-10.000"),
-            account_id=sample_accounts[2].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[2].id,
             security_key=sample_securities[3].key,
         ),
     ]
@@ -959,7 +961,13 @@ def _make_holding(
     name: str = "Test Fund",
 ) -> Holding:
     """Create a Holding object for testing compute_portfolio_totals."""
-    account = Account(id=1, name="Test", institution="Test")
+    account = AccountPublic(
+        id=1,
+        name="Test",
+        institution="Test",
+        created_at=datetime.datetime.now(),
+        properties={},
+    )
     security = Security(
         key=key,
         name=name,

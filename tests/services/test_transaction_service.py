@@ -15,7 +15,7 @@ from niveshpy.exceptions import (
     InvalidInputError,
     ResourceNotFoundError,
 )
-from niveshpy.models.account import Account, AccountCreate
+from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.models.security import Security, SecurityCategory, SecurityType
 from niveshpy.models.transaction import (
     Transaction,
@@ -62,7 +62,9 @@ def transaction_service(
 
 
 @pytest.fixture
-def sample_accounts(account_repository: MockAccountRepository) -> Sequence[Account]:
+def sample_accounts(
+    account_repository: MockAccountRepository,
+) -> Sequence[AccountPublic]:
     """Create sample accounts for testing."""
     accounts = [
         AccountCreate(name="Savings", institution="HDFC Bank"),
@@ -104,7 +106,7 @@ def sample_securities(
 
 @pytest.fixture
 def sample_transactions(
-    sample_accounts: Sequence[Account],
+    sample_accounts: Sequence[AccountPublic],
     sample_securities: Sequence[Security],
     transaction_service: TransactionService,
 ) -> Sequence[Transaction]:
@@ -116,7 +118,7 @@ def sample_transactions(
             description="Purchase HDFC Fund",
             amount=Decimal("10000.00"),
             units=Decimal("100.50"),
-            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[0].id,
             security_key=sample_securities[0].key,
         ),
         TransactionCreate(
@@ -125,7 +127,7 @@ def sample_transactions(
             description="Sold ICICI Fund",
             amount=Decimal("5000.00"),
             units=Decimal("50.25"),
-            account_id=sample_accounts[1].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[1].id,
             security_key=sample_securities[1].key,
         ),
         TransactionCreate(
@@ -134,7 +136,7 @@ def sample_transactions(
             description="Dividend from Reliance",
             amount=Decimal("500.00"),
             units=Decimal("0.00"),
-            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[0].id,
             security_key=sample_securities[2].key,
         ),
         TransactionCreate(
@@ -143,7 +145,7 @@ def sample_transactions(
             description="Additional purchase HDFC",
             amount=Decimal("20000.00"),
             units=Decimal("200.75"),
-            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[0].id,
             security_key=sample_securities[0].key,
         ),
     ]
@@ -268,7 +270,7 @@ class TestListTransactions:
 
 @pytest.fixture
 def cost_basis_transactions(
-    sample_accounts: Sequence[Account],
+    sample_accounts: Sequence[AccountPublic],
     sample_securities: Sequence[Security],
     transaction_service: TransactionService,
 ) -> Sequence[Transaction]:
@@ -280,7 +282,7 @@ def cost_basis_transactions(
             description="Purchase HDFC Fund",
             amount=Decimal("10000.00"),
             units=Decimal("100.000"),
-            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[0].id,
             security_key=sample_securities[0].key,
         ),
         TransactionCreate(
@@ -289,7 +291,7 @@ def cost_basis_transactions(
             description="Purchase HDFC Fund again",
             amount=Decimal("15000.00"),
             units=Decimal("150.000"),
-            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[0].id,
             security_key=sample_securities[0].key,
         ),
         TransactionCreate(
@@ -298,7 +300,7 @@ def cost_basis_transactions(
             description="Sell HDFC Fund",
             amount=Decimal("12000.00"),
             units=Decimal("-120.000"),
-            account_id=sample_accounts[0].id,  # ty:ignore[invalid-argument-type]
+            account_id=sample_accounts[0].id,
             security_key=sample_securities[0].key,
         ),
     ]

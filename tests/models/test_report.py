@@ -3,7 +3,7 @@
 import datetime
 from decimal import Decimal
 
-from niveshpy.models.account import Account
+from niveshpy.models.account import AccountPublic
 from niveshpy.models.report import (
     Allocation,
     Holding,
@@ -26,7 +26,13 @@ class TestPerformanceHoldingModel:
         invested=Decimal("1000"),
         date=datetime.date(2024, 6, 1),
     ):
-        account = Account(id=1, name="Savings", institution="Bank")
+        account = AccountPublic(
+            id=1,
+            name="Savings",
+            institution="Bank",
+            created_at=datetime.datetime.now(),
+            properties={},
+        )
         security = Security(
             key="MF001",
             name="Equity Fund",
@@ -92,7 +98,13 @@ class TestPerformanceResultModel:
 
     def test_create_with_holdings_and_totals(self):
         """Test creating PerformanceResult with holdings and totals."""
-        account = Account(id=1, name="Savings", institution="Bank")
+        account = AccountPublic(
+            id=1,
+            name="Savings",
+            institution="Bank",
+            created_at=datetime.datetime.now(),
+            properties={},
+        )
         security = Security(
             key="MF001",
             name="Equity Fund",
@@ -162,7 +174,13 @@ class TestSummaryResultModel:
 
     def test_summary_result_creation(self):
         """Test creating SummaryResult with all fields populated."""
-        account = Account(id=1, name="Savings", institution="Bank")
+        account = AccountPublic(
+            id=1,
+            name="Savings",
+            institution="Bank",
+            created_at=datetime.datetime.now(),
+            properties={},
+        )
         security = Security(
             key="MF001",
             name="Equity Fund",

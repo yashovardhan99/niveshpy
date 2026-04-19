@@ -7,7 +7,6 @@ from typing import Any
 
 from sqlmodel import JSON, NUMERIC, Column, Field, Relationship, SQLModel
 
-from niveshpy.core.query import ast
 from niveshpy.models.account import Account
 from niveshpy.models.security import Security
 
@@ -182,18 +181,3 @@ class TransactionPublicWithRelationsAndCost(TransactionPublicWithRelations):
     """
 
     cost: Decimal | None
-
-
-TRANSACTION_COLUMN_MAPPING: dict[ast.Field, list] = {
-    ast.Field.ACCOUNT: [Account.name, Account.institution],
-    ast.Field.AMOUNT: ["amount"],
-    ast.Field.DATE: ["transaction_date"],
-    ast.Field.DESCRIPTION: ["description"],
-    ast.Field.SECURITY: [
-        Security.key,
-        Security.name,
-        Security.type,
-        Security.category,
-    ],
-    ast.Field.TYPE: [Transaction.type],
-}
