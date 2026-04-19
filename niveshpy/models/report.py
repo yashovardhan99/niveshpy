@@ -24,7 +24,7 @@ class Holding:
     security: Security
     date: datetime.date
     units: decimal.Decimal
-    invested: decimal.Decimal | None
+    invested: decimal.Decimal
     amount: decimal.Decimal
 
 
@@ -35,6 +35,17 @@ HOLDING_COLUMN_MAPPINGS_TXN: dict[ast.Field, list] = {
 HOLDING_COLUMN_MAPPINGS_PRICE: dict[ast.Field, list] = {
     ast.Field.SECURITY: [Security.key, Security.name, Security.category, Security.type],
 }
+
+
+@dataclass(slots=True, frozen=True)
+class HoldingUnitRow:
+    """Data class for a single row of holding units used in report computations."""
+
+    security_key: str
+    account_id: int
+    total_units: decimal.Decimal
+    last_transaction_date: datetime.date
+
 
 # Portfolio Totals
 
@@ -124,7 +135,7 @@ class PerformanceHolding:
 class PerformanceResult:
     """Result of portfolio performance computation."""
 
-    holdings: list[PerformanceHolding]
+    holdings: Sequence[PerformanceHolding]
     totals: PortfolioTotals
 
 

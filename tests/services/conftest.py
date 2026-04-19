@@ -3,7 +3,7 @@
 import datetime
 import re
 from collections.abc import Iterable, Sequence
-from typing import Any
+from typing import Any, Literal
 
 from niveshpy.core.query.ast import Field, FilterNode, Operator
 from niveshpy.domain.repositories.price_repository import PriceFetchProfile
@@ -18,6 +18,7 @@ from niveshpy.exceptions import (
 )
 from niveshpy.models.account import Account
 from niveshpy.models.price import Price, PriceCreate
+from niveshpy.models.report import Allocation, HoldingUnitRow
 from niveshpy.models.security import Security
 from niveshpy.models.transaction import Transaction, TransactionCreate
 
@@ -68,6 +69,22 @@ class MockAccountRepository:
         account_ids = sorted(result)[offset : offset + limit if limit else None]
         return [self._accounts[account_id] for account_id in account_ids]
 
+    def find_accounts_by_ids(self, account_ids: Sequence[int]) -> Sequence[Account]:
+        """Find accounts matching the given sequence of IDs.
+
+        Args:
+            account_ids: A sequence of account IDs to search for.
+
+        Returns:
+            A sequence of Account objects matching the given IDs.
+        """
+        results = []
+        for account_id in account_ids:
+            account = self.get_account_by_id(account_id)
+            if account:
+                results.append(account)
+        return results
+
     def find_accounts_by_name_and_institutions(self, names, institutions):
         """Find accounts matching the given name-institution pairs."""
         results = []
@@ -82,7 +99,9 @@ class MockAccountRepository:
         if self.get_account_by_name_and_institution(account.name, account.institution):
             return None  # Simulate unique constraint violation by returning None
         account_id = self._next_id
-        self._accounts[account_id] = Account(id=account_id, **account.model_dump())
+        self._accounts[account_id] = Account(
+            id=account_id, **account.model_dump(exclude={"id"})
+        )
         self._next_id += 1
         return account_id
 
@@ -184,12 +203,74 @@ class MockTransactionRepository:
         self,
         account_repository: MockAccountRepository,
         security_repository: MockSecurityRepository,
+        price_repository: "MockPriceRepository | None" = None,
     ):
         """Initialize the test transaction repository."""
         self._transactions: dict[int, Transaction] = {}
         self._next_id: int = 1
         self._account_repository: MockAccountRepository = account_repository
         self._security_repository: MockSecurityRepository = security_repository
+        self._price_repository: MockPriceRepository | None = price_repository
+
+    def _matches_regex_filter(self, txn: Transaction, filter: FilterNode) -> bool:
+        """Check if a transaction matches a single REGEX_MATCH filter."""
+        if filter.field == Field.SECURITY:
+            security = self._security_repository.get_security_by_key(txn.security_key)
+            if security is None:
+                return False
+            pattern = str(filter.value).lower()
+            return bool(
+                re.search(pattern, security.key.lower())
+                or re.search(pattern, security.name.lower())
+                or re.search(pattern, security.type.value.lower())
+                or re.search(pattern, security.category.value.lower())
+            )
+        elif filter.field == Field.ACCOUNT:
+            account = self._account_repository.get_account_by_id(txn.account_id)
+            if account is None:
+                return False
+            pattern = str(filter.value).lower()
+            return bool(
+                re.search(pattern, account.name.lower())
+                or re.search(pattern, account.institution.lower())
+            )
+        return True
+
+    def _matches_filters(self, txn: Transaction, filters: Iterable[FilterNode]) -> bool:
+        """Replicate get_sqlalchemy_filters AND/OR semantics.
+
+        All REGEX_MATCH filters across all fields are OR'd into one condition.
+        Non-REGEX_MATCH filters each become a separate AND condition.
+        """
+        filters = list(filters)
+        regex_filters = [f for f in filters if f.operator == Operator.REGEX_MATCH]
+        non_regex_filters = [f for f in filters if f.operator != Operator.REGEX_MATCH]
+
+        # Non-regex filters: each must match (AND)
+        for f in non_regex_filters:
+            if f.field == Field.SECURITY:
+                security = self._security_repository.get_security_by_key(
+                    txn.security_key
+                )
+                if security is None:
+                    return False
+                values = f.value if isinstance(f.value, tuple) else (f.value,)
+                if security.key not in values:
+                    return False
+            elif f.field == Field.ACCOUNT:
+                account = self._account_repository.get_account_by_id(txn.account_id)
+                if account is None:
+                    return False
+                values = f.value if isinstance(f.value, tuple) else (f.value,)
+                if account.name not in values and account.institution not in values:
+                    return False
+
+        # Regex filters: at least one must match (OR)
+        if regex_filters:
+            if not any(self._matches_regex_filter(txn, f) for f in regex_filters):
+                return False
+
+        return True
 
     def get_transaction_by_id(
         self,
@@ -261,9 +342,38 @@ class MockTransactionRepository:
             else:
                 return transactions[offset:]
         else:
-            raise NotImplementedError(
-                "Filtering transactions is not implemented in the mock repository."
-            )
+            transactions = [
+                t
+                for t in self._transactions.values()
+                if self._matches_filters(t, filters)
+            ]
+            if sort_order == TransactionSortOrder.DATE_DESC_ID_ASC:
+                transactions.sort(
+                    key=lambda t: (
+                        (t.transaction_date, -t.id)
+                        if t.id is not None
+                        else (t.transaction_date, 0)
+                    ),
+                    reverse=True,
+                )
+            elif sort_order == TransactionSortOrder.DATE_ASC_ID_ASC:
+                transactions.sort(
+                    key=lambda t: (
+                        (t.transaction_date, t.id)
+                        if t.id is not None
+                        else (t.transaction_date, 0)
+                    )
+                )
+            elif sort_order == TransactionSortOrder.ID_ASC:
+                transactions.sort(key=lambda t: t.id if t.id is not None else 0)
+            elif sort_order == TransactionSortOrder.ID_DESC:
+                transactions.sort(
+                    key=lambda t: t.id if t.id is not None else 0, reverse=True
+                )
+            if limit is not None:
+                return transactions[offset : offset + limit]
+            else:
+                return transactions[offset:]
 
     def find_transactions_by_ids(
         self,
@@ -317,6 +427,151 @@ class MockTransactionRepository:
             self._transactions.pop(transaction_id)
             return True
         return False
+
+    def overwrite_transactions_in_date_range_for_accounts(
+        self,
+        transactions: Sequence[TransactionCreate],
+        date_range: tuple[datetime.date, datetime.date],
+        account_ids: Sequence[int],
+    ) -> int:
+        """Overwrite transactions for given accounts in a specified date range with new transactions."""
+        start_date, end_date = date_range
+        filtered_transactions = [
+            transaction
+            for transaction in transactions
+            if transaction.account_id in account_ids
+            and start_date <= transaction.transaction_date <= end_date
+        ]
+
+        if not filtered_transactions:
+            return 0
+
+        affected_account_ids = {
+            transaction.account_id for transaction in filtered_transactions
+        }
+        transaction_ids_to_delete = [
+            existing_transaction.id
+            for existing_transaction in self._transactions.values()
+            if existing_transaction.account_id in affected_account_ids
+            and start_date <= existing_transaction.transaction_date <= end_date
+        ]
+        for transaction_id in transaction_ids_to_delete:
+            self.delete_transaction_by_id(transaction_id)
+
+        for transaction in filtered_transactions:
+            self.insert_transaction(transaction)
+
+        return len(filtered_transactions)
+
+    def find_holding_units(
+        self, filters: Iterable[FilterNode]
+    ) -> Sequence[HoldingUnitRow]:
+        """Find holding units matching the given filters."""
+        from decimal import Decimal
+
+        filters = list(filters)
+        all_txns = list(self._transactions.values())
+        if filters:
+            all_txns = [t for t in all_txns if self._matches_filters(t, filters)]
+
+        # Group by (security_key, account_id)
+        groups: dict[tuple[str, int], list] = {}
+        for txn in all_txns:
+            key = (txn.security_key, txn.account_id)
+            groups.setdefault(key, []).append(txn)
+
+        rows = []
+        for (security_key, account_id), txns in groups.items():
+            total_units = sum((t.units for t in txns), Decimal(0))
+            if total_units >= Decimal("0.001"):
+                last_date = max(t.transaction_date for t in txns)
+                rows.append(
+                    HoldingUnitRow(
+                        security_key=security_key,
+                        account_id=account_id,
+                        total_units=total_units,
+                        last_transaction_date=last_date,
+                    )
+                )
+        return rows
+
+    def find_allocation(
+        self,
+        filters: Iterable[FilterNode],
+        group_by: Literal["category", "type", "both"],
+    ) -> Sequence[Allocation]:
+        """Find allocations matching the given filters."""
+        from collections import defaultdict
+        from decimal import Decimal
+
+        if self._price_repository is None:
+            raise NotImplementedError(
+                "find_allocation requires a price_repository to be set."
+            )
+
+        filters = list(filters)
+        all_txns = list(self._transactions.values())
+        if filters:
+            all_txns = [t for t in all_txns if self._matches_filters(t, filters)]
+
+        # Group by security_key only (aggregate across accounts)
+        sec_groups: dict[str, list] = {}
+        for txn in all_txns:
+            sec_groups.setdefault(txn.security_key, []).append(txn)
+
+        # Latest price filters: only SECURITY and DATE fields pass through
+        price_filters = [f for f in filters if f.field in (Field.SECURITY, Field.DATE)]
+        latest_prices = {
+            p.security_key: p
+            for p in self._price_repository.find_latest_prices(price_filters)
+        }
+
+        group_amounts: dict[tuple, Decimal] = defaultdict(Decimal)
+        group_dates: dict[tuple, datetime.date] = {}
+
+        for security_key, txns in sec_groups.items():
+            total_units = sum((t.units for t in txns), Decimal(0))
+            if total_units < Decimal("0.001"):
+                continue
+            price = latest_prices.get(security_key)
+            if price is None:
+                continue
+            security = self._security_repository.get_security_by_key(security_key)
+            if security is None:
+                continue
+
+            holding_value = total_units * price.close
+            last_txn_date = max(t.transaction_date for t in txns)
+            as_of = max(last_txn_date, price.date)
+
+            if group_by == "both":
+                key: tuple = (security.category, security.type)
+            elif group_by == "type":
+                key = (None, security.type)
+            else:  # category
+                key = (security.category, None)
+
+            group_amounts[key] += holding_value
+            group_dates[key] = (
+                min(group_dates[key], as_of) if key in group_dates else as_of
+            )
+
+        if not group_amounts:
+            return []
+
+        total_value = sum(group_amounts.values())
+        results = [
+            Allocation(
+                security_category=key[0],
+                security_type=key[1],
+                date=group_dates[key],
+                amount=amount.quantize(Decimal("0.01")),
+                allocation=(amount / total_value).quantize(Decimal("0.0001")),
+            )
+            for key, amount in group_amounts.items()
+        ]
+        results.sort(key=lambda a: a.amount, reverse=True)
+        return results
 
 
 class MockPriceRepository:

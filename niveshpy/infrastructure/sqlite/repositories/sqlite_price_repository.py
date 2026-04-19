@@ -84,6 +84,7 @@ class SqlitePriceRepository:
         Returns:
             A sequence of Price objects matching the filters and pagination criteria.
         """
+        filters = list(filters)
         where_clauses = get_sqlalchemy_filters(
             filters,
             {

@@ -1,12 +1,14 @@
 """Repository module for performing CRUD operations on transactions in a SQLite database."""
 
+import datetime
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import ClassVar
+from decimal import Decimal
+from typing import ClassVar, Literal
 
-from sqlalchemy.orm import contains_eager, joinedload, raiseload, selectinload
+from sqlalchemy.orm import aliased, contains_eager, joinedload, raiseload, selectinload
 from sqlalchemy.sql.dml import ReturningInsert
-from sqlmodel import col, delete, insert, select
+from sqlmodel import col, delete, func, insert, literal, select
 from sqlmodel.sql._expression_select_cls import SelectOfScalar
 
 from niveshpy.core.logging import logger
@@ -19,6 +21,8 @@ from niveshpy.domain.repositories.transaction_repository import (
 )
 from niveshpy.exceptions import DatabaseError, OperationError
 from niveshpy.models.account import Account
+from niveshpy.models.price import Price
+from niveshpy.models.report import Allocation, HoldingUnitRow
 from niveshpy.models.security import Security
 from niveshpy.models.transaction import Transaction, TransactionCreate
 
@@ -114,6 +118,7 @@ class SqliteTransactionRepository:
         Returns:
             A sequence of Transaction objects matching the filters and pagination criteria.
         """
+        filters = list(filters)
         where_clauses = get_sqlalchemy_filters(
             filters, SqliteTransactionRepository._column_mapping
         )
@@ -285,3 +290,250 @@ class SqliteTransactionRepository:
             session.commit()
             logger.debug(f"Deleted transaction with ID {transaction_id}.")
             return True
+
+    def overwrite_transactions_in_date_range_for_accounts(
+        self,
+        transactions: Sequence[TransactionCreate],
+        date_range: tuple[datetime.date, datetime.date],
+        account_ids: Sequence[int],
+    ) -> int:
+        """Bulk insert transactions into the database.
+
+        Delete existing transactions in the date range for specified accounts before inserting.
+
+        Args:
+            transactions: A sequence of TransactionCreate objects to insert.
+            date_range: A tuple containing the start and end dates (inclusive) as datetime.date objects.
+            account_ids: A sequence of account IDs for which to delete existing transactions in the date range before inserting.
+
+        Returns:
+            The number of transactions successfully inserted.
+        """
+        transaction_dicts = [
+            {
+                "transaction_date": transaction.transaction_date,
+                "type": transaction.type,
+                "description": transaction.description,
+                "amount": transaction.amount,
+                "units": transaction.units,
+                "security_key": transaction.security_key,
+                "account_id": transaction.account_id,
+                "properties": transaction.properties,
+            }
+            for transaction in transactions
+        ]
+        with get_session() as session:
+            session.exec(
+                delete(Transaction).where(
+                    col(Transaction.transaction_date) >= date_range[0],
+                    col(Transaction.transaction_date) <= date_range[1],
+                    col(Transaction.account_id).in_(account_ids),
+                )
+            )
+            result = (
+                session.exec(insert(Transaction).values(transaction_dicts)).rowcount
+                if transaction_dicts
+                else 0
+            )
+            session.commit()
+            logger.debug(
+                f"Overwrote transactions in date range {date_range} for accounts {account_ids}. Inserted {result} transactions."
+            )
+            return result
+
+    def find_holding_units(
+        self, filters: Iterable[FilterNode]
+    ) -> Sequence[HoldingUnitRow]:
+        """Find holding units matching the given filters.
+
+        Args:
+            filters: An iterable of FilterNode objects to filter holding units.
+
+        Returns:
+            A sequence of HoldingUnitRow objects matching the given filters.
+        """
+        filters = list(filters)
+        where_clauses = get_sqlalchemy_filters(
+            filters,
+            {
+                Field.ACCOUNT: [Account.name, Account.institution],
+                Field.SECURITY: [
+                    Security.key,
+                    Security.name,
+                    Security.type,
+                    Security.category,
+                ],
+            },
+        )
+        filter_fields = get_fields_from_filters(filters)
+
+        holding_units_stmt = select(
+            col(Transaction.security_key),
+            col(Transaction.account_id),
+            func.sum(Transaction.units).label("total_units"),
+            func.max(Transaction.transaction_date).label("last_transaction_date"),
+        )
+        if Field.SECURITY in filter_fields:
+            holding_units_stmt = holding_units_stmt.join(
+                Security, col(Security.key) == col(Transaction.security_key)
+            )
+        if Field.ACCOUNT in filter_fields:
+            holding_units_stmt = holding_units_stmt.join(
+                Account, col(Account.id) == col(Transaction.account_id)
+            )
+        holding_units_stmt = (
+            holding_units_stmt.where(*where_clauses)
+            .group_by(col(Transaction.account_id), col(Transaction.security_key))
+            .having(func.sum(Transaction.units) >= Decimal("0.001"))
+        )
+        with get_session() as session:
+            results = session.exec(holding_units_stmt).all()
+            holding_unit_rows = [HoldingUnitRow(*result) for result in results]
+            logger.debug(
+                f"Found {len(holding_unit_rows)} holding unit rows matching filters."
+            )
+            return holding_unit_rows
+
+    def find_allocation(
+        self,
+        filters: Iterable[FilterNode],
+        group_by: Literal["category", "type", "both"],
+    ) -> Sequence[Allocation]:
+        """Find allocations matching the given filters.
+
+        Args:
+            filters: An iterable of FilterNode objects to filter allocations.
+            group_by: A string indicating how to group the allocations ("category", "type", or "both").
+
+        Returns:
+            A sequence of Allocation objects matching the filters and grouped according to the specified criteria.
+        """
+        filters = list(filters)
+
+        # Transaction filters: security + account only (no date — FIFO needs full history)
+        txn_where = get_sqlalchemy_filters(
+            filters,
+            {
+                Field.SECURITY: [
+                    Security.key,
+                    Security.name,
+                    Security.type,
+                    Security.category,
+                ],
+                Field.ACCOUNT: [Account.name, Account.institution],
+            },
+            include_fields={Field.SECURITY, Field.ACCOUNT},
+        )
+        # Price filters: security + date (supports "as of date" price lookups)
+        price_where = get_sqlalchemy_filters(
+            filters,
+            {
+                Field.SECURITY: [
+                    Security.key,
+                    Security.name,
+                    Security.type,
+                    Security.category,
+                ],
+                Field.DATE: [Price.date],
+            },
+            include_fields={Field.SECURITY, Field.DATE},
+        )
+
+        filter_fields = get_fields_from_filters(filters)
+
+        # CTE 1: total units held per security (grouped by security only, not account)
+        holding_units_stmt = select(
+            col(Transaction.security_key),
+            func.max(Transaction.transaction_date).label("last_transaction_date"),
+            func.sum(Transaction.units).label("total_units"),
+        )
+        if Field.SECURITY in filter_fields:
+            holding_units_stmt = holding_units_stmt.join(
+                Security, col(Security.key) == col(Transaction.security_key)
+            )
+        if Field.ACCOUNT in filter_fields:
+            holding_units_stmt = holding_units_stmt.join(
+                Account, col(Account.id) == col(Transaction.account_id)
+            )
+        holding_units = (
+            holding_units_stmt.where(*txn_where)
+            .group_by(col(Transaction.security_key))
+            .having(func.sum(Transaction.units) >= Decimal("0.001"))
+            .cte("holding_units")
+        )
+
+        # CTE 2: latest price per security (with optional date filter)
+        prices_stmt = select(
+            Price,
+            func.row_number()
+            .over(partition_by=Price.security_key, order_by=col(Price.date).desc())
+            .label("row_num"),
+        )
+        if Field.SECURITY in filter_fields:
+            prices_stmt = prices_stmt.join(
+                Security, col(Security.key) == col(Price.security_key)
+            )
+        prices_stmt = prices_stmt.where(*price_where)
+        cte_prices = prices_stmt.cte("cte_prices")
+        aliased_price = aliased(Price, cte_prices)
+        latest_prices = (
+            select(aliased_price).where(cte_prices.c.row_num == 1).cte("latest_prices")
+        )
+
+        # CTE 3: holding values joined with security metadata for grouping
+        cte_holdings = (
+            select(
+                col(Security.category) if group_by in ("both", "category") else None,
+                col(Security.type) if group_by in ("both", "type") else None,
+                (holding_units.c.total_units * latest_prices.c.close).label(
+                    "holding_value"
+                ),
+                func.max(
+                    holding_units.c.last_transaction_date, latest_prices.c.date
+                ).label("date"),
+            )
+            .join(holding_units, col(Security.key) == holding_units.c.security_key)
+            .join(latest_prices, col(Security.key) == latest_prices.c.security_key)
+            .cte("cte_holdings")
+        )
+
+        # CTE 4: total portfolio value for proportion calculation
+        cte_total = select(
+            func.sum(cte_holdings.c.holding_value).label("total_value")
+        ).cte("cte_total")
+
+        # Final: group by category/type and compute proportions
+        stmt = (
+            select(
+                col(cte_holdings.c.category)
+                if group_by in ("both", "category")
+                else None,
+                col(cte_holdings.c.type) if group_by in ("both", "type") else None,
+                func.min(cte_holdings.c.date).label("date"),
+                func.sum(cte_holdings.c.holding_value).label("total_amount"),
+                (
+                    func.sum(cte_holdings.c.holding_value) / cte_total.c.total_value
+                ).label("proportion"),
+            )  # ty:ignore[no-matching-overload]
+            .join(cte_total, literal(True))
+            .group_by(
+                col(cte_holdings.c.category)
+                if group_by in ("both", "category")
+                else None,
+                col(cte_holdings.c.type) if group_by in ("both", "type") else None,
+            )
+            .order_by(func.sum(cte_holdings.c.holding_value).desc())
+        )
+
+        with get_session() as session:
+            results = session.exec(stmt)
+            return [
+                Allocation(
+                    security_category=row[0],
+                    security_type=row[1],
+                    date=row[2],
+                    amount=Decimal(str(row[3])).quantize(Decimal("0.01")),
+                    allocation=Decimal(str(row[4])).quantize(Decimal("0.0001")),
+                )
+                for row in results
+            ]

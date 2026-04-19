@@ -29,6 +29,7 @@ from niveshpy.cli.utils.display import (
 from niveshpy.cli.utils.formatters import format_decimal, format_percentage
 from niveshpy.cli.utils.models import OutputFormat, SectionBreak, TotalRow
 from niveshpy.cli.utils.overrides import NiveshPyCommand
+from niveshpy.core.app import AppState
 from niveshpy.core.logging import logger
 from niveshpy.core.query import tokens
 from niveshpy.core.query.tokenizer import QueryLexer
@@ -59,7 +60,9 @@ def cli():
     default=True,
 )
 @essentials.command(parent=cli, cls=NiveshPyCommand)
+@click.pass_context
 def holdings(
+    ctx: click.Context,
     queries: tuple[str, ...],
     limit: int,
     offset: int,
@@ -77,9 +80,10 @@ def holdings(
 
     # Generate report
     with loading_spinner("Generating holdings report..."):
-        from niveshpy.services.report import get_holdings
-
-        holdings = get_holdings(queries, limit, offset)
+        state = ctx.ensure_object(AppState)
+        holdings = state.app.report_service.get_holdings(
+            queries, limit=limit, offset=offset
+        )
 
     # Warn if date filter is used — invested amounts don't respect date filters
     if _has_date_query(queries):
@@ -179,7 +183,9 @@ def holdings(
     hidden=True,
 )
 @essentials.command(parent=cli, cls=NiveshPyCommand)
+@click.pass_context
 def allocation(
+    ctx: click.Context,
     queries: tuple[str, ...],
     format: OutputFormat,
     output_file: Path | None,
@@ -199,9 +205,10 @@ def allocation(
     )
     # Generate report
     with loading_spinner("Generating allocation report..."):
-        from niveshpy.services.report import get_allocation
-
-        allocations = get_allocation(queries, group_by=group_by)
+        state = ctx.ensure_object(AppState)
+        allocations = state.app.report_service.get_allocation(
+            queries, group_by=group_by
+        )
     if len(allocations) == 0:
         msg = (
             "No allocations found.\n"
@@ -252,7 +259,9 @@ def allocation(
     default=True,
 )
 @essentials.command(parent=cli, cls=NiveshPyCommand)
+@click.pass_context
 def performance(
+    ctx: click.Context,
     queries: tuple[str, ...],
     limit: int,
     offset: int,
@@ -269,9 +278,11 @@ def performance(
     """
     logger.debug("Running performance command with %d queries", len(queries))
     with loading_spinner("Generating performance report..."):
-        from niveshpy.services.report import get_performance
+        state = ctx.ensure_object(AppState)
 
-        result = get_performance(queries, limit=limit, offset=offset)
+        result = state.app.report_service.get_performance(
+            queries, limit=limit, offset=offset
+        )
 
     if len(result.holdings) == 0:
         msg = (
@@ -338,7 +349,9 @@ def performance(
 @flags.output("format", allowed=[OutputFormat.TABLE, OutputFormat.JSON])
 @flags.output_file()
 @essentials.command(parent=cli, cls=NiveshPyCommand)
+@click.pass_context
 def summary(
+    ctx: click.Context,
     queries: tuple[str, ...],
     format: Literal[OutputFormat.TABLE, OutputFormat.JSON],
     output_file: Path | None,
@@ -352,9 +365,8 @@ def summary(
     """
     logger.debug("Running summary command with %d queries", len(queries))
     with loading_spinner("Generating portfolio summary..."):
-        from niveshpy.services.report import get_summary
-
-        result = get_summary(queries)
+        state = ctx.ensure_object(AppState)
+        result = state.app.report_service.get_summary(queries)
 
     if len(result.top_holdings) == 0:
         if len(queries) > 0:
