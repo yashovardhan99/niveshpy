@@ -1,11 +1,11 @@
-"""Tests for all account models."""
+"""Tests for SQLite models."""
 
 from datetime import datetime
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from niveshpy.models.account import Account
+from niveshpy.infrastructure.sqlite.models import Account
 
 
 class TestAccountModels:

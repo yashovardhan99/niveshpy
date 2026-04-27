@@ -20,7 +20,7 @@ from niveshpy.domain.repositories.transaction_repository import (
     TransactionSortOrder,
 )
 from niveshpy.exceptions import DatabaseError, OperationError
-from niveshpy.models.account import Account
+from niveshpy.infrastructure.sqlite.models import Account
 from niveshpy.models.price import Price
 from niveshpy.models.report import Allocation, HoldingUnitRow
 from niveshpy.models.security import Security

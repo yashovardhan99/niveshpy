@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlmodel import JSON, NUMERIC, Column, Field, Relationship, SQLModel
 
-from niveshpy.models.account import Account
+from niveshpy.infrastructure.sqlite.models import Account
 from niveshpy.models.security import Security
 
 

@@ -13,7 +13,8 @@ from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_sqlalchemy_filters
 from niveshpy.database import get_session
 from niveshpy.exceptions import InvalidInputError
-from niveshpy.models.account import Account, AccountCreate, AccountPublic
+from niveshpy.infrastructure.sqlite.models import Account
+from niveshpy.models.account import AccountCreate, AccountPublic
 
 
 @dataclass(slots=True, frozen=True)
