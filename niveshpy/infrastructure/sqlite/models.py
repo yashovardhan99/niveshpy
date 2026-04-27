@@ -5,6 +5,8 @@ from typing import Any
 
 from sqlmodel import JSON, Column, Field, SQLModel, UniqueConstraint
 
+from niveshpy.models.security import SecurityCategory, SecurityType
+
 
 class Account(SQLModel, table=True):
     """Database model for investment accounts.
@@ -26,3 +28,23 @@ class Account(SQLModel, table=True):
     institution: str
     properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=datetime.now)
+
+
+class Security(SQLModel, table=True):
+    """Database model for securities.
+
+    Attributes:
+        key (str): Unique key identifying the security.
+        name (str): Name of the security.
+        type (SecurityType): Type of the security.
+        category (SecurityCategory): Category of the security.
+        properties (dict[str, Any]): Additional properties of the security.
+        created (datetime): Timestamp when the security was created.
+    """
+
+    key: str = Field(primary_key=True)
+    name: str = Field()
+    type: SecurityType = Field()
+    category: SecurityCategory = Field()
+    properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    created: datetime = Field(default_factory=datetime.now)

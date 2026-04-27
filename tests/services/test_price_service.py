@@ -5,6 +5,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+from attrs import evolve
 
 from niveshpy.core.query.ast import Field, FilterNode, Operator
 from niveshpy.domain.repositories import PriceRepository, SecurityRepository
@@ -12,9 +13,9 @@ from niveshpy.exceptions import InvalidInputError, ResourceNotFoundError
 from niveshpy.models.output import ProgressUpdate, Warning
 from niveshpy.models.price import PriceCreate
 from niveshpy.models.security import (
-    Security,
     SecurityCategory,
     SecurityCreate,
+    SecurityPublic,
     SecurityType,
 )
 from niveshpy.services.price import PriceService
@@ -599,11 +600,13 @@ class TestSyncPrices:
     def test_sync_prices_security_without_provider(self, mock_registry, price_service):
         """Test that securities without applicable provider generate warnings."""
         # Create a security that won't be supported
-        unsupported = Security(
+        unsupported = SecurityPublic(
             key="UNSUPPORTED001",
             name="Unsupported Security",
             type=SecurityType.OTHER,
             category=SecurityCategory.OTHER,
+            properties={},
+            created=datetime.datetime.now(),
         )
         price_service.security_repository.insert_security(unsupported)
 
@@ -694,7 +697,9 @@ class TestSyncPrices:
         # Set last_price_date to today
         security = sample_securities[0]
         today = datetime.date.today()
-        security.properties = {"last_price_date": today.strftime("%Y-%m-%d")}
+        security = evolve(
+            security, properties={"last_price_date": today.strftime("%Y-%m-%d")}
+        )
         price_service.security_repository.update_security_properties(
             security.key, ("last_price_date", today.strftime("%Y-%m-%d"))
         )

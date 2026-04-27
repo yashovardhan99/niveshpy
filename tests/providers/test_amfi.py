@@ -8,7 +8,7 @@ import pytest
 import requests
 
 from niveshpy.exceptions import NetworkError, OperationError, ResourceNotFoundError
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
+from niveshpy.models.security import SecurityCategory, SecurityPublic, SecurityType
 from niveshpy.providers.amfi import AMFIProvider, AMFIProviderFactory
 
 # Test constants
@@ -26,34 +26,39 @@ def amfi_provider():
 @pytest.fixture
 def mutual_fund_with_amfi_code():
     """Security with amfi_code in properties."""
-    return Security(
+    return SecurityPublic(
         key="MF001",
         name="Test Mutual Fund",
         type=SecurityType.MUTUAL_FUND,
         category=SecurityCategory.EQUITY,
         properties={"amfi_code": TEST_AMFI_CODE},
+        created=datetime.datetime.now(),
     )
 
 
 @pytest.fixture
 def mutual_fund_with_numeric_key():
     """Security with 6-digit numeric key."""
-    return Security(
+    return SecurityPublic(
         key=TEST_AMFI_CODE,
         name="Test Mutual Fund",
         type=SecurityType.MUTUAL_FUND,
         category=SecurityCategory.EQUITY,
+        properties={},
+        created=datetime.datetime.now(),
     )
 
 
 @pytest.fixture
 def mutual_fund_without_amfi_code():
     """Security without valid AMFI code."""
-    return Security(
+    return SecurityPublic(
         key="INVALID",
         name="Test Mutual Fund",
         type=SecurityType.MUTUAL_FUND,
         category=SecurityCategory.EQUITY,
+        properties={},
+        created=datetime.datetime.now(),
     )
 
 
@@ -77,12 +82,13 @@ class TestGetPriority:
 
     def test_mutual_fund_with_amfi_code_as_integer(self, amfi_provider):
         """Test that amfi_code as integer works."""
-        security = Security(
+        security = SecurityPublic(
             key="MF001",
             name="Test",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.EQUITY,
             properties={"amfi_code": int(TEST_AMFI_CODE)},
+            created=datetime.datetime.now(),
         )
         priority = amfi_provider.get_priority(security)
         assert priority == 10
@@ -98,56 +104,68 @@ class TestGetPriority:
         "security_factory,description",
         [
             (
-                lambda: Security(
+                lambda: SecurityPublic(
                     key="AAPL",
                     name="Apple Inc",
                     type=SecurityType.STOCK,
                     category=SecurityCategory.EQUITY,
+                    properties={},
+                    created=datetime.datetime.now(),
                 ),
                 "non_mutual_fund",
             ),
             (
-                lambda: Security(
+                lambda: SecurityPublic(
                     key="INVALID",
                     name="Test",
                     type=SecurityType.MUTUAL_FUND,
                     category=SecurityCategory.EQUITY,
+                    properties={},
+                    created=datetime.datetime.now(),
                 ),
                 "no_amfi_code",
             ),
             (
-                lambda: Security(
+                lambda: SecurityPublic(
                     key="12345",
                     name="Test",
                     type=SecurityType.MUTUAL_FUND,
                     category=SecurityCategory.EQUITY,
+                    properties={},
+                    created=datetime.datetime.now(),
                 ),
                 "key_too_short",
             ),
             (
-                lambda: Security(
+                lambda: SecurityPublic(
                     key="1234567",
                     name="Test",
                     type=SecurityType.MUTUAL_FUND,
                     category=SecurityCategory.EQUITY,
+                    properties={},
+                    created=datetime.datetime.now(),
                 ),
                 "key_too_long",
             ),
             (
-                lambda: Security(
+                lambda: SecurityPublic(
                     key="ABC123",
                     name="Test",
                     type=SecurityType.MUTUAL_FUND,
                     category=SecurityCategory.EQUITY,
+                    properties={},
+                    created=datetime.datetime.now(),
                 ),
                 "non_numeric_key",
             ),
             (
-                lambda: Security(
+                lambda: SecurityPublic(
                     key="",
                     name="Test",
                     type=SecurityType.MUTUAL_FUND,
                     category=SecurityCategory.EQUITY,
+                    properties={},
+                    created=datetime.datetime.now(),
                 ),
                 "empty_key",
             ),

@@ -12,7 +12,11 @@ from niveshpy.models.report import (
     PortfolioTotals,
     SummaryResult,
 )
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
+from niveshpy.models.security import (
+    SecurityCategory,
+    SecurityPublic,
+    SecurityType,
+)
 
 # --- Performance models ---
 
@@ -33,11 +37,13 @@ class TestPerformanceHoldingModel:
             created_at=datetime.datetime.now(),
             properties={},
         )
-        security = Security(
+        security = SecurityPublic(
             key="MF001",
             name="Equity Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.datetime.now(),
         )
         return Holding(
             account=account,
@@ -105,11 +111,13 @@ class TestPerformanceResultModel:
             created_at=datetime.datetime.now(),
             properties={},
         )
-        security = Security(
+        security = SecurityPublic(
             key="MF001",
             name="Equity Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.datetime.now(),
         )
         holding = Holding(
             account=account,
@@ -181,11 +189,13 @@ class TestSummaryResultModel:
             created_at=datetime.datetime.now(),
             properties={},
         )
-        security = Security(
+        security = SecurityPublic(
             key="MF001",
             name="Equity Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.datetime.now(),
         )
         holding = Holding(
             account=account,

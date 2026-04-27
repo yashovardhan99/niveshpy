@@ -7,8 +7,8 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
-from niveshpy.infrastructure.sqlite.models import Account
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
+from niveshpy.infrastructure.sqlite.models import Account, Security
+from niveshpy.models.security import SecurityCategory, SecurityType
 from niveshpy.models.transaction import Transaction, TransactionCreate, TransactionType
 
 

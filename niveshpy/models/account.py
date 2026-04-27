@@ -1,5 +1,6 @@
 """Account model for user financial data."""
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
@@ -13,13 +14,13 @@ class AccountCreate:
     Attributes:
         name (str): Name of the account.
         institution (str): Financial institution managing the account.
-        properties (dict[str, Any], optional): Additional properties of the account.
+        properties (Mapping[str, Any], optional): Additional properties of the account.
             Defaults to an empty dictionary.
     """
 
     name: str
     institution: str
-    properties: dict[str, Any] = field(factory=dict)
+    properties: Mapping[str, Any] = field(factory=dict)
 
 
 @frozen
@@ -31,11 +32,11 @@ class AccountPublic:
         name (str): Name of the account.
         institution (str): Financial institution managing the account.
         created_at (datetime): Timestamp when the account was created.
-        properties (dict[str, Any]): Additional properties of the account.
+        properties (Mapping[str, Any]): Additional properties of the account.
     """
 
     id: int
     name: str
     institution: str
     created_at: datetime
-    properties: dict[str, Any]
+    properties: Mapping[str, Any]

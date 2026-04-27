@@ -15,8 +15,9 @@ from niveshpy.exceptions import (
     InvalidInputError,
     ResourceNotFoundError,
 )
+from niveshpy.infrastructure.sqlite.models import Security
 from niveshpy.models.account import AccountCreate, AccountPublic
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
+from niveshpy.models.security import SecurityCategory, SecurityType
 from niveshpy.models.transaction import (
     Transaction,
     TransactionCreate,

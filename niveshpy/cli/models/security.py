@@ -5,13 +5,12 @@ from __future__ import annotations
 import datetime
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
 from niveshpy.cli.utils.formatters import format_datetime
 from niveshpy.cli.utils.models import Column
-
-if TYPE_CHECKING:
-    from niveshpy.models.security import Security, SecurityCategory, SecurityType
+from niveshpy.infrastructure.sqlite.models import Security
+from niveshpy.models.security import SecurityCategory, SecurityPublic, SecurityType
 
 
 def _format_security_type(sec_type: SecurityType) -> str:
@@ -69,7 +68,7 @@ class SecurityDisplay:
     ]
 
     @classmethod
-    def from_domain(cls, security: Security) -> Self:
+    def from_domain(cls, security: SecurityPublic | Security) -> Self:
         """Create a SecurityDisplay instance from a domain Security model."""
         return cls(
             key=security.key,

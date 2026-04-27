@@ -16,7 +16,7 @@ from niveshpy.models.report import (
     PerformanceHolding,
     SummaryResult,
 )
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
+from niveshpy.models.security import SecurityCategory, SecurityPublic, SecurityType
 from niveshpy.models.transaction import Transaction, TransactionCreate, TransactionType
 from niveshpy.services.report_service import ReportService
 from tests.services.conftest import (
@@ -92,32 +92,42 @@ def sample_accounts(
 
 
 @pytest.fixture
-def sample_securities(security_repository: MockSecurityRepository) -> list[Security]:
+def sample_securities(
+    security_repository: MockSecurityRepository,
+) -> list[SecurityPublic]:
     """Create sample securities for testing."""
     securities = [
-        Security(
+        SecurityPublic(
             key="123456",
             name="HDFC Equity Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.datetime.now(),
         ),
-        Security(
+        SecurityPublic(
             key="234567",
             name="ICICI Liquid Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.DEBT,
+            properties={},
+            created=datetime.datetime.now(),
         ),
-        Security(
+        SecurityPublic(
             key="RELI",
             name="Reliance Industries",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.datetime.now(),
         ),
-        Security(
+        SecurityPublic(
             key="TCS",
             name="TCS Limited",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.datetime.now(),
         ),
     ]
     security_repository.insert_multiple_securities(securities)
@@ -128,7 +138,7 @@ def sample_securities(security_repository: MockSecurityRepository) -> list[Secur
 def sample_transactions(
     transaction_repository: MockTransactionRepository,
     sample_accounts: Sequence[AccountPublic],
-    sample_securities: list[Security],
+    sample_securities: list[SecurityPublic],
 ) -> Sequence[Transaction]:
     """Create sample transactions for testing."""
     transactions = [
@@ -198,7 +208,7 @@ def sample_transactions(
 @pytest.fixture
 def sample_prices(
     price_repository: MockPriceRepository,
-    sample_securities: list[Security],
+    sample_securities: list[SecurityPublic],
 ) -> Sequence[Price]:
     """Create sample prices for testing."""
     prices = [
@@ -968,11 +978,13 @@ def _make_holding(
         created_at=datetime.datetime.now(),
         properties={},
     )
-    security = Security(
+    security = SecurityPublic(
         key=key,
         name=name,
         type=SecurityType.MUTUAL_FUND,
         category=SecurityCategory.EQUITY,
+        properties={},
+        created=datetime.datetime.now(),
     )
     amt = Decimal(amount)
     inv = Decimal(invested) if invested is not None else amt

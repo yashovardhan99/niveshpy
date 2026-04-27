@@ -47,9 +47,8 @@ def engine():
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
-    from niveshpy.infrastructure.sqlite.models import Account  # noqa: F401
+    from niveshpy.infrastructure.sqlite.models import Account, Security  # noqa: F401
     from niveshpy.models.price import Price  # noqa: F401
-    from niveshpy.models.security import Security  # noqa: F401
     from niveshpy.models.transaction import Transaction  # noqa: F401
 
     # Import all models to ensure they are registered with SQLModel

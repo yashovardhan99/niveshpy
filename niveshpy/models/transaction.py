@@ -7,8 +7,7 @@ from typing import Any
 
 from sqlmodel import JSON, NUMERIC, Column, Field, Relationship, SQLModel
 
-from niveshpy.infrastructure.sqlite.models import Account
-from niveshpy.models.security import Security
+from niveshpy.infrastructure.sqlite.models import Account, Security
 
 
 class TransactionType(StrEnum):

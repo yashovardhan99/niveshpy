@@ -5,6 +5,8 @@ import re
 from collections.abc import Iterable, Sequence
 from typing import Any, Literal
 
+from attrs import evolve
+
 from niveshpy.core.query.ast import Field, FilterNode, Operator
 from niveshpy.domain.repositories.price_repository import PriceFetchProfile
 from niveshpy.domain.repositories.transaction_repository import (
@@ -19,7 +21,7 @@ from niveshpy.exceptions import (
 from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.models.price import Price, PriceCreate
 from niveshpy.models.report import Allocation, HoldingUnitRow
-from niveshpy.models.security import Security
+from niveshpy.models.security import SecurityCreate, SecurityPublic
 from niveshpy.models.transaction import Transaction, TransactionCreate
 
 
@@ -141,7 +143,7 @@ class MockSecurityRepository:
 
     def __init__(self):
         """Initialize the test security repository."""
-        self._securities = {}
+        self._securities: dict[str, SecurityPublic] = {}
 
     def get_security_by_key(self, key):
         """Retrieve a security by its key."""
@@ -167,11 +169,18 @@ class MockSecurityRepository:
                 results.append(security)
         return results
 
-    def insert_security(self, security):
+    def insert_security(self, security: SecurityCreate):
         """Insert a new security into the repository."""
         if self.get_security_by_key(security.key):
             return False
-        self._securities[security.key] = security
+        self._securities[security.key] = SecurityPublic(
+            key=security.key,
+            name=security.name,
+            type=security.type,
+            category=security.category,
+            properties=security.properties,
+            created=datetime.datetime.now(),
+        )
         return True
 
     def insert_multiple_securities(self, securities):
@@ -207,7 +216,10 @@ class MockSecurityRepository:
 
         # Update properties
         for prop_name, prop_value in properties:
-            security.properties[prop_name] = prop_value
+            security = evolve(
+                security, properties={**security.properties, prop_name: prop_value}
+            )
+        self._securities[security_key] = security
 
 
 class MockTransactionRepository:
@@ -615,8 +627,8 @@ class MockPriceRepository:
         return self._prices.get(security_key, {}).get(date)
 
     def _search_security_filter(
-        self, filters: Iterable[FilterNode], securities: Sequence[Security]
-    ) -> Sequence[Security]:
+        self, filters: Iterable[FilterNode], securities: Sequence[SecurityPublic]
+    ) -> Sequence[SecurityPublic]:
         """Helper method to search for a security in the filters and return the corresponding Security object if found."""
         for filter in filters:
             if filter.field == Field.SECURITY:

@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 
 from niveshpy.models.account import AccountPublic
 from niveshpy.models.security import (
-    Security,
     SecurityCategory,
+    SecurityPublic,
     SecurityType,
 )
 
@@ -20,7 +20,7 @@ class Holding:
     """Data class for a single holding used in report computations."""
 
     account: AccountPublic
-    security: Security
+    security: SecurityPublic
     date: datetime.date
     units: decimal.Decimal
     invested: decimal.Decimal
@@ -81,7 +81,7 @@ class PerformanceHolding:
     """Data class for per-holding performance data used in reports."""
 
     account: AccountPublic
-    security: Security
+    security: SecurityPublic
     date: datetime.date
     current_value: decimal.Decimal
     invested: decimal.Decimal | None

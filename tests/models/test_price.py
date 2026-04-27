@@ -6,8 +6,9 @@ from decimal import Decimal
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from niveshpy.infrastructure.sqlite.models import Security
 from niveshpy.models.price import Price, PriceCreate
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
+from niveshpy.models.security import SecurityCategory, SecurityType
 
 
 class TestPriceModels:
@@ -161,6 +162,8 @@ class TestPriceDatabase:
             name="Test Security",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.now(),
         )
         session.add(security)
         session.commit()
@@ -193,6 +196,8 @@ class TestPriceDatabase:
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.now(),
         )
         session.add(security)
         session.commit()
@@ -222,6 +227,8 @@ class TestPriceDatabase:
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.now(),
         )
         session.add(security)
         session.commit()
@@ -257,6 +264,8 @@ class TestPriceDatabase:
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.now(),
         )
         session.add(security)
         session.commit()
@@ -298,12 +307,16 @@ class TestPriceDatabase:
             name="Security 1",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.now(),
         )
         security2 = Security(
             key="SEC2",
             name="Security 2",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.now(),
         )
         session.add_all([security1, security2])
         session.commit()
@@ -365,6 +378,8 @@ class TestPriceDatabase:
             name="Reliance Industries",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.now(),
         )
         session.add(security)
         session.commit()
@@ -396,6 +411,8 @@ class TestPriceDatabase:
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.now(),
         )
         session.add(security)
         session.commit()
@@ -427,6 +444,8 @@ class TestPriceDatabase:
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.now(),
         )
         session.add(security)
         session.commit()
@@ -455,6 +474,8 @@ class TestPriceDatabase:
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.now(),
         )
         session.add(security)
         session.commit()
@@ -491,6 +512,8 @@ class TestPriceDatabase:
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.now(),
         )
         session.add(security)
         session.commit()

@@ -17,8 +17,8 @@ from niveshpy.core.query.prepare import get_fields_from_filters, get_sqlalchemy_
 from niveshpy.database import get_session
 from niveshpy.domain.repositories.price_repository import PriceFetchProfile
 from niveshpy.exceptions import DatabaseError, InvalidInputError, ResourceNotFoundError
+from niveshpy.infrastructure.sqlite.models import Security
 from niveshpy.models.price import Price, PriceCreate
-from niveshpy.models.security import Security
 
 if sys.version_info >= (3, 12):
     from itertools import batched

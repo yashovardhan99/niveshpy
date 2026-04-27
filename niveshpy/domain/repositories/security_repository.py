@@ -4,25 +4,25 @@ from collections.abc import Sequence
 from typing import Any, Protocol
 
 from niveshpy.core.query.ast import FilterNode
-from niveshpy.models.security import Security, SecurityCreate
+from niveshpy.models.security import SecurityCreate, SecurityPublic
 
 
 class SecurityRepository(Protocol):
     """Repository interface for retrieving and managing securities."""
 
-    def get_security_by_key(self, key: str) -> Security | None:
+    def get_security_by_key(self, key: str) -> SecurityPublic | None:
         """Fetch a security by its unique key.
 
         Args:
             key: The unique key of the security to fetch.
 
         Returns:
-            The Security object if found, otherwise None.
+            The SecurityPublic object if found, otherwise None.
         """
 
     def find_securities(
         self, filters: list[FilterNode], limit: int | None = None, offset: int = 0
-    ) -> Sequence[Security]:
+    ) -> Sequence[SecurityPublic]:
         """Find securities matching the given filters with optional pagination.
 
         Args:
@@ -31,17 +31,17 @@ class SecurityRepository(Protocol):
             offset: Optional number of securities to skip before returning results.
 
         Returns:
-            A sequence of Security objects matching the filters and pagination criteria.
+            A sequence of SecurityPublic objects matching the filters and pagination criteria.
         """
 
-    def find_securities_by_keys(self, keys: Sequence[str]) -> Sequence[Security]:
+    def find_securities_by_keys(self, keys: Sequence[str]) -> Sequence[SecurityPublic]:
         """Find securities matching the given list of keys.
 
         Args:
             keys: A sequence of unique keys to search for.
 
         Returns:
-            A sequence of Security objects matching the given keys.
+            A sequence of SecurityPublic objects matching the given keys.
         """
 
     def insert_security(self, security: SecurityCreate) -> bool:

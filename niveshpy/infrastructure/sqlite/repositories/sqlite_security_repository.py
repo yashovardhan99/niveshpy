@@ -14,27 +14,39 @@ from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_sqlalchemy_filters
 from niveshpy.database import get_session
 from niveshpy.exceptions import ResourceNotFoundError
-from niveshpy.models.security import Security, SecurityCreate
+from niveshpy.infrastructure.sqlite.models import Security
+from niveshpy.models.security import SecurityCreate, SecurityPublic
 
 
 @dataclass(slots=True, frozen=True)
 class SqliteSecurityRepository:
     """Repository for performing database operations related to securities."""
 
+    def _convert_to_public(self, security: Security) -> SecurityPublic:
+        """Convert a Security database model to a SecurityPublic domain model."""
+        return SecurityPublic(
+            key=security.key,
+            name=security.name,
+            type=security.type,
+            category=security.category,
+            properties=security.properties,
+            created=security.created,
+        )
+
     # SELECT operations for single security
 
-    def get_security_by_key(self, key: str) -> Security | None:
+    def get_security_by_key(self, key: str) -> SecurityPublic | None:
         """Fetch a security by its unique key."""
         with get_session() as session:
             security = session.get(Security, key)
             logger.debug("Fetched security by key '%s': %s", key, str(security))
-            return security
+            return self._convert_to_public(security) if security else None
 
     # SELECT operations for multiple securities
 
     def find_securities(
         self, filters: list[FilterNode], limit: int | None = None, offset: int = 0
-    ) -> Sequence[Security]:
+    ) -> Sequence[SecurityPublic]:
         """Find securities matching the given filters with optional pagination."""
         where_clause = get_sqlalchemy_filters(
             filters,
@@ -58,9 +70,9 @@ class SqliteSecurityRepository:
                 offset,
                 len(securities),
             )
-            return securities
+            return [self._convert_to_public(sec) for sec in securities]
 
-    def find_securities_by_keys(self, keys: Sequence[str]) -> Sequence[Security]:
+    def find_securities_by_keys(self, keys: Sequence[str]) -> Sequence[SecurityPublic]:
         """Find securities matching the given list of keys."""
         if not keys:
             return []
@@ -71,7 +83,7 @@ class SqliteSecurityRepository:
             logger.debug(
                 "Fetched securities by %d keys: %d results", len(keys), len(securities)
             )
-            return securities
+            return [self._convert_to_public(sec) for sec in securities]
 
     # INSERT operations for single security
 
@@ -101,7 +113,16 @@ class SqliteSecurityRepository:
 
     def insert_multiple_securities(self, securities: Sequence[SecurityCreate]) -> int:
         """Insert multiple securities into the database."""
-        security_dicts = [sec.model_dump() for sec in securities]
+        security_dicts = [
+            {
+                "key": sec.key,
+                "name": sec.name,
+                "type": sec.type,
+                "category": sec.category,
+                "properties": sec.properties,
+            }
+            for sec in securities
+        ]
         if not security_dicts:
             logger.debug("No securities provided for bulk insert.")
             return 0

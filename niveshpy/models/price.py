@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlmodel import JSON, NUMERIC, Column, Field, Relationship, SQLModel
 
-from niveshpy.models.security import Security
+from niveshpy.infrastructure.sqlite.models import Security
 
 
 class PriceBase(SQLModel):
