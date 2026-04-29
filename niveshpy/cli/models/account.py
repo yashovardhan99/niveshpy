@@ -5,14 +5,11 @@ from __future__ import annotations
 import datetime
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
 from niveshpy.cli.utils.formatters import format_datetime
 from niveshpy.cli.utils.models import Column
-from niveshpy.exceptions import ResourceError
-
-if TYPE_CHECKING:
-    from niveshpy.models.account import Account
+from niveshpy.models.account import AccountPublic
 
 
 @dataclass(slots=True, frozen=True)
@@ -40,11 +37,8 @@ class AccountDisplay:
     ]
 
     @classmethod
-    def from_domain(cls, account: Account) -> Self:
+    def from_domain(cls, account: AccountPublic) -> Self:
         """Create an AccountDisplay instance from a domain Account model."""
-        if account.id is None:
-            msg = f"Invalid account data: missing ID for account '{account.name}'"
-            raise ResourceError(msg)
         return cls(
             id=account.id,
             name=account.name,

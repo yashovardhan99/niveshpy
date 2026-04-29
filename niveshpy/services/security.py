@@ -12,9 +12,9 @@ from niveshpy.exceptions import (
     QuerySyntaxError,
 )
 from niveshpy.models.security import (
-    Security,
     SecurityCategory,
     SecurityCreate,
+    SecurityPublic,
     SecurityType,
 )
 
@@ -34,7 +34,7 @@ class SecurityService:
         queries: tuple[str, ...],
         limit: int = 30,
         offset: int = 0,
-    ) -> Sequence[Security]:
+    ) -> Sequence[SecurityPublic]:
         """List securities matching the query.
 
         Args:
@@ -122,7 +122,7 @@ class SecurityService:
 
     def resolve_security_key(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
-    ) -> Sequence[Security]:
+    ) -> Sequence[SecurityPublic]:
         """Resolve a security key to a Security object if it exists.
 
         Args:

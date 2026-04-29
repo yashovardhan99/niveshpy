@@ -14,7 +14,7 @@ from niveshpy.exceptions import (
 )
 from niveshpy.models.price import PriceCreate
 from niveshpy.models.provider import ProviderInfo
-from niveshpy.models.security import Security, SecurityType
+from niveshpy.models.security import SecurityPublic, SecurityType
 
 
 class AMFIProvider:
@@ -27,7 +27,7 @@ class AMFIProvider:
         self.session = requests.sessions.Session()
         self.session.headers.update({"Accept": "application/json"})
 
-    def get_priority(self, security: Security) -> int | None:
+    def get_priority(self, security: SecurityPublic) -> int | None:
         """Get the priority of this provider for the given security.
 
         Lower numbers = higher priority. Providers are tried in priority order
@@ -45,7 +45,7 @@ class AMFIProvider:
             return 10  # Higher priority if AMFI code is provided
         return None  # Cannot handle this security
 
-    def _extract_amfi_code(self, security: Security) -> str:
+    def _extract_amfi_code(self, security: SecurityPublic) -> str:
         """Extract the AMFI code from the security.
 
         Args:
@@ -67,7 +67,7 @@ class AMFIProvider:
         raise ResourceNotFoundError("Security", security.key)
 
     def _extract_price_data(
-        self, response: requests.Response, security: Security
+        self, response: requests.Response, security: SecurityPublic
     ) -> Iterable[PriceCreate]:
         """Handle the API response and convert it to PriceData instances.
 
@@ -119,7 +119,7 @@ class AMFIProvider:
         except requests.JSONDecodeError as e:
             raise NetworkError("Failed to decode JSON response from AMFI.") from e
 
-    def fetch_latest_price(self, security: Security) -> PriceCreate:
+    def fetch_latest_price(self, security: SecurityPublic) -> PriceCreate:
         """Fetch the latest price for a security.
 
         Args:
@@ -151,7 +151,7 @@ class AMFIProvider:
 
     def fetch_historical_prices(
         self,
-        security: Security,
+        security: SecurityPublic,
         start_date: datetime.date,
         end_date: datetime.date,
     ) -> Iterable[PriceCreate]:

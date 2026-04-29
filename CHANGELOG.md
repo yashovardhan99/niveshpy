@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Internal) Refactor Transaction, Price, and Report services into new repository pattern.
 - (Internal) Refactor Transaction, Price, and Report service tests to use a dummy repository.
+- (Internal) Restructure Account, Security, Transaction and Price models resulting in performance improvements.
 
 ## [1.0.0a5] - 2026-04-08
 

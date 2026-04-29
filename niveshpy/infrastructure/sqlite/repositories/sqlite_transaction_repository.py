@@ -20,11 +20,9 @@ from niveshpy.domain.repositories.transaction_repository import (
     TransactionSortOrder,
 )
 from niveshpy.exceptions import DatabaseError, OperationError
-from niveshpy.models.account import Account
-from niveshpy.models.price import Price
+from niveshpy.infrastructure.sqlite.models import Account, Price, Security, Transaction
 from niveshpy.models.report import Allocation, HoldingUnitRow
-from niveshpy.models.security import Security
-from niveshpy.models.transaction import Transaction, TransactionCreate
+from niveshpy.models.transaction import TransactionCreate, TransactionPublic
 
 
 @dataclass(slots=True, frozen=True)
@@ -70,7 +68,7 @@ class SqliteTransactionRepository:
         self,
         transaction_id: int,
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
-    ) -> Transaction | None:
+    ) -> TransactionPublic | None:
         """Fetch a transaction by its unique ID.
 
         Args:
@@ -78,7 +76,7 @@ class SqliteTransactionRepository:
             fetch_profile: The fetch profile to determine the level of detail to retrieve.
 
         Returns:
-            The Transaction object if found, otherwise None.
+            The TransactionPublic object if found, otherwise None.
         """
         with get_session() as session:
             stmt: SelectOfScalar[Transaction] = select(Transaction).where(
@@ -96,7 +94,14 @@ class SqliteTransactionRepository:
 
             transaction = session.exec(stmt).first()
             logger.debug(f"Fetched transaction with ID {transaction_id}: {transaction}")
-            return transaction
+            if transaction:
+                return transaction.to_public(
+                    include_relations=(
+                        fetch_profile == TransactionFetchProfile.WITH_RELATIONS
+                    ),
+                )
+            else:
+                return None
 
     def find_transactions(
         self,
@@ -105,7 +110,7 @@ class SqliteTransactionRepository:
         offset: int = 0,
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
         sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
-    ) -> Sequence[Transaction]:
+    ) -> Sequence[TransactionPublic]:
         """Find transactions matching the given filters with optional pagination.
 
         Args:
@@ -116,7 +121,7 @@ class SqliteTransactionRepository:
             sort_order: The sort order to determine the order of the returned transactions.
 
         Returns:
-            A sequence of Transaction objects matching the filters and pagination criteria.
+            A sequence of TransactionPublic objects matching the filters and pagination criteria.
         """
         filters = list(filters)
         where_clauses = get_sqlalchemy_filters(
@@ -161,14 +166,21 @@ class SqliteTransactionRepository:
         with get_session() as session:
             transactions = session.exec(stmt).all()
             logger.debug(f"Found {len(transactions)} transactions matching filters")
-            return transactions
+            return [
+                transaction.to_public(
+                    include_relations=(
+                        fetch_profile == TransactionFetchProfile.WITH_RELATIONS
+                    ),
+                )
+                for transaction in transactions
+            ]
 
     def find_transactions_by_ids(
         self,
         ids: Sequence[int],
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
         sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
-    ) -> Sequence[Transaction]:
+    ) -> Sequence[TransactionPublic]:
         """Find transactions matching the given list of IDs.
 
         Args:
@@ -177,7 +189,7 @@ class SqliteTransactionRepository:
             sort_order: The sort order to determine the order of the returned transactions.
 
         Returns:
-            A sequence of Transaction objects matching the given IDs.
+            A sequence of TransactionPublic objects matching the given IDs.
         """
         if not ids:
             return []
@@ -201,7 +213,14 @@ class SqliteTransactionRepository:
         with get_session() as session:
             transactions = session.exec(stmt).all()
             logger.debug(f"Found {len(transactions)} transactions matching IDs")
-            return transactions
+            return [
+                transaction.to_public(
+                    include_relations=(
+                        fetch_profile == TransactionFetchProfile.WITH_RELATIONS
+                    ),
+                )
+                for transaction in transactions
+            ]
 
     def insert_transaction(self, transaction: TransactionCreate) -> int:
         """Insert a new transaction.

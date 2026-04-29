@@ -1,9 +1,9 @@
 """Service for parsing financial documents."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TypeVar
 
-from attrs import field, frozen
+from attrs import evolve, field, frozen
 
 from niveshpy.domain.repositories import (
     AccountRepository,
@@ -53,12 +53,12 @@ class ParsingService:
     def _add_metadata(self, item: _T) -> _T:
         """Add metadata to a parsed item."""
         if item.properties.get("source") is None:
-            item.properties["source"] = "parser"
+            item = evolve(item, properties={**item.properties, "source": "parser"})
         return item
 
     def _bulk_insert_accounts(
         self, accounts: list[AccountCreate]
-    ) -> list[AccountPublic]:
+    ) -> Sequence[AccountPublic]:
         """Bulk insert accounts into the database."""
         if len(accounts) == 0:
             return []
@@ -69,14 +69,14 @@ class ParsingService:
                 institutions=[account.institution for account in accounts],
             )
         )
-        return [AccountPublic.model_validate(acc) for acc in included_accounts]
+        return included_accounts
 
     def _bulk_insert_securities(self, securities: list[SecurityCreate]) -> None:
         """Bulk insert securities into the database."""
         if len(securities) != 0:
             self._security_repository.insert_multiple_securities(securities)
 
-    def _parse_accounts(self) -> list[AccountPublic]:
+    def _parse_accounts(self) -> Sequence[AccountPublic]:
         """Parse and store accounts using the parser."""
         self._report_progress("accounts", 0, -1)
         accounts = [
@@ -95,7 +95,7 @@ class ParsingService:
         self._bulk_insert_securities(securities)
         self._report_progress("securities", len(securities), len(securities))
 
-    def _parse_transactions(self, accounts: list[AccountPublic]) -> None:
+    def _parse_transactions(self, accounts: Sequence[AccountPublic]) -> None:
         """Parse and store transactions using the parser."""
         self._report_progress("transactions", 0, -1)
         transactions = list(

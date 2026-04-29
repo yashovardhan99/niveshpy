@@ -6,13 +6,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 
+from attrs import evolve
+
 from niveshpy.domain.models.lot import OpenLot, RealizedLotEvent
 from niveshpy.exceptions import InvalidInputError, OperationError
-from niveshpy.models.transaction import (
-    Transaction,
-    TransactionPublicWithCost,
-    TransactionType,
-)
+from niveshpy.models.transaction import TransactionPublic, TransactionType
 
 
 @dataclass(slots=True, frozen=True)
@@ -26,7 +24,7 @@ class LotAccountingService:
 
     def _run_fifo(
         self,
-        transactions: Sequence[Transaction],
+        transactions: Sequence[TransactionPublic],
     ) -> tuple[Mapping[tuple[str, int], Sequence[OpenLot]], Sequence[RealizedLotEvent]]:
         """Core FIFO engine. Single pass over the transaction stream.
 
@@ -132,7 +130,7 @@ class LotAccountingService:
 
     def build_open_lot_state(
         self,
-        transactions: Sequence[Transaction],
+        transactions: Sequence[TransactionPublic],
     ) -> Mapping[tuple[str, int], Sequence[OpenLot]]:
         """Return remaining open lots per (security_key, account_id).
 
@@ -148,7 +146,7 @@ class LotAccountingService:
 
     def compute_position_costs(
         self,
-        transactions: Sequence[Transaction],
+        transactions: Sequence[TransactionPublic],
     ) -> Mapping[tuple[str, int], Decimal]:
         """Return remaining cost basis per (security_key, account_id).
 
@@ -170,8 +168,8 @@ class LotAccountingService:
 
     def annotate_transactions_with_cost(
         self,
-        transactions: Sequence[Transaction],
-    ) -> Sequence[TransactionPublicWithCost]:
+        transactions: Sequence[TransactionPublic],
+    ) -> Sequence[TransactionPublic]:
         """Return transactions annotated with FIFO cost basis for each sale.
 
         Purchases receive cost=None. Sales receive the total matched cost
@@ -183,7 +181,7 @@ class LotAccountingService:
             transactions: Persisted transactions in chronological order.
 
         Returns:
-            Sequence of TransactionPublicWithCost in the original input order.
+            Sequence of TransactionPublic in the original input order with cost annotation.
         """
         _, realized_events = self._run_fifo(transactions)
 
@@ -192,7 +190,7 @@ class LotAccountingService:
         for event in realized_events:
             cost_by_disposal[event.disposal_transaction_id] += event.matched_cost
 
-        result: list[TransactionPublicWithCost] = []
+        result: list[TransactionPublic] = []
         for txn in transactions:
             if txn.id is None:
                 raise InvalidInputError(
@@ -203,16 +201,12 @@ class LotAccountingService:
                 cost = None
             else:
                 cost = cost_by_disposal[txn.id].quantize(Decimal("0.01"))
-            result.append(
-                TransactionPublicWithCost.model_validate(
-                    {**txn.model_dump(), "cost": cost}
-                )
-            )
+            result.append(evolve(txn, cost=cost))
         return result
 
     def compute_realized_lot_events(
         self,
-        transactions: Sequence[Transaction],
+        transactions: Sequence[TransactionPublic],
     ) -> Sequence[RealizedLotEvent]:
         """Return all realized lot events produced by the FIFO engine.
 

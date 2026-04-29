@@ -1,10 +1,11 @@
 """Models for securities."""
 
+from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum, auto
 from typing import Any
 
-from sqlmodel import JSON, Column, Field, SQLModel
+from attrs import field, frozen
 
 
 class SecurityType(StrEnum):
@@ -37,30 +38,8 @@ class SecurityCategory(StrEnum):
     """Security category representing other categories."""
 
 
-class SecurityBase(SQLModel):
-    """Base model for securities.
-
-    Attributes:
-        key (str): Unique key identifying the security.
-        name (str): Name of the security.
-        type (SecurityType): Type of the security.
-        category (SecurityCategory): Category of the security.
-        properties (dict[str, Any], optional): Additional properties of the security.
-            Defaults to an empty dictionary.
-    """
-
-    key: str = Field(primary_key=True)
-    name: str = Field()
-    type: SecurityType = Field()
-    category: SecurityCategory = Field()
-    properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-
-    def __init_subclass__(cls, **kwargs):
-        """Ensure subclasses inherit schema extra metadata."""
-        return super().__init_subclass__(**kwargs)
-
-
-class SecurityCreate(SecurityBase):
+@frozen
+class SecurityCreate:
     """Model for creating a new security.
 
     Attributes:
@@ -72,9 +51,16 @@ class SecurityCreate(SecurityBase):
             Defaults to an empty dictionary.
     """
 
+    key: str
+    name: str
+    type: SecurityType
+    category: SecurityCategory
+    properties: Mapping[str, Any] = field(factory=dict)
 
-class Security(SecurityBase, table=True):
-    """Database model for securities.
+
+@frozen
+class SecurityPublic:
+    """Public model for a security.
 
     Attributes:
         key (str): Unique key identifying the security.
@@ -85,4 +71,9 @@ class Security(SecurityBase, table=True):
         created (datetime): Timestamp when the security was created.
     """
 
-    created: datetime = Field(default_factory=datetime.now)
+    key: str
+    name: str
+    type: SecurityType
+    category: SecurityCategory
+    properties: Mapping[str, Any]
+    created: datetime

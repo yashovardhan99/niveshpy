@@ -3,7 +3,7 @@
 import datetime
 from decimal import Decimal
 
-from niveshpy.models.account import Account
+from niveshpy.models.account import AccountPublic
 from niveshpy.models.report import (
     Allocation,
     Holding,
@@ -12,7 +12,11 @@ from niveshpy.models.report import (
     PortfolioTotals,
     SummaryResult,
 )
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
+from niveshpy.models.security import (
+    SecurityCategory,
+    SecurityPublic,
+    SecurityType,
+)
 
 # --- Performance models ---
 
@@ -26,12 +30,20 @@ class TestPerformanceHoldingModel:
         invested=Decimal("1000"),
         date=datetime.date(2024, 6, 1),
     ):
-        account = Account(id=1, name="Savings", institution="Bank")
-        security = Security(
+        account = AccountPublic(
+            id=1,
+            name="Savings",
+            institution="Bank",
+            created_at=datetime.datetime.now(),
+            properties={},
+        )
+        security = SecurityPublic(
             key="MF001",
             name="Equity Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.datetime.now(),
         )
         return Holding(
             account=account,
@@ -92,12 +104,20 @@ class TestPerformanceResultModel:
 
     def test_create_with_holdings_and_totals(self):
         """Test creating PerformanceResult with holdings and totals."""
-        account = Account(id=1, name="Savings", institution="Bank")
-        security = Security(
+        account = AccountPublic(
+            id=1,
+            name="Savings",
+            institution="Bank",
+            created_at=datetime.datetime.now(),
+            properties={},
+        )
+        security = SecurityPublic(
             key="MF001",
             name="Equity Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.datetime.now(),
         )
         holding = Holding(
             account=account,
@@ -162,12 +182,20 @@ class TestSummaryResultModel:
 
     def test_summary_result_creation(self):
         """Test creating SummaryResult with all fields populated."""
-        account = Account(id=1, name="Savings", institution="Bank")
-        security = Security(
+        account = AccountPublic(
+            id=1,
+            name="Savings",
+            institution="Bank",
+            created_at=datetime.datetime.now(),
+            properties={},
+        )
+        security = SecurityPublic(
             key="MF001",
             name="Equity Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.EQUITY,
+            properties={},
+            created=datetime.datetime.now(),
         )
         holding = Holding(
             account=account,

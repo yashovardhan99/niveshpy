@@ -13,7 +13,8 @@ from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_sqlalchemy_filters
 from niveshpy.database import get_session
 from niveshpy.exceptions import InvalidInputError
-from niveshpy.models.account import Account, AccountCreate
+from niveshpy.infrastructure.sqlite.models import Account
+from niveshpy.models.account import AccountCreate, AccountPublic
 
 
 @dataclass(slots=True, frozen=True)
@@ -26,16 +27,16 @@ class SqliteAccountRepository:
 
     # SELECT operations for single account
 
-    def get_account_by_id(self, account_id: int) -> Account | None:
+    def get_account_by_id(self, account_id: int) -> AccountPublic | None:
         """Fetch an account by its ID."""
         with get_session() as session:
             account = session.get(Account, account_id)
             logger.debug("Fetched account by ID %d: %s", account_id, str(account))
-            return account
+            return account.to_public() if account else None
 
     def get_account_by_name_and_institution(
         self, name: str, institution: str
-    ) -> Account | None:
+    ) -> AccountPublic | None:
         """Fetch an account by its name and institution."""
         query = select(Account).where(
             col(Account.name) == name, col(Account.institution) == institution
@@ -48,13 +49,13 @@ class SqliteAccountRepository:
                 institution,
                 str(account),
             )
-            return account
+            return account.to_public() if account else None
 
     # SELECT operations for multiple accounts
 
     def find_accounts(
         self, filters: Iterable[FilterNode], limit: int | None = None, offset: int = 0
-    ) -> Sequence[Account]:
+    ) -> Sequence[AccountPublic]:
         """Find accounts matching the given filters with optional pagination."""
         where_clause = get_sqlalchemy_filters(
             filters, SqliteAccountRepository._column_mappings
@@ -68,16 +69,18 @@ class SqliteAccountRepository:
                 .order_by(col(Account.id))
             ).all()
             logger.debug("Fetched %d accounts with filters: %s", len(accounts), filters)
-            return accounts
+            return [account.to_public() for account in accounts]
 
-    def find_accounts_by_ids(self, account_ids: Sequence[int]) -> Sequence[Account]:
+    def find_accounts_by_ids(
+        self, account_ids: Sequence[int]
+    ) -> Sequence[AccountPublic]:
         """Find accounts matching the given sequence of IDs.
 
         Args:
             account_ids: A sequence of account IDs to search for.
 
         Returns:
-            A sequence of Account objects matching the given IDs.
+            A sequence of AccountPublic objects matching the given IDs.
         """
         if not account_ids:
             logger.debug("No account IDs provided for search.")
@@ -88,11 +91,11 @@ class SqliteAccountRepository:
             logger.debug(
                 "Fetched %d accounts with IDs in %s", len(accounts), account_ids
             )
-            return accounts
+            return [account.to_public() for account in accounts]
 
     def find_accounts_by_name_and_institutions(
         self, names: Sequence[str], institutions: Sequence[str]
-    ) -> Sequence[Account]:
+    ) -> Sequence[AccountPublic]:
         """Find accounts matching the given name-institution pairs."""
         if not names or not institutions:
             logger.debug("No names or institutions provided for account search.")
@@ -115,7 +118,7 @@ class SqliteAccountRepository:
                 names,
                 institutions,
             )
-            return accounts
+            return [account.to_public() for account in accounts]
 
     # INSERT operations for single account
 

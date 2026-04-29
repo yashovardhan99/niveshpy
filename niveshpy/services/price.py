@@ -7,6 +7,8 @@ from collections.abc import Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
+from attrs import evolve
+
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
@@ -23,9 +25,9 @@ from niveshpy.exceptions import (
     ResourceNotFoundError,
 )
 from niveshpy.models.output import BaseMessage, ProgressUpdate, Warning
-from niveshpy.models.price import PriceCreate, PricePublicWithRelations
+from niveshpy.models.price import PriceCreate, PricePublic
 from niveshpy.models.provider import Provider, ProviderInfo
-from niveshpy.models.security import Security
+from niveshpy.models.security import SecurityPublic
 
 
 @dataclass(slots=True, frozen=True)
@@ -43,7 +45,7 @@ class PriceService:
         queries: tuple[str, ...],
         limit: int = 30,
         offset: int = 0,
-    ) -> Sequence[PricePublicWithRelations]:
+    ) -> Sequence[PricePublic]:
         """List latest prices for securities matching the queries.
 
         Args:
@@ -64,10 +66,7 @@ class PriceService:
             # Otherwise, return all prices matching the filters
             prices = self.price_repository.find_all_prices(filters, limit, offset)
 
-        return [
-            PricePublicWithRelations(**price.model_dump(), security=price.security)
-            for price in prices
-        ]
+        return prices
 
     def update_price(
         self,
@@ -159,7 +158,7 @@ class PriceService:
 
         return provider_instances
 
-    def _fetch_securities(self, queries: tuple[str, ...]) -> Sequence[Security]:
+    def _fetch_securities(self, queries: tuple[str, ...]) -> Sequence[SecurityPublic]:
         """Fetch securities matching the given queries.
 
         Args:
@@ -183,10 +182,10 @@ class PriceService:
 
     def _build_provider_map(
         self,
-        securities: Sequence[Security],
+        securities: Sequence[SecurityPublic],
         provider_instances: list[tuple[str, ProviderInfo, Provider]],
     ) -> tuple[
-        dict[str, list[tuple[int, str, ProviderInfo, Provider]]], list[Security]
+        dict[str, list[tuple[int, str, ProviderInfo, Provider]]], list[SecurityPublic]
     ]:
         """Build provider priority map for each security.
 
@@ -202,7 +201,7 @@ class PriceService:
             Tuple of (provider_map, securities_with_providers).
         """
         provider_map: dict[str, list[tuple[int, str, ProviderInfo, Provider]]] = {}
-        securities_with_providers: list[Security] = []
+        securities_with_providers: list[SecurityPublic] = []
 
         for security in securities:
             applicable_providers: list[tuple[int, str, ProviderInfo, Provider]] = []
@@ -222,7 +221,7 @@ class PriceService:
 
     def _fetch_prices_for_security(
         self,
-        security: Security,
+        security: SecurityPublic,
         providers: list[tuple[int, str, ProviderInfo, Provider]],
         start_date: datetime.date,
         end_date: datetime.date,
@@ -437,12 +436,12 @@ class PriceService:
 
     def _process_sync(
         self,
-        security: Security,
+        security: SecurityPublic,
         providers: list[tuple[int, str, ProviderInfo, Provider]],
         force: bool,
     ) -> (
         tuple[
-            Security,
+            SecurityPublic,
             list[PriceCreate],
             str,
             datetime.date,
@@ -495,5 +494,9 @@ class PriceService:
     def _add_metadata(self, price_data: PriceCreate, source: str) -> PriceCreate:
         """Add source metadata to price data."""
         if "source" not in price_data.properties:
-            price_data.properties["source"] = source
-        return price_data
+            return evolve(
+                price_data,
+                properties={**price_data.properties, "source": source},
+            )
+        else:
+            return price_data

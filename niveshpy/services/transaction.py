@@ -5,6 +5,8 @@ import decimal
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from attrs import evolve
+
 from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import (
     get_prepared_filters_from_queries,
@@ -26,9 +28,7 @@ from niveshpy.exceptions import (
 )
 from niveshpy.models.transaction import (
     TransactionCreate,
-    TransactionPublicWithCost,
-    TransactionPublicWithRelations,
-    TransactionPublicWithRelationsAndCost,
+    TransactionPublic,
     TransactionType,
 )
 
@@ -48,9 +48,7 @@ class TransactionService:
         limit: int = 30,
         offset: int = 0,
         cost: bool = False,
-    ) -> Sequence[
-        TransactionPublicWithRelations | TransactionPublicWithRelationsAndCost
-    ]:
+    ) -> Sequence[TransactionPublic]:
         """List transactions matching the query."""
         if limit < 1:
             raise InvalidInputError(limit, "Limit must be positive.")
@@ -90,27 +88,14 @@ class TransactionService:
             sort_order=TransactionSortOrder.DATE_DESC_ID_ASC,
         )
         if cost:
-            id_to_cost_transaction: dict[int, TransactionPublicWithCost] = {
-                t.id: t for t in transactions_with_cost if t.id is not None
+            id_to_cost_transaction: dict[int, TransactionPublic] = {
+                t.id: t for t in transactions_with_cost
             }
-            result: list[TransactionPublicWithRelations] = [
-                TransactionPublicWithRelationsAndCost.model_validate(
-                    {
-                        **TransactionPublicWithRelations.model_validate(
-                            txn
-                        ).model_dump(),
-                        "cost": id_to_cost_transaction[txn.id].cost,
-                    }
-                )
-                for txn in transactions
-                if txn.id is not None
-            ]
-        else:
-            result = [
-                TransactionPublicWithRelations.model_validate(txn)
+            transactions = [
+                evolve(txn, cost=id_to_cost_transaction[txn.id].cost)
                 for txn in transactions
             ]
-        return result
+        return transactions
 
     def add_transaction(
         self,
@@ -172,7 +157,7 @@ class TransactionService:
 
     def resolve_transaction(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
-    ) -> Sequence[TransactionPublicWithRelations]:
+    ) -> Sequence[TransactionPublic]:
         """Resolve a query to a Transaction object if it exists.
 
         Args:
@@ -181,7 +166,7 @@ class TransactionService:
             allow_ambiguous (bool): Whether to allow ambiguous results.
 
         Returns:
-            Sequence[TransactionPublicWithRelations]: The resolved transaction(s).
+            Sequence[TransactionPublic]: The resolved transaction(s).
 
         Raises:
             InvalidInputError: If no queries are provided and ambiguous results are not allowed.
@@ -205,9 +190,7 @@ class TransactionService:
                 transaction_id
             )
             if exact_transaction is not None:
-                return [
-                    TransactionPublicWithRelations.model_validate(exact_transaction)
-                ]
+                return [exact_transaction]
 
         # No exact match found by ID
         # If ambiguous results are not allowed, raise error

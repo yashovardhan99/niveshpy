@@ -4,25 +4,25 @@ from collections.abc import Iterable, Sequence
 from typing import Protocol
 
 from niveshpy.core.query.ast import FilterNode
-from niveshpy.models.account import Account, AccountCreate
+from niveshpy.models.account import AccountCreate, AccountPublic
 
 
 class AccountRepository(Protocol):
     """Repository interface for retrieving and managing accounts."""
 
-    def get_account_by_id(self, account_id: int) -> Account | None:
+    def get_account_by_id(self, account_id: int) -> AccountPublic | None:
         """Fetch an account by its ID.
 
         Args:
             account_id: The ID of the account to fetch.
 
         Returns:
-            The Account object if found, otherwise None.
+            The AccountPublic object if found, otherwise None.
         """
 
     def get_account_by_name_and_institution(
         self, name: str, institution: str
-    ) -> Account | None:
+    ) -> AccountPublic | None:
         """Fetch an account by its name and institution.
 
         Args:
@@ -30,12 +30,12 @@ class AccountRepository(Protocol):
             institution: The institution associated with the account.
 
         Returns:
-            The Account object if found, otherwise None.
+            The AccountPublic object if found, otherwise None.
         """
 
     def find_accounts(
         self, filters: Iterable[FilterNode], limit: int | None = None, offset: int = 0
-    ) -> Sequence[Account]:
+    ) -> Sequence[AccountPublic]:
         """Find accounts matching the given filters with optional pagination.
 
         Args:
@@ -44,22 +44,24 @@ class AccountRepository(Protocol):
             offset: Optional number of accounts to skip before returning results.
 
         Returns:
-            A sequence of Account objects matching the filters and pagination criteria.
+            A sequence of AccountPublic objects matching the filters and pagination criteria.
         """
 
-    def find_accounts_by_ids(self, account_ids: Sequence[int]) -> Sequence[Account]:
+    def find_accounts_by_ids(
+        self, account_ids: Sequence[int]
+    ) -> Sequence[AccountPublic]:
         """Find accounts matching the given sequence of IDs.
 
         Args:
             account_ids: A sequence of account IDs to search for.
 
         Returns:
-            A sequence of Account objects matching the given IDs.
+            A sequence of AccountPublic objects matching the given IDs.
         """
 
     def find_accounts_by_name_and_institutions(
         self, names: Sequence[str], institutions: Sequence[str]
-    ) -> Sequence[Account]:
+    ) -> Sequence[AccountPublic]:
         """Find accounts matching the given name-institution pairs.
 
         Args:
@@ -67,7 +69,7 @@ class AccountRepository(Protocol):
             institutions: A sequence of institution names to search for.
 
         Returns:
-            A sequence of Account objects matching the given name-institution pairs.
+            A sequence of AccountPublic objects matching the given name-institution pairs.
         """
 
     def insert_account(self, account: AccountCreate) -> int | None:

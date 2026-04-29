@@ -7,7 +7,7 @@ from typing import Literal, Protocol
 
 from niveshpy.core.query.ast import FilterNode
 from niveshpy.models.report import Allocation, HoldingUnitRow
-from niveshpy.models.transaction import Transaction, TransactionCreate
+from niveshpy.models.transaction import TransactionCreate, TransactionPublic
 
 
 class TransactionFetchProfile(Enum):
@@ -39,7 +39,7 @@ class TransactionRepository(Protocol):
         self,
         transaction_id: int,
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
-    ) -> Transaction | None:
+    ) -> TransactionPublic | None:
         """Fetch a transaction by its unique ID.
 
         Args:
@@ -47,7 +47,7 @@ class TransactionRepository(Protocol):
             fetch_profile: The fetch profile to determine the level of detail to retrieve.
 
         Returns:
-            The Transaction object if found, otherwise None.
+            The TransactionPublic object if found, otherwise None.
         """
 
     def find_transactions(
@@ -57,7 +57,7 @@ class TransactionRepository(Protocol):
         offset: int = 0,
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
         sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
-    ) -> Sequence[Transaction]:
+    ) -> Sequence[TransactionPublic]:
         """Find transactions matching the given filters with optional pagination.
 
         Args:
@@ -68,7 +68,7 @@ class TransactionRepository(Protocol):
             sort_order: The sort order to determine the order of the returned transactions.
 
         Returns:
-            A sequence of Transaction objects matching the filters and pagination criteria.
+            A sequence of TransactionPublic objects matching the filters and pagination criteria.
         """
 
     def find_transactions_by_ids(
@@ -76,7 +76,7 @@ class TransactionRepository(Protocol):
         ids: Sequence[int],
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
         sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
-    ) -> Sequence[Transaction]:
+    ) -> Sequence[TransactionPublic]:
         """Find transactions matching the given list of IDs.
 
         Args:
@@ -85,7 +85,7 @@ class TransactionRepository(Protocol):
             sort_order: The sort order to determine the order of the returned transactions.
 
         Returns:
-            A sequence of Transaction objects matching the given IDs.
+            A sequence of TransactionPublic objects matching the given IDs.
         """
 
     def insert_transaction(self, transaction: TransactionCreate) -> int:

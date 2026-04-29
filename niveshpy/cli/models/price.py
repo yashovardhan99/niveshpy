@@ -11,9 +11,10 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 from niveshpy.cli.models.security import SecurityDisplay
 from niveshpy.cli.utils.formatters import format_date, format_datetime, format_decimal
 from niveshpy.cli.utils.models import Column
+from niveshpy.exceptions import InvalidInputError
 
 if TYPE_CHECKING:
-    from niveshpy.models.price import PricePublicWithRelations
+    from niveshpy.models.price import PricePublic
 
 
 def _format_security(security: SecurityDisplay) -> str:
@@ -56,9 +57,13 @@ class PriceDisplay:
     @classmethod
     def from_domain(
         cls,
-        price: PricePublicWithRelations,
+        price: PricePublic,
     ) -> Self:
         """Create a PriceDisplay instance from a domain Price model."""
+        if price.security is None:
+            raise InvalidInputError(
+                price, "Price must have an associated security for display"
+            )
         return cls(
             security=SecurityDisplay.from_domain(price.security),
             date=price.date,

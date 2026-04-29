@@ -7,11 +7,7 @@ import pytest
 
 from niveshpy.domain.services import LotAccountingService
 from niveshpy.exceptions import InvalidInputError, OperationError
-from niveshpy.models.transaction import (
-    Transaction,
-    TransactionPublicWithCost,
-    TransactionType,
-)
+from niveshpy.models.transaction import TransactionPublic, TransactionType
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -28,8 +24,8 @@ def _buy(
     security_key: str = "SEC1",
     account_id: int = 1,
     date: datetime.date = datetime.date(2024, 1, 1),
-) -> Transaction:
-    return Transaction(
+) -> TransactionPublic:
+    return TransactionPublic(
         id=id,
         transaction_date=date,
         type=TransactionType.PURCHASE,
@@ -38,6 +34,8 @@ def _buy(
         units=Decimal(units),
         security_key=security_key,
         account_id=account_id,
+        properties={},
+        created=datetime.datetime.now(),
     )
 
 
@@ -49,9 +47,9 @@ def _sell(
     security_key: str = "SEC1",
     account_id: int = 1,
     date: datetime.date = datetime.date(2024, 1, 1),
-) -> Transaction:
+) -> TransactionPublic:
     """Create a sell transaction. Units and amount provided as positive; will be negated."""
-    return Transaction(
+    return TransactionPublic(
         id=id,
         transaction_date=date,
         type=TransactionType.SALE,
@@ -60,6 +58,8 @@ def _sell(
         units=-Decimal(units),
         security_key=security_key,
         account_id=account_id,
+        properties={},
+        created=datetime.datetime.now(),
     )
 
 
@@ -472,16 +472,16 @@ class TestAnnotateTransactionsWithCost:
         with pytest.raises(OperationError, match="Insufficient purchase history"):
             lot_accounting_service.annotate_transactions_with_cost(txns)
 
-    def test_returns_transaction_public_with_cost_instances(
+    def test_returns_transaction_public_instances(
         self, lot_accounting_service: LotAccountingService
     ):
-        """All results should be TransactionPublicWithCost instances."""
+        """All results should be TransactionPublic instances."""
         txns = [
             _buy(1, "100", "10000"),
             _sell(2, "100", "12000"),
         ]
         result = lot_accounting_service.annotate_transactions_with_cost(txns)
-        assert all(isinstance(r, TransactionPublicWithCost) for r in result)
+        assert all(isinstance(r, TransactionPublic) for r in result)
 
     def test_preserves_transaction_fields(
         self, lot_accounting_service: LotAccountingService

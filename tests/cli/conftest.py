@@ -49,10 +49,12 @@ def cli_in_memory_engine(monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture(autouse=True)
 def reset_cli_database(cli_in_memory_engine) -> None:
     """Reset the in-memory database between CLI integration tests."""
-    from niveshpy.models.account import Account  # noqa: F401
-    from niveshpy.models.price import Price  # noqa: F401
-    from niveshpy.models.security import Security  # noqa: F401
-    from niveshpy.models.transaction import Transaction  # noqa: F401
+    from niveshpy.infrastructure.sqlite.models import (  # noqa: F401
+        Account,
+        Price,
+        Security,
+        Transaction,
+    )
 
     SQLModel.metadata.drop_all(cli_in_memory_engine)
     SQLModel.metadata.create_all(cli_in_memory_engine)

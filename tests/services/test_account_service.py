@@ -5,7 +5,7 @@ from collections.abc import Sequence
 import pytest
 
 from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
-from niveshpy.models.account import Account, AccountCreate
+from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.services.account import AccountService
 from niveshpy.services.result import InsertResult, MergeAction
 from tests.services.conftest import MockAccountRepository
@@ -18,7 +18,7 @@ def account_service() -> AccountService:
 
 
 @pytest.fixture
-def sample_accounts(account_service: AccountService) -> list[Account]:
+def sample_accounts(account_service: AccountService) -> Sequence[AccountPublic]:
     """Create sample accounts for testing."""
     accounts = [
         AccountCreate(name="HDFC Savings", institution="HDFC Bank"),
@@ -27,12 +27,8 @@ def sample_accounts(account_service: AccountService) -> list[Account]:
         AccountCreate(name="HDFC Current", institution="HDFC Bank"),
         AccountCreate(name="Zerodha Demat", institution="Zerodha"),
     ]
-    created_accounts = []
-    for account in accounts:
-        created_account_id = account_service.account_repository.insert_account(account)
-        created_account = Account(id=created_account_id, **account.model_dump())
-        created_accounts.append(created_account)
-    return created_accounts
+    account_service.account_repository.insert_multiple_accounts(accounts)
+    return account_service.account_repository.find_accounts(())
 
 
 class TestListAccounts:
@@ -45,7 +41,7 @@ class TestListAccounts:
         accounts = account_service.list_accounts(queries=(), limit=30, offset=0)
 
         assert len(accounts) == 5
-        assert all(isinstance(acc, Account) for acc in accounts)
+        assert all(isinstance(acc, AccountPublic) for acc in accounts)
         assert accounts[0].name == "HDFC Savings"
 
     def test_list_accounts_with_limit(
@@ -128,14 +124,14 @@ class TestListAccounts:
         with pytest.raises(InvalidInputError, match="Offset cannot be negative"):
             account_service.list_accounts(queries=(), limit=30, offset=-1)
 
-    def test_list_accounts_returns_account(
+    def test_list_accounts_returns_accountpublic(
         self, account_service: AccountService, sample_accounts
     ):
-        """Test that list_accounts returns Account instances."""
+        """Test that list_accounts returns AccountPublic instances."""
         accounts = account_service.list_accounts(queries=(), limit=1, offset=0)
 
         assert len(accounts) == 1
-        assert isinstance(accounts[0], Account)
+        assert isinstance(accounts[0], AccountPublic)
 
 
 class TestAddAccount:
@@ -290,20 +286,20 @@ class TestResolveAccountId:
     """Tests for resolve_account_id method."""
 
     def test_resolve_empty_queries_ambiguous_allowed(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test resolving with empty queries when ambiguous is allowed."""
-        accounts: Sequence[Account] = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=(), limit=10, allow_ambiguous=True
         )
 
         assert len(accounts) == 5
-        assert all(isinstance(acc, Account) for acc in accounts)
+        assert all(isinstance(acc, AccountPublic) for acc in accounts)
         for i in range(5):
             assert accounts[i].id == sample_accounts[i].id
 
     def test_resolve_empty_queries_ambiguous_not_allowed(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test resolving with empty queries when ambiguous is not allowed."""
         with pytest.raises(InvalidInputError, match="No queries provided"):
@@ -312,21 +308,21 @@ class TestResolveAccountId:
             )
 
     def test_resolve_empty_queries_respects_limit(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test that empty queries resolution respects limit."""
-        accounts: Sequence[Account] = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=(), limit=3, allow_ambiguous=True
         )
 
         assert len(accounts) == 3
 
     def test_resolve_exact_match_by_id(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test resolving by exact account ID."""
         account_id = sample_accounts[0].id
-        accounts: Sequence[Account] = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=(str(account_id),), limit=10, allow_ambiguous=True
         )
 
@@ -336,11 +332,11 @@ class TestResolveAccountId:
         assert accounts[0].institution == sample_accounts[0].institution
 
     def test_resolve_exact_match_by_id_with_whitespace(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test resolving by ID with surrounding whitespace."""
         account_id = sample_accounts[0].id
-        accounts: Sequence[Account] = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=(f"  {account_id}  ",), limit=10, allow_ambiguous=True
         )
 
@@ -348,7 +344,7 @@ class TestResolveAccountId:
         assert accounts[0].id == account_id
 
     def test_resolve_nonexistent_id_ambiguous_not_allowed(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test resolving non-existent ID when ambiguous not allowed."""
         with pytest.raises(AmbiguousResourceError, match="account"):
@@ -357,10 +353,10 @@ class TestResolveAccountId:
             )
 
     def test_resolve_nonexistent_id_ambiguous_allowed(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test resolving non-existent ID when ambiguous allowed falls back to text search."""
-        accounts: Sequence[Account] = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=("99999",), limit=10, allow_ambiguous=True
         )
 
@@ -368,20 +364,20 @@ class TestResolveAccountId:
         assert len(accounts) == 0
 
     def test_resolve_text_search_no_matches(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test text search with no matches."""
-        accounts: Sequence[Account] = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=("NonExistent",), limit=10, allow_ambiguous=True
         )
 
         assert len(accounts) == 0
 
     def test_resolve_text_search_single_match(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test text search with exactly one match."""
-        accounts: Sequence[Account] = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=("Zerodha",), limit=10, allow_ambiguous=True
         )
 
@@ -389,10 +385,10 @@ class TestResolveAccountId:
         assert accounts[0].name == "Zerodha Demat"
 
     def test_resolve_text_search_multiple_matches(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test text search with multiple matches."""
-        accounts: Sequence[Account] = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=("HDFC",), limit=10, allow_ambiguous=True
         )
 
@@ -400,7 +396,7 @@ class TestResolveAccountId:
         assert all("HDFC" in acc.name or "HDFC" in acc.institution for acc in accounts)
 
     def test_resolve_text_search_multiple_matches_ambiguous_not_allowed(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test text search with multiple matches when ambiguous not allowed."""
         with pytest.raises(AmbiguousResourceError, match="account"):
@@ -409,10 +405,10 @@ class TestResolveAccountId:
             )
 
     def test_resolve_text_search_respects_limit(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test that text search respects limit parameter."""
-        accounts: Sequence[Account] = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=("HDFC",), limit=1, allow_ambiguous=True
         )
 
@@ -421,7 +417,7 @@ class TestResolveAccountId:
         assert len(accounts) == 1
 
     def test_resolve_non_numeric_query_ambiguous_not_allowed(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test non-numeric query when ambiguous not allowed."""
         with pytest.raises(AmbiguousResourceError, match="account"):
@@ -431,22 +427,22 @@ class TestResolveAccountId:
 
     def test_resolve_empty_database(self, account_service: AccountService):
         """Test resolving in empty database."""
-        accounts: Sequence[Account] = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=("test",), limit=10, allow_ambiguous=True
         )
 
         assert len(accounts) == 0
 
     def test_resolve_returns_accountpublic(
-        self, account_service: AccountService, sample_accounts: list[Account]
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test that resolution returns Account instances."""
         account_id = sample_accounts[0].id
-        accounts: Sequence[Account] = account_service.resolve_account_id(
+        accounts: Sequence[AccountPublic] = account_service.resolve_account_id(
             queries=(str(account_id),), limit=10, allow_ambiguous=True
         )
 
-        assert isinstance(accounts[0], Account)
+        assert isinstance(accounts[0], AccountPublic)
         assert hasattr(accounts[0], "id")
         assert hasattr(accounts[0], "created_at")
 
@@ -455,7 +451,7 @@ class TestDeleteAccount:
     """Tests for delete_account method."""
 
     def test_delete_account_success(
-        self, account_service: AccountService, sample_accounts
+        self, account_service: AccountService, sample_accounts: Sequence[AccountPublic]
     ):
         """Test successfully deleting an account."""
         account_id = sample_accounts[0].id

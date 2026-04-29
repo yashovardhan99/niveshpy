@@ -8,9 +8,8 @@ from sqlalchemy import event, inspect, text
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from niveshpy.database import _iregexp, get_session, initialize
-from niveshpy.models.account import Account
-from niveshpy.models.price import Price
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
+from niveshpy.infrastructure.sqlite.models import Account, Price, Security
+from niveshpy.models.security import SecurityCategory, SecurityType
 
 
 class TestIregexpFunction:

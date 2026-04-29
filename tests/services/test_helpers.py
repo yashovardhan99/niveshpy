@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 
 from niveshpy.exceptions import OperationError
-from niveshpy.models.transaction import Transaction, TransactionType
+from niveshpy.models.transaction import TransactionPublic, TransactionType
 from niveshpy.services.helpers import compute_cagr, compute_xirr
 
 
@@ -20,9 +20,9 @@ def _make_txn(
     account_id: int = 1,
     date: datetime.date = datetime.date(2024, 1, 1),
     description: str = "",
-) -> Transaction:
-    """Create a Transaction object for testing."""
-    return Transaction(
+) -> TransactionPublic:
+    """Create a TransactionPublic object for testing."""
+    return TransactionPublic(
         id=id,
         transaction_date=date,
         type=txn_type,
@@ -31,6 +31,8 @@ def _make_txn(
         units=units,
         security_key=security_key,
         account_id=account_id,
+        properties={},
+        created=datetime.datetime.now(),
     )
 
 
@@ -42,7 +44,7 @@ def _buy(
     security_key: str = "SEC1",
     account_id: int = 1,
     date: datetime.date = datetime.date(2024, 1, 1),
-) -> Transaction:
+) -> TransactionPublic:
     return _make_txn(
         id=id,
         txn_type=TransactionType.PURCHASE,
@@ -62,7 +64,7 @@ def _sell(
     security_key: str = "SEC1",
     account_id: int = 1,
     date: datetime.date = datetime.date(2024, 1, 1),
-) -> Transaction:
+) -> TransactionPublic:
     """Create a sell transaction. Units and amount provided as positive; will be negated."""
     return _make_txn(
         id=id,

@@ -5,6 +5,8 @@ import re
 from collections.abc import Iterable, Sequence
 from typing import Any, Literal
 
+from attrs import asdict, evolve
+
 from niveshpy.core.query.ast import Field, FilterNode, Operator
 from niveshpy.domain.repositories.price_repository import PriceFetchProfile
 from niveshpy.domain.repositories.transaction_repository import (
@@ -16,11 +18,11 @@ from niveshpy.exceptions import (
     QuerySyntaxError,
     ResourceNotFoundError,
 )
-from niveshpy.models.account import Account
-from niveshpy.models.price import Price, PriceCreate
+from niveshpy.models.account import AccountCreate, AccountPublic
+from niveshpy.models.price import PriceCreate, PricePublic
 from niveshpy.models.report import Allocation, HoldingUnitRow
-from niveshpy.models.security import Security
-from niveshpy.models.transaction import Transaction, TransactionCreate
+from niveshpy.models.security import SecurityCreate, SecurityPublic
+from niveshpy.models.transaction import TransactionCreate, TransactionPublic
 
 
 class MockAccountRepository:
@@ -28,24 +30,28 @@ class MockAccountRepository:
 
     def __init__(self):
         """Initialize the test account repository."""
-        self._accounts = {}
+        self._accounts: dict[int, AccountPublic] = {}
         self._next_id = 1
 
-    def get_account_by_id(self, account_id):
+    def get_account_by_id(self, account_id: int) -> AccountPublic | None:
         """Retrieve an account by its ID."""
         return self._accounts.get(account_id)
 
-    def get_account_by_name_and_institution(self, name, institution):
+    def get_account_by_name_and_institution(
+        self, name: str, institution: str
+    ) -> AccountPublic | None:
         """Retrieve an account by its name and institution."""
         for account in self._accounts.values():
             if account.name == name and account.institution == institution:
                 return account
         return None
 
-    def find_accounts(self, filters: Iterable[FilterNode], limit=None, offset=0):
+    def find_accounts(
+        self, filters: Iterable[FilterNode], limit: int | None = None, offset: int = 0
+    ) -> Sequence[AccountPublic]:
         """Find accounts matching the given filters with optional pagination."""
         if not filters:
-            return sorted(self._accounts.values(), key=lambda a: a.id)[
+            return sorted(self._accounts.values(), key=lambda account: account.id)[
                 offset : offset + limit if limit else None
             ]
         for filter in filters:
@@ -66,10 +72,14 @@ class MockAccountRepository:
             ]
             result.update(matching_accounts)
 
-        account_ids = sorted(result)[offset : offset + limit if limit else None]
-        return [self._accounts[account_id] for account_id in account_ids]
+        accounts = sorted(result, key=lambda account_id: account_id)[
+            offset : offset + limit if limit else None
+        ]
+        return self.find_accounts_by_ids(accounts)
 
-    def find_accounts_by_ids(self, account_ids: Sequence[int]) -> Sequence[Account]:
+    def find_accounts_by_ids(
+        self, account_ids: Sequence[int]
+    ) -> Sequence[AccountPublic]:
         """Find accounts matching the given sequence of IDs.
 
         Args:
@@ -85,7 +95,9 @@ class MockAccountRepository:
                 results.append(account)
         return results
 
-    def find_accounts_by_name_and_institutions(self, names, institutions):
+    def find_accounts_by_name_and_institutions(
+        self, names: Sequence[str], institutions: Sequence[str]
+    ) -> Sequence[AccountPublic]:
         """Find accounts matching the given name-institution pairs."""
         results = []
         pairs = set(zip(names, institutions, strict=True))
@@ -94,18 +106,22 @@ class MockAccountRepository:
                 results.append(account)
         return results
 
-    def insert_account(self, account):
+    def insert_account(self, account: AccountCreate) -> int | None:
         """Insert a new account into the repository."""
         if self.get_account_by_name_and_institution(account.name, account.institution):
             return None  # Simulate unique constraint violation by returning None
         account_id = self._next_id
-        self._accounts[account_id] = Account(
-            id=account_id, **account.model_dump(exclude={"id"})
+        self._accounts[account_id] = AccountPublic(
+            id=account_id,
+            name=account.name,
+            institution=account.institution,
+            properties=account.properties,
+            created_at=datetime.datetime.now(),
         )
         self._next_id += 1
         return account_id
 
-    def insert_multiple_accounts(self, accounts):
+    def insert_multiple_accounts(self, accounts: Iterable[AccountCreate]) -> int:
         """Insert multiple accounts into the repository."""
         count = 0
         for account in accounts:
@@ -114,7 +130,7 @@ class MockAccountRepository:
                 count += 1
         return count
 
-    def delete_account_by_id(self, account_id):
+    def delete_account_by_id(self, account_id: int) -> bool:
         """Delete an account by its ID."""
         if account_id in self._accounts:
             self._accounts.pop(account_id)
@@ -127,7 +143,7 @@ class MockSecurityRepository:
 
     def __init__(self):
         """Initialize the test security repository."""
-        self._securities = {}
+        self._securities: dict[str, SecurityPublic] = {}
 
     def get_security_by_key(self, key):
         """Retrieve a security by its key."""
@@ -153,11 +169,18 @@ class MockSecurityRepository:
                 results.append(security)
         return results
 
-    def insert_security(self, security):
+    def insert_security(self, security: SecurityCreate):
         """Insert a new security into the repository."""
         if self.get_security_by_key(security.key):
             return False
-        self._securities[security.key] = security
+        self._securities[security.key] = SecurityPublic(
+            key=security.key,
+            name=security.name,
+            type=security.type,
+            category=security.category,
+            properties=security.properties,
+            created=datetime.datetime.now(),
+        )
         return True
 
     def insert_multiple_securities(self, securities):
@@ -193,7 +216,10 @@ class MockSecurityRepository:
 
         # Update properties
         for prop_name, prop_value in properties:
-            security.properties[prop_name] = prop_value
+            security = evolve(
+                security, properties={**security.properties, prop_name: prop_value}
+            )
+        self._securities[security_key] = security
 
 
 class MockTransactionRepository:
@@ -206,13 +232,13 @@ class MockTransactionRepository:
         price_repository: "MockPriceRepository | None" = None,
     ):
         """Initialize the test transaction repository."""
-        self._transactions: dict[int, Transaction] = {}
+        self._transactions: dict[int, TransactionPublic] = {}
         self._next_id: int = 1
         self._account_repository: MockAccountRepository = account_repository
         self._security_repository: MockSecurityRepository = security_repository
         self._price_repository: MockPriceRepository | None = price_repository
 
-    def _matches_regex_filter(self, txn: Transaction, filter: FilterNode) -> bool:
+    def _matches_regex_filter(self, txn: TransactionPublic, filter: FilterNode) -> bool:
         """Check if a transaction matches a single REGEX_MATCH filter."""
         if filter.field == Field.SECURITY:
             security = self._security_repository.get_security_by_key(txn.security_key)
@@ -236,7 +262,9 @@ class MockTransactionRepository:
             )
         return True
 
-    def _matches_filters(self, txn: Transaction, filters: Iterable[FilterNode]) -> bool:
+    def _matches_filters(
+        self, txn: TransactionPublic, filters: Iterable[FilterNode]
+    ) -> bool:
         """Replicate get_sqlalchemy_filters AND/OR semantics.
 
         All REGEX_MATCH filters across all fields are OR'd into one condition.
@@ -276,7 +304,7 @@ class MockTransactionRepository:
         self,
         transaction_id: int,
         fetch_profile=TransactionFetchProfile.WITH_RELATIONS,
-    ) -> Transaction | None:
+    ) -> TransactionPublic | None:
         """Retrieve a transaction by its ID."""
         if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
             transaction = self._transactions.get(transaction_id)
@@ -288,8 +316,10 @@ class MockTransactionRepository:
                 transaction.security_key
             )
             # Return a new object with relations populated (simplified for testing)
-            return transaction.model_copy(
-                update={"account": account, "security": security}
+            return evolve(
+                transaction,
+                account=account,
+                security=security,
             )
         else:
             return self._transactions.get(transaction_id)
@@ -301,7 +331,7 @@ class MockTransactionRepository:
         offset=0,
         fetch_profile=TransactionFetchProfile.WITH_RELATIONS,
         sort_order=TransactionSortOrder.DATE_DESC_ID_ASC,
-    ) -> Sequence[Transaction]:
+    ) -> Sequence[TransactionPublic]:
         """Find transactions matching the given filters with optional pagination."""
         if not filters:
             transaction_ids = self._transactions.keys()
@@ -380,7 +410,7 @@ class MockTransactionRepository:
         ids: Sequence[int],
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
         sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
-    ) -> Sequence[Transaction]:
+    ) -> Sequence[TransactionPublic]:
         """Find transactions matching the given IDs."""
         results = []
         for transaction_id in ids:
@@ -406,7 +436,12 @@ class MockTransactionRepository:
     def insert_transaction(self, transaction: TransactionCreate) -> int:
         """Insert a new transaction into the repository."""
         transaction_id = self._next_id
-        new_transaction = Transaction(id=transaction_id, **transaction.model_dump())
+        transaction_data = asdict(transaction, recurse=False)
+        new_transaction = TransactionPublic(
+            **transaction_data,
+            id=transaction_id,
+            created=datetime.datetime.now(),
+        )
         self._transactions[transaction_id] = new_transaction
         self._next_id += 1
         return transaction_id
@@ -579,7 +614,7 @@ class MockPriceRepository:
 
     def __init__(self, security_repository: MockSecurityRepository):
         """Initialize the mock price repository."""
-        self._prices: dict[str, dict[datetime.date, Price]] = {}
+        self._prices: dict[str, dict[datetime.date, PricePublic]] = {}
         self._security_repository = security_repository
 
     def get_price_by_key_and_date(
@@ -587,7 +622,7 @@ class MockPriceRepository:
         security_key: str,
         date: datetime.date,
         fetch_profile: PriceFetchProfile = PriceFetchProfile.WITH_SECURITY,
-    ) -> Price | None:
+    ) -> PricePublic | None:
         """Fetch a price by its security key and date.
 
         Args:
@@ -596,13 +631,13 @@ class MockPriceRepository:
             fetch_profile: The profile determining the level of detail to fetch for the price.
 
         Returns:
-            The Price object if found, otherwise None.
+            The PricePublic object if found, otherwise None.
         """
         return self._prices.get(security_key, {}).get(date)
 
     def _search_security_filter(
-        self, filters: Iterable[FilterNode], securities: Sequence[Security]
-    ) -> Sequence[Security]:
+        self, filters: Iterable[FilterNode], securities: Sequence[SecurityPublic]
+    ) -> Sequence[SecurityPublic]:
         """Helper method to search for a security in the filters and return the corresponding Security object if found."""
         for filter in filters:
             if filter.field == Field.SECURITY:
@@ -656,7 +691,7 @@ class MockPriceRepository:
         limit: int | None = None,
         offset: int = 0,
         fetch_profile: PriceFetchProfile = PriceFetchProfile.WITH_SECURITY,
-    ) -> Sequence[Price]:
+    ) -> Sequence[PricePublic]:
         """Find all prices matching the given filters with optional pagination.
 
         Args:
@@ -666,7 +701,7 @@ class MockPriceRepository:
             fetch_profile: The profile determining the level of detail to fetch for the prices.
 
         Returns:
-            A sequence of Price objects matching the filters and pagination criteria.
+            A sequence of PricePublic objects matching the filters and pagination criteria.
         """
         securities = self._security_repository.find_securities([])
         securities = self._search_security_filter(filters, securities)
@@ -689,7 +724,7 @@ class MockPriceRepository:
         limit: int | None = None,
         offset: int = 0,
         fetch_profile: PriceFetchProfile = PriceFetchProfile.WITH_SECURITY,
-    ) -> Sequence[Price]:
+    ) -> Sequence[PricePublic]:
         """Find the latest prices for securities matching the given filters with optional pagination.
 
         Args:
@@ -699,7 +734,7 @@ class MockPriceRepository:
             fetch_profile: The profile determining the level of detail to fetch for the prices.
 
         Returns:
-            A sequence of the latest Price objects for securities matching the filters and pagination criteria.
+            A sequence of the latest PricePublic objects for securities matching the filters and pagination criteria.
         """
         securities = self._security_repository.find_securities([])
         securities = self._search_security_filter(filters, securities)
@@ -727,7 +762,17 @@ class MockPriceRepository:
                 "Security", price.security_key, f"for price on {price.date}"
             )
         prices = self._prices.setdefault(price.security_key, {})
-        prices[price.date] = Price(**price.model_dump(), security=security)
+        prices[price.date] = PricePublic(
+            security_key=price.security_key,
+            security=security,
+            open=price.open,
+            high=price.high,
+            low=price.low,
+            close=price.close,
+            date=price.date,
+            properties=price.properties,
+            created=datetime.datetime.now(),
+        )
 
     def replace_prices_in_range(
         self,
@@ -800,4 +845,14 @@ class MockPriceRepository:
                 del prices[date]
         # Insert new prices
         for price in new_prices:
-            prices[price.date] = Price(**price.model_dump(), security=security)
+            prices[price.date] = PricePublic(
+                security_key=price.security_key,
+                security=security,
+                open=price.open,
+                high=price.high,
+                low=price.low,
+                close=price.close,
+                date=price.date,
+                properties=price.properties,
+                created=datetime.datetime.now(),
+            )

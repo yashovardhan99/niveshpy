@@ -17,8 +17,8 @@ from niveshpy.core.query.prepare import get_fields_from_filters, get_sqlalchemy_
 from niveshpy.database import get_session
 from niveshpy.domain.repositories.price_repository import PriceFetchProfile
 from niveshpy.exceptions import DatabaseError, InvalidInputError, ResourceNotFoundError
-from niveshpy.models.price import Price, PriceCreate
-from niveshpy.models.security import Security
+from niveshpy.infrastructure.sqlite.models import Price, Security
+from niveshpy.models.price import PriceCreate, PricePublic
 
 if sys.version_info >= (3, 12):
     from itertools import batched
@@ -42,7 +42,7 @@ class SqlitePriceRepository:
         security_key: str,
         date: datetime.date,
         fetch_profile: PriceFetchProfile = PriceFetchProfile.WITH_SECURITY,
-    ) -> Price | None:
+    ) -> PricePublic | None:
         """Fetch a price by its security key and date.
 
         Args:
@@ -51,7 +51,7 @@ class SqlitePriceRepository:
             fetch_profile: The profile determining the level of detail to fetch for the price.
 
         Returns:
-            The Price object if found, otherwise None.
+            The PricePublic object if found, otherwise None.
         """
         stmt = select(Price).where(
             col(Price.security_key) == security_key,
@@ -64,7 +64,12 @@ class SqlitePriceRepository:
 
         with get_session() as session:
             result = session.exec(stmt).first()
-            return result
+            if result:
+                return result.to_public(
+                    include_security=fetch_profile == PriceFetchProfile.WITH_SECURITY,
+                )
+            else:
+                return None
 
     def find_all_prices(
         self,
@@ -72,7 +77,7 @@ class SqlitePriceRepository:
         limit: int | None = None,
         offset: int = 0,
         fetch_profile: PriceFetchProfile = PriceFetchProfile.WITH_SECURITY,
-    ) -> Sequence[Price]:
+    ) -> Sequence[PricePublic]:
         """Find all prices matching the given filters with optional pagination.
 
         Args:
@@ -82,7 +87,7 @@ class SqlitePriceRepository:
             fetch_profile: The profile determining the level of detail to fetch for the prices.
 
         Returns:
-            A sequence of Price objects matching the filters and pagination criteria.
+            A sequence of PricePublic objects matching the filters and pagination criteria.
         """
         filters = list(filters)
         where_clauses = get_sqlalchemy_filters(
@@ -120,7 +125,12 @@ class SqlitePriceRepository:
 
         with get_session() as session:
             results = session.exec(stmt).all()
-            return results
+            return [
+                result.to_public(
+                    include_security=fetch_profile == PriceFetchProfile.WITH_SECURITY,
+                )
+                for result in results
+            ]
 
     def find_latest_prices(
         self,
@@ -128,7 +138,7 @@ class SqlitePriceRepository:
         limit: int | None = None,
         offset: int = 0,
         fetch_profile: PriceFetchProfile = PriceFetchProfile.WITH_SECURITY,
-    ) -> Sequence[Price]:
+    ) -> Sequence[PricePublic]:
         """Find the latest prices for securities matching the given filters with optional pagination.
 
         Args:
@@ -138,7 +148,7 @@ class SqlitePriceRepository:
             fetch_profile: The profile determining the level of detail to fetch for the prices.
 
         Returns:
-            A sequence of the latest Price objects for securities matching the filters and pagination criteria.
+            A sequence of the latest PricePublic objects for securities matching the filters and pagination criteria.
         """
         where_clauses = get_sqlalchemy_filters(
             filters,
@@ -177,7 +187,12 @@ class SqlitePriceRepository:
 
         with get_session() as session:
             results = session.exec(stmt).all()
-            return results
+            return [
+                result.to_public(
+                    include_security=fetch_profile == PriceFetchProfile.WITH_SECURITY,
+                )
+                for result in results
+            ]
 
     def overwrite_price(self, price: PriceCreate) -> None:
         """Overwrite an existing price or insert a new one if it doesn't exist.

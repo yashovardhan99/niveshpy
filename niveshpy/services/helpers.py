@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from decimal import Decimal
 
 from niveshpy.exceptions import OperationError
-from niveshpy.models.transaction import Transaction
+from niveshpy.models.transaction import TransactionPublic
 
 
 def compute_cagr(
@@ -65,7 +65,7 @@ def compute_cagr(
 
 
 def compute_xirr(
-    transactions: Sequence[Transaction],
+    transactions: Sequence[TransactionPublic],
     current_value: Decimal,
     current_date: datetime.date | None = None,
 ) -> Decimal:

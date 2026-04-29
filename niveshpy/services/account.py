@@ -15,7 +15,7 @@ from niveshpy.exceptions import (
     OperationError,
     QuerySyntaxError,
 )
-from niveshpy.models.account import Account, AccountCreate
+from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.services.result import (
     InsertResult,
     MergeAction,
@@ -30,7 +30,7 @@ class AccountService:
 
     def list_accounts(
         self, queries: tuple[str, ...], limit: int = 30, offset: int = 0
-    ) -> Sequence[Account]:
+    ) -> Sequence[AccountPublic]:
         """List accounts, optionally filtered by a query string.
 
         Args:
@@ -39,7 +39,7 @@ class AccountService:
             offset (int): Number of accounts to skip from the start.
 
         Returns:
-            Sequence[Account]: List of accounts matching the query.
+            Sequence[AccountPublic]: List of accounts matching the query.
 
         Raises:
             InvalidInputError: If limit is less than 1 or offset is negative.
@@ -93,7 +93,7 @@ class AccountService:
 
     def resolve_account_id(
         self, queries: tuple[str, ...], limit: int, allow_ambiguous: bool = True
-    ) -> Sequence[Account]:
+    ) -> Sequence[AccountPublic]:
         """Resolve an account id to an Account object if it exists.
 
         Args:
@@ -102,7 +102,7 @@ class AccountService:
             allow_ambiguous (bool): Whether to allow ambiguous results.
 
         Returns:
-            Sequence[Account]: The resolved account(s).
+            Sequence[AccountPublic]: The resolved account(s).
 
         Raises:
             InvalidInputError: If no queries are provided and ambiguous results are not allowed.

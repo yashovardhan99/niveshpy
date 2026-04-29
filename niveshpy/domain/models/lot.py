@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Self
 
 from niveshpy.exceptions import InvalidInputError
-from niveshpy.models.transaction import Transaction, TransactionType
+from niveshpy.models.transaction import TransactionPublic, TransactionType
 
 
 @dataclass(slots=True, frozen=True)
@@ -39,7 +39,7 @@ class OpenLot:
     remaining_cost: Decimal
 
     @classmethod
-    def from_transaction(cls, txn: Transaction) -> Self:
+    def from_transaction(cls, txn: TransactionPublic) -> Self:
         """Factory method to create an OpenLot from a purchase Transaction."""
         if txn.id is None:
             raise InvalidInputError(

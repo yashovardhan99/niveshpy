@@ -7,7 +7,12 @@ import pytest
 
 from niveshpy.core.query.ast import Field, FilterNode, Operator
 from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
-from niveshpy.models.security import Security, SecurityCategory, SecurityType
+from niveshpy.models.security import (
+    SecurityCategory,
+    SecurityCreate,
+    SecurityPublic,
+    SecurityType,
+)
 from niveshpy.services.security import SecurityService
 from tests.services.conftest import MockSecurityRepository
 
@@ -19,34 +24,34 @@ def security_service() -> SecurityService:
 
 
 @pytest.fixture
-def sample_securities(security_service):
+def sample_securities(security_service: SecurityService) -> Sequence[SecurityPublic]:
     """Create sample securities for testing."""
     securities = [
-        Security(
+        SecurityCreate(
             key="123456",
             name="HDFC Equity Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.EQUITY,
         ),
-        Security(
+        SecurityCreate(
             key="234567",
             name="ICICI Liquid Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.DEBT,
         ),
-        Security(
+        SecurityCreate(
             key="RELI",
             name="Reliance Industries",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
         ),
-        Security(
+        SecurityCreate(
             key="NIFTY",
             name="Nifty 50 ETF",
             type=SecurityType.ETF,
             category=SecurityCategory.EQUITY,
         ),
-        Security(
+        SecurityCreate(
             key="GOLD",
             name="Gold Bond",
             type=SecurityType.BOND,
@@ -54,7 +59,9 @@ def sample_securities(security_service):
         ),
     ]
     security_service.security_repository.insert_multiple_securities(securities)
-    return securities
+    return security_service.security_repository.find_securities(
+        [], limit=None, offset=0
+    )
 
 
 class TestListSecurities:
@@ -65,7 +72,7 @@ class TestListSecurities:
         securities = security_service.list_securities(queries=(), limit=30, offset=0)
 
         assert len(securities) == 5
-        assert all(isinstance(sec, Security) for sec in securities)
+        assert all(isinstance(sec, SecurityPublic) for sec in securities)
         assert securities[0].key == "123456"
 
     def test_list_securities_with_limit(self, security_service, sample_securities):
@@ -360,17 +367,21 @@ class TestResolveSecurityKey:
     """Tests for resolve_security_key method."""
 
     def test_resolve_empty_queries_ambiguous_allowed(
-        self, security_service: SecurityService, sample_securities: list[Security]
+        self,
+        security_service: SecurityService,
+        sample_securities: Sequence[SecurityPublic],
     ):
         """Test resolving with empty queries when ambiguous is allowed."""
-        securities: Sequence[Security] = security_service.resolve_security_key(
+        securities: Sequence[SecurityPublic] = security_service.resolve_security_key(
             queries=(), limit=10, allow_ambiguous=True
         )
 
         assert len(securities) == 5
 
     def test_resolve_empty_queries_ambiguous_not_allowed(
-        self, security_service: SecurityService, sample_securities: list[Security]
+        self,
+        security_service: SecurityService,
+        sample_securities: Sequence[SecurityPublic],
     ):
         """Test resolving with empty queries when ambiguous is not allowed."""
         with pytest.raises(InvalidInputError, match="No queries provided"):
@@ -379,20 +390,24 @@ class TestResolveSecurityKey:
             )
 
     def test_resolve_empty_queries_respects_limit(
-        self, security_service: SecurityService, sample_securities: list[Security]
+        self,
+        security_service: SecurityService,
+        sample_securities: Sequence[SecurityPublic],
     ):
         """Test that empty queries resolution respects limit."""
-        securities: Sequence[Security] = security_service.resolve_security_key(
+        securities: Sequence[SecurityPublic] = security_service.resolve_security_key(
             queries=(), limit=3, allow_ambiguous=True
         )
 
         assert len(securities) == 3
 
     def test_resolve_exact_match_by_key(
-        self, security_service: SecurityService, sample_securities: list[Security]
+        self,
+        security_service: SecurityService,
+        sample_securities: Sequence[SecurityPublic],
     ):
         """Test resolving by exact security key."""
-        securities: Sequence[Security] = security_service.resolve_security_key(
+        securities: Sequence[SecurityPublic] = security_service.resolve_security_key(
             queries=("123456",), limit=10, allow_ambiguous=True
         )
 
@@ -401,10 +416,12 @@ class TestResolveSecurityKey:
         assert securities[0].name == "HDFC Equity Fund"
 
     def test_resolve_exact_match_by_key_with_whitespace(
-        self, security_service: SecurityService, sample_securities: list[Security]
+        self,
+        security_service: SecurityService,
+        sample_securities: Sequence[SecurityPublic],
     ):
         """Test resolving by key with surrounding whitespace."""
-        securities: Sequence[Security] = security_service.resolve_security_key(
+        securities: Sequence[SecurityPublic] = security_service.resolve_security_key(
             queries=("  RELI  ",), limit=10, allow_ambiguous=True
         )
 
@@ -412,7 +429,9 @@ class TestResolveSecurityKey:
         assert securities[0].key == "RELI"
 
     def test_resolve_nonexistent_key_ambiguous_not_allowed(
-        self, security_service: SecurityService, sample_securities: list[Security]
+        self,
+        security_service: SecurityService,
+        sample_securities: Sequence[SecurityPublic],
     ):
         """Test resolving non-existent key when ambiguous not allowed."""
         with pytest.raises(AmbiguousResourceError, match="security"):
@@ -421,7 +440,9 @@ class TestResolveSecurityKey:
             )
 
     def test_resolve_nonexistent_key_ambiguous_allowed(
-        self, security_service: SecurityService, sample_securities: list[Security]
+        self,
+        security_service: SecurityService,
+        sample_securities: Sequence[SecurityPublic],
     ):
         """Test resolving non-existent key when ambiguous allowed falls back to text search."""
         with patch.object(
@@ -429,8 +450,10 @@ class TestResolveSecurityKey:
             "find_securities",
             return_value=[],
         ) as mock:
-            securities: Sequence[Security] = security_service.resolve_security_key(
-                queries=("NONEXIST",), limit=10, allow_ambiguous=True
+            securities: Sequence[SecurityPublic] = (
+                security_service.resolve_security_key(
+                    queries=("NONEXIST",), limit=10, allow_ambiguous=True
+                )
             )
             mock.assert_called_once()
             mock.assert_called_with(
@@ -442,16 +465,20 @@ class TestResolveSecurityKey:
         assert len(securities) == 0
 
     def test_resolve_text_search_single_match(
-        self, security_service: SecurityService, sample_securities: list[Security]
+        self,
+        security_service: SecurityService,
+        sample_securities: Sequence[SecurityPublic],
     ):
         """Test text search with exactly one match."""
         with patch.object(
             security_service.security_repository,
             "find_securities",
-            return_value=[sample_securities[2]],
+            return_value=[sample_securities[4]],
         ) as mock:
-            securities: Sequence[Security] = security_service.resolve_security_key(
-                queries=("Reliance",), limit=10, allow_ambiguous=True
+            securities: Sequence[SecurityPublic] = (
+                security_service.resolve_security_key(
+                    queries=("Reliance",), limit=10, allow_ambiguous=True
+                )
             )
             mock.assert_called_once()
             mock.assert_called_with(
@@ -464,7 +491,9 @@ class TestResolveSecurityKey:
         assert securities[0].name == "Reliance Industries"
 
     def test_resolve_text_search_multiple_matches_ambiguous_not_allowed(
-        self, security_service: SecurityService, sample_securities: list[Security]
+        self,
+        security_service: SecurityService,
+        sample_securities: Sequence[SecurityPublic],
     ):
         """Test text search with multiple matches when ambiguous not allowed."""
         with pytest.raises(AmbiguousResourceError, match="security"):
@@ -473,14 +502,16 @@ class TestResolveSecurityKey:
             )
 
     def test_resolve_returns_security(
-        self, security_service: SecurityService, sample_securities: list[Security]
+        self,
+        security_service: SecurityService,
+        sample_securities: Sequence[SecurityPublic],
     ):
         """Test that resolution returns Security instances."""
-        securities: Sequence[Security] = security_service.resolve_security_key(
+        securities: Sequence[SecurityPublic] = security_service.resolve_security_key(
             queries=("123456",), limit=10, allow_ambiguous=True
         )
 
-        assert isinstance(securities[0], Security)
+        assert isinstance(securities[0], SecurityPublic)
         assert hasattr(securities[0], "key")
         assert hasattr(securities[0], "created")
 
