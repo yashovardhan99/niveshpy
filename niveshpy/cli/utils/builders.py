@@ -44,7 +44,7 @@ def build_table(
         else:
             row = []
             for column in columns:
-                value = getattr(item, column.key, None)
+                value = column.get(item)
                 row.append(column.format(value))
             table.add_row(*row)
 

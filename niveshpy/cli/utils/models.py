@@ -44,6 +44,7 @@ class Column:
     key: str
     name: str = ""
     style: str = ""
+    getter: Callable[[Any], Any] | None = None
     formatter: Callable[[Any], str] = str
     justify: Literal["default", "left", "center", "right", "full"] = "left"
 
@@ -62,3 +63,16 @@ class Column:
             str: The formatted string representation of the value.
         """
         return self.formatter(value)
+
+    def get(self, obj: Any) -> Any:
+        """Get the value for this column from an object using the getter or key.
+
+        Args:
+            obj (Any): The object to get the value from.
+
+        Returns:
+            Any: The value obtained from the object.
+        """
+        if self.getter is not None:
+            return self.getter(obj)
+        return getattr(obj, self.key, None)
