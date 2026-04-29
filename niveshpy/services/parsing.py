@@ -53,10 +53,7 @@ class ParsingService:
     def _add_metadata(self, item: _T) -> _T:
         """Add metadata to a parsed item."""
         if item.properties.get("source") is None:
-            if isinstance(item, (AccountCreate, SecurityCreate)):
-                item = evolve(item, properties={**item.properties, "source": "parser"})
-            else:
-                item.properties["source"] = "parser"
+            item = evolve(item, properties={**item.properties, "source": "parser"})
         return item
 
     def _bulk_insert_accounts(

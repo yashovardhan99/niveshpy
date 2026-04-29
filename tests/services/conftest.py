@@ -5,7 +5,7 @@ import re
 from collections.abc import Iterable, Sequence
 from typing import Any, Literal
 
-from attrs import evolve
+from attrs import asdict, evolve
 
 from niveshpy.core.query.ast import Field, FilterNode, Operator
 from niveshpy.domain.repositories.price_repository import PriceFetchProfile
@@ -22,7 +22,7 @@ from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.models.price import PriceCreate, PricePublic
 from niveshpy.models.report import Allocation, HoldingUnitRow
 from niveshpy.models.security import SecurityCreate, SecurityPublic
-from niveshpy.models.transaction import Transaction, TransactionCreate
+from niveshpy.models.transaction import TransactionCreate, TransactionPublic
 
 
 class MockAccountRepository:
@@ -232,13 +232,13 @@ class MockTransactionRepository:
         price_repository: "MockPriceRepository | None" = None,
     ):
         """Initialize the test transaction repository."""
-        self._transactions: dict[int, Transaction] = {}
+        self._transactions: dict[int, TransactionPublic] = {}
         self._next_id: int = 1
         self._account_repository: MockAccountRepository = account_repository
         self._security_repository: MockSecurityRepository = security_repository
         self._price_repository: MockPriceRepository | None = price_repository
 
-    def _matches_regex_filter(self, txn: Transaction, filter: FilterNode) -> bool:
+    def _matches_regex_filter(self, txn: TransactionPublic, filter: FilterNode) -> bool:
         """Check if a transaction matches a single REGEX_MATCH filter."""
         if filter.field == Field.SECURITY:
             security = self._security_repository.get_security_by_key(txn.security_key)
@@ -262,7 +262,9 @@ class MockTransactionRepository:
             )
         return True
 
-    def _matches_filters(self, txn: Transaction, filters: Iterable[FilterNode]) -> bool:
+    def _matches_filters(
+        self, txn: TransactionPublic, filters: Iterable[FilterNode]
+    ) -> bool:
         """Replicate get_sqlalchemy_filters AND/OR semantics.
 
         All REGEX_MATCH filters across all fields are OR'd into one condition.
@@ -302,7 +304,7 @@ class MockTransactionRepository:
         self,
         transaction_id: int,
         fetch_profile=TransactionFetchProfile.WITH_RELATIONS,
-    ) -> Transaction | None:
+    ) -> TransactionPublic | None:
         """Retrieve a transaction by its ID."""
         if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
             transaction = self._transactions.get(transaction_id)
@@ -314,8 +316,10 @@ class MockTransactionRepository:
                 transaction.security_key
             )
             # Return a new object with relations populated (simplified for testing)
-            return transaction.model_copy(
-                update={"account": account, "security": security}
+            return evolve(
+                transaction,
+                account=account,
+                security=security,
             )
         else:
             return self._transactions.get(transaction_id)
@@ -327,7 +331,7 @@ class MockTransactionRepository:
         offset=0,
         fetch_profile=TransactionFetchProfile.WITH_RELATIONS,
         sort_order=TransactionSortOrder.DATE_DESC_ID_ASC,
-    ) -> Sequence[Transaction]:
+    ) -> Sequence[TransactionPublic]:
         """Find transactions matching the given filters with optional pagination."""
         if not filters:
             transaction_ids = self._transactions.keys()
@@ -406,7 +410,7 @@ class MockTransactionRepository:
         ids: Sequence[int],
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
         sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
-    ) -> Sequence[Transaction]:
+    ) -> Sequence[TransactionPublic]:
         """Find transactions matching the given IDs."""
         results = []
         for transaction_id in ids:
@@ -432,7 +436,12 @@ class MockTransactionRepository:
     def insert_transaction(self, transaction: TransactionCreate) -> int:
         """Insert a new transaction into the repository."""
         transaction_id = self._next_id
-        new_transaction = Transaction(id=transaction_id, **transaction.model_dump())
+        transaction_data = asdict(transaction, recurse=False)
+        new_transaction = TransactionPublic(
+            **transaction_data,
+            id=transaction_id,
+            created=datetime.datetime.now(),
+        )
         self._transactions[transaction_id] = new_transaction
         self._next_id += 1
         return transaction_id

@@ -53,8 +53,8 @@ def reset_cli_database(cli_in_memory_engine) -> None:
         Account,
         Price,
         Security,
+        Transaction,
     )
-    from niveshpy.models.transaction import Transaction  # noqa: F401
 
     SQLModel.metadata.drop_all(cli_in_memory_engine)
     SQLModel.metadata.create_all(cli_in_memory_engine)

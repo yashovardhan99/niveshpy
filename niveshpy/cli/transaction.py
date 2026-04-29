@@ -363,6 +363,7 @@ def delete(
                 ),
             )
             for txn in candidates
+            if txn.security is not None and txn.account is not None
         ]
         transaction_id = inquirer.fuzzy(
             message="Multiple transactions found. Select one to delete:",

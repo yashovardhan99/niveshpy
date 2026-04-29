@@ -17,7 +17,11 @@ from niveshpy.models.report import (
     SummaryResult,
 )
 from niveshpy.models.security import SecurityCategory, SecurityPublic, SecurityType
-from niveshpy.models.transaction import Transaction, TransactionCreate, TransactionType
+from niveshpy.models.transaction import (
+    TransactionCreate,
+    TransactionPublic,
+    TransactionType,
+)
 from niveshpy.services.report_service import ReportService
 from tests.services.conftest import (
     MockAccountRepository,
@@ -139,7 +143,7 @@ def sample_transactions(
     transaction_repository: MockTransactionRepository,
     sample_accounts: Sequence[AccountPublic],
     sample_securities: list[SecurityPublic],
-) -> Sequence[Transaction]:
+) -> Sequence[TransactionPublic]:
     """Create sample transactions for testing."""
     transactions = [
         # Account 0 - HDFC Equity Fund: Buy 100, Sell 20 = 80 units

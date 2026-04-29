@@ -15,14 +15,16 @@ from niveshpy.exceptions import (
     InvalidInputError,
     ResourceNotFoundError,
 )
-from niveshpy.infrastructure.sqlite.models import Security
 from niveshpy.models.account import AccountCreate, AccountPublic
-from niveshpy.models.security import SecurityCategory, SecurityType
+from niveshpy.models.security import (
+    SecurityCategory,
+    SecurityCreate,
+    SecurityPublic,
+    SecurityType,
+)
 from niveshpy.models.transaction import (
-    Transaction,
     TransactionCreate,
-    TransactionPublicWithRelations,
-    TransactionPublicWithRelationsAndCost,
+    TransactionPublic,
     TransactionType,
 )
 from niveshpy.services.transaction import TransactionService
@@ -79,22 +81,22 @@ def sample_accounts(
 @pytest.fixture
 def sample_securities(
     security_repository: MockSecurityRepository,
-) -> Sequence[Security]:
+) -> Sequence[SecurityPublic]:
     """Create sample securities for testing."""
     securities = [
-        Security(
+        SecurityCreate(
             key="123456",
             name="HDFC Equity Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.EQUITY,
         ),
-        Security(
+        SecurityCreate(
             key="234567",
             name="ICICI Liquid Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.DEBT,
         ),
-        Security(
+        SecurityCreate(
             key="RELI",
             name="Reliance Industries",
             type=SecurityType.STOCK,
@@ -108,9 +110,9 @@ def sample_securities(
 @pytest.fixture
 def sample_transactions(
     sample_accounts: Sequence[AccountPublic],
-    sample_securities: Sequence[Security],
+    sample_securities: Sequence[SecurityPublic],
     transaction_service: TransactionService,
-) -> Sequence[Transaction]:
+) -> Sequence[TransactionPublic]:
     """Create sample transactions for testing."""
     transactions = [
         TransactionCreate(
@@ -272,9 +274,9 @@ class TestListTransactions:
 @pytest.fixture
 def cost_basis_transactions(
     sample_accounts: Sequence[AccountPublic],
-    sample_securities: Sequence[Security],
+    sample_securities: Sequence[SecurityPublic],
     transaction_service: TransactionService,
-) -> Sequence[Transaction]:
+) -> Sequence[TransactionPublic]:
     """Create transactions with proper buy-before-sell ordering for cost basis tests."""
     transactions = [
         TransactionCreate(
@@ -317,15 +319,13 @@ class TestListTransactionsWithCost:
     def test_list_with_cost_returns_cost_models(
         self, transaction_service, cost_basis_transactions
     ):
-        """Test that cost=True returns TransactionPublicWithRelationsAndCost."""
+        """Test that cost=True returns TransactionPublic."""
         transactions = transaction_service.list_transactions(
             queries=(), limit=30, offset=0, cost=True
         )
 
         assert len(transactions) == 3
-        assert all(
-            isinstance(t, TransactionPublicWithRelationsAndCost) for t in transactions
-        )
+        assert all(isinstance(t, TransactionPublic) for t in transactions)
 
     def test_purchase_transactions_have_no_cost(
         self, transaction_service, cost_basis_transactions
@@ -378,7 +378,7 @@ class TestListTransactionsWithCost:
         )
 
         assert len(transactions) == 1
-        assert isinstance(transactions[0], TransactionPublicWithRelationsAndCost)
+        assert isinstance(transactions[0], TransactionPublic)
 
     def test_cost_preserves_relations(
         self, transaction_service, cost_basis_transactions
@@ -654,10 +654,10 @@ class TestResolveTransaction:
     def test_resolve_empty_queries_ambiguous_allowed(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test resolving with empty queries when ambiguous is allowed."""
-        candidates: Sequence[TransactionPublicWithRelations] = (
+        candidates: Sequence[TransactionPublic] = (
             transaction_service.resolve_transaction(
                 queries=(), limit=10, allow_ambiguous=True
             )
@@ -668,7 +668,7 @@ class TestResolveTransaction:
     def test_resolve_empty_queries_ambiguous_not_allowed(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test resolving with empty queries when ambiguous is not allowed."""
         with pytest.raises(InvalidInputError, match="No queries provided"):
@@ -679,10 +679,10 @@ class TestResolveTransaction:
     def test_resolve_empty_queries_respects_limit(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test that empty queries resolution respects limit."""
-        resolution: Sequence[TransactionPublicWithRelations] = (
+        resolution: Sequence[TransactionPublic] = (
             transaction_service.resolve_transaction(
                 queries=(), limit=2, allow_ambiguous=True
             )
@@ -693,11 +693,11 @@ class TestResolveTransaction:
     def test_resolve_exact_match_by_id(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test resolving by exact transaction id."""
         transaction_id = sample_transactions[0].id
-        resolution: Sequence[TransactionPublicWithRelations] = (
+        resolution: Sequence[TransactionPublic] = (
             transaction_service.resolve_transaction(
                 queries=(str(transaction_id),), limit=10, allow_ambiguous=True
             )
@@ -709,11 +709,11 @@ class TestResolveTransaction:
     def test_resolve_exact_match_by_id_with_whitespace(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test resolving by id with surrounding whitespace."""
         transaction_id = sample_transactions[0].id
-        resolution: Sequence[TransactionPublicWithRelations] = (
+        resolution: Sequence[TransactionPublic] = (
             transaction_service.resolve_transaction(
                 queries=(f"  {transaction_id}  ",), limit=10, allow_ambiguous=True
             )
@@ -725,7 +725,7 @@ class TestResolveTransaction:
     def test_resolve_nonexistent_id_ambiguous_not_allowed(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test resolving non-existent id when ambiguous not allowed."""
         with pytest.raises(AmbiguousResourceError, match="Transaction.*99999"):
@@ -736,14 +736,14 @@ class TestResolveTransaction:
     def test_resolve_nonexistent_id_ambiguous_allowed(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test resolving non-existent id when ambiguous allowed falls back to text search."""
         with patch.object(
             transaction_service.transaction_repository, "find_transactions"
         ) as mock_find:
             mock_find.return_value = []
-            resolution: Sequence[TransactionPublicWithRelations] = (
+            resolution: Sequence[TransactionPublic] = (
                 transaction_service.resolve_transaction(
                     queries=("99999",), limit=10, allow_ambiguous=True
                 )
@@ -756,14 +756,14 @@ class TestResolveTransaction:
     def test_resolve_text_search_no_matches(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test text search with no matches."""
         with patch.object(
             transaction_service.transaction_repository, "find_transactions"
         ) as mock_find:
             mock_find.return_value = []
-            resolution: Sequence[TransactionPublicWithRelations] = (
+            resolution: Sequence[TransactionPublic] = (
                 transaction_service.resolve_transaction(
                     queries=("NonExistentTransaction",), limit=10, allow_ambiguous=True
                 )
@@ -775,7 +775,7 @@ class TestResolveTransaction:
     def test_resolve_text_search_single_match(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test text search with exactly one match (matches security)."""
         with patch.object(
@@ -783,21 +783,24 @@ class TestResolveTransaction:
         ) as mock_find:
             # Ensure the mock is used and returns the expected result
             mock_find.return_value = [
-                txn for txn in sample_transactions if "Reliance" in txn.security.name
+                txn
+                for txn in sample_transactions
+                if txn.security is not None and "Reliance" in txn.security.name
             ]
-            resolution: Sequence[TransactionPublicWithRelations] = (
+            resolution: Sequence[TransactionPublic] = (
                 transaction_service.resolve_transaction(
                     queries=("Reliance",), limit=10, allow_ambiguous=True
                 )
             )
 
             assert len(resolution) == 1
+            assert resolution[0].security is not None
             assert "Reliance" in resolution[0].security.name
 
     def test_resolve_text_search_multiple_matches(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test text search with multiple matches (security)."""
         with patch.object(
@@ -805,9 +808,11 @@ class TestResolveTransaction:
         ) as mock_find:
             # Ensure the mock is used and returns the expected results
             mock_find.return_value = [
-                txn for txn in sample_transactions if "Fund" in txn.security.name
+                txn
+                for txn in sample_transactions
+                if txn.security is not None and "Fund" in txn.security.name
             ]
-            resolution: Sequence[TransactionPublicWithRelations] = (
+            resolution: Sequence[TransactionPublic] = (
                 transaction_service.resolve_transaction(
                     queries=("Fund",), limit=10, allow_ambiguous=True
                 )
@@ -816,12 +821,15 @@ class TestResolveTransaction:
 
             assert len(resolution) >= 2
             # security is a formatted string like "name (key)"
-            assert all("Fund" in txn.security.name for txn in resolution)
+            assert all(
+                txn.security is not None and "Fund" in txn.security.name
+                for txn in resolution
+            )
 
     def test_resolve_text_search_multiple_matches_ambiguous_not_allowed(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test text search with multiple matches when ambiguous not allowed."""
         with pytest.raises(AmbiguousResourceError, match="Transaction.*Fund"):
@@ -832,7 +840,7 @@ class TestResolveTransaction:
     def test_resolve_text_search_respects_limit(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test that text search respects limit parameter."""
         with patch.object(
@@ -848,7 +856,7 @@ class TestResolveTransaction:
     def test_resolve_non_numeric_query_ambiguous_not_allowed(
         self,
         transaction_service: TransactionService,
-        sample_transactions: Sequence[Transaction],
+        sample_transactions: Sequence[TransactionPublic],
     ):
         """Test that non-numeric query with ambiguous not allowed."""
         with pytest.raises(AmbiguousResourceError, match="Transaction.*Fund"):
@@ -863,7 +871,7 @@ class TestResolveTransaction:
             "find_transactions",
         ) as mock_find:
             mock_find.return_value = []
-            resolution: Sequence[TransactionPublicWithRelations] = (
+            resolution: Sequence[TransactionPublic] = (
                 transaction_service.resolve_transaction(
                     queries=("test",), limit=10, allow_ambiguous=True
                 )

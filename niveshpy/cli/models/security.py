@@ -9,7 +9,6 @@ from typing import ClassVar, Self
 
 from niveshpy.cli.utils.formatters import format_datetime
 from niveshpy.cli.utils.models import Column
-from niveshpy.infrastructure.sqlite.models import Security
 from niveshpy.models.security import SecurityCategory, SecurityPublic, SecurityType
 
 
@@ -68,7 +67,7 @@ class SecurityDisplay:
     ]
 
     @classmethod
-    def from_domain(cls, security: SecurityPublic | Security) -> Self:
+    def from_domain(cls, security: SecurityPublic) -> Self:
         """Create a SecurityDisplay instance from a domain Security model."""
         return cls(
             key=security.key,

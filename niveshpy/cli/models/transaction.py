@@ -6,20 +6,14 @@ import datetime
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import Any, ClassVar, Self
 
 from niveshpy.cli.models.account import AccountDisplay
 from niveshpy.cli.models.security import SecurityDisplay
 from niveshpy.cli.utils.formatters import format_date, format_datetime, format_decimal
 from niveshpy.cli.utils.models import Column
-from niveshpy.models.account import AccountPublic
-
-if TYPE_CHECKING:
-    from niveshpy.models.transaction import (
-        TransactionPublicWithRelations,
-        TransactionPublicWithRelationsAndCost,
-        TransactionType,
-    )
+from niveshpy.exceptions import ResourceError
+from niveshpy.models.transaction import TransactionPublic, TransactionType
 
 
 def _format_transaction_type(txn_type: TransactionType) -> str:
@@ -102,10 +96,18 @@ class TransactionDisplay:
     @classmethod
     def from_domain(
         cls,
-        transaction: TransactionPublicWithRelations
-        | TransactionPublicWithRelationsAndCost,
+        transaction: TransactionPublic,
     ) -> Self:
         """Create a TransactionDisplay instance from a domain Transaction model."""
+        if transaction.security is None:
+            raise ResourceError(
+                f"Transaction {transaction.id} security is missing",
+            )
+        if transaction.account is None:
+            raise ResourceError(
+                f"Transaction {transaction.id} account is missing",
+            )
+
         return cls(
             id=transaction.id,
             transaction_date=transaction.transaction_date,
@@ -114,12 +116,10 @@ class TransactionDisplay:
             amount=transaction.amount,
             units=transaction.units,
             security=SecurityDisplay.from_domain(transaction.security),
-            account=AccountDisplay.from_domain(
-                AccountPublic(**transaction.account.model_dump())
-            ),
+            account=AccountDisplay.from_domain(transaction.account),
             created=transaction.created,
             source=transaction.properties.get("source"),
-            cost=getattr(transaction, "cost", None),
+            cost=transaction.cost,
         )
 
     def to_json_dict(self, include_cost: bool = False) -> dict[str, Any]:

@@ -37,22 +37,6 @@ else:
 class SqlitePriceRepository:
     """SQLite-based repository implementation for managing price data."""
 
-    def _convert_to_public(
-        self, price: Price, include_security: bool = True
-    ) -> PricePublic:
-        """Convert a Price SQLModel instance to a PricePublic domain model."""
-        return PricePublic(
-            security_key=price.security_key,
-            date=price.date,
-            open=price.open,
-            high=price.high,
-            low=price.low,
-            close=price.close,
-            properties=price.properties,
-            created=price.created,
-            security=price.security.to_public() if include_security else None,
-        )
-
     def get_price_by_key_and_date(
         self,
         security_key: str,
@@ -81,8 +65,7 @@ class SqlitePriceRepository:
         with get_session() as session:
             result = session.exec(stmt).first()
             if result:
-                return self._convert_to_public(
-                    result,
+                return result.to_public(
                     include_security=fetch_profile == PriceFetchProfile.WITH_SECURITY,
                 )
             else:
@@ -143,8 +126,7 @@ class SqlitePriceRepository:
         with get_session() as session:
             results = session.exec(stmt).all()
             return [
-                self._convert_to_public(
-                    result,
+                result.to_public(
                     include_security=fetch_profile == PriceFetchProfile.WITH_SECURITY,
                 )
                 for result in results
@@ -206,8 +188,7 @@ class SqlitePriceRepository:
         with get_session() as session:
             results = session.exec(stmt).all()
             return [
-                self._convert_to_public(
-                    result,
+                result.to_public(
                     include_security=fetch_profile == PriceFetchProfile.WITH_SECURITY,
                 )
                 for result in results

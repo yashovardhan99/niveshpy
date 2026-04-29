@@ -25,18 +25,6 @@ class SqliteAccountRepository:
         Field.ACCOUNT: ["name", "institution"],
     }
 
-    def _convert_to_public(self, account: Account) -> AccountPublic:
-        """Convert an Account database model to an AccountPublic domain model."""
-        if account.id is None:
-            raise InvalidInputError(account, "Account ID cannot be None")
-        return AccountPublic(
-            id=account.id,
-            name=account.name,
-            institution=account.institution,
-            properties=account.properties,
-            created_at=account.created_at,
-        )
-
     # SELECT operations for single account
 
     def get_account_by_id(self, account_id: int) -> AccountPublic | None:
@@ -44,7 +32,7 @@ class SqliteAccountRepository:
         with get_session() as session:
             account = session.get(Account, account_id)
             logger.debug("Fetched account by ID %d: %s", account_id, str(account))
-            return self._convert_to_public(account) if account else None
+            return account.to_public() if account else None
 
     def get_account_by_name_and_institution(
         self, name: str, institution: str
@@ -61,7 +49,7 @@ class SqliteAccountRepository:
                 institution,
                 str(account),
             )
-            return self._convert_to_public(account) if account else None
+            return account.to_public() if account else None
 
     # SELECT operations for multiple accounts
 
@@ -81,7 +69,7 @@ class SqliteAccountRepository:
                 .order_by(col(Account.id))
             ).all()
             logger.debug("Fetched %d accounts with filters: %s", len(accounts), filters)
-            return [self._convert_to_public(account) for account in accounts]
+            return [account.to_public() for account in accounts]
 
     def find_accounts_by_ids(
         self, account_ids: Sequence[int]
@@ -103,7 +91,7 @@ class SqliteAccountRepository:
             logger.debug(
                 "Fetched %d accounts with IDs in %s", len(accounts), account_ids
             )
-            return [self._convert_to_public(account) for account in accounts]
+            return [account.to_public() for account in accounts]
 
     def find_accounts_by_name_and_institutions(
         self, names: Sequence[str], institutions: Sequence[str]
@@ -130,7 +118,7 @@ class SqliteAccountRepository:
                 names,
                 institutions,
             )
-            return [self._convert_to_public(account) for account in accounts]
+            return [account.to_public() for account in accounts]
 
     # INSERT operations for single account
 

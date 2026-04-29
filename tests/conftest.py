@@ -51,8 +51,8 @@ def engine():
         Account,
         Price,
         Security,
+        Transaction,
     )
-    from niveshpy.models.transaction import Transaction  # noqa: F401
 
     # Import all models to ensure they are registered with SQLModel
     SQLModel.metadata.create_all(engine)
