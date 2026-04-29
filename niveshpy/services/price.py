@@ -7,6 +7,8 @@ from collections.abc import Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
+from attrs import evolve
+
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast
@@ -23,7 +25,7 @@ from niveshpy.exceptions import (
     ResourceNotFoundError,
 )
 from niveshpy.models.output import BaseMessage, ProgressUpdate, Warning
-from niveshpy.models.price import PriceCreate, PricePublicWithRelations
+from niveshpy.models.price import PriceCreate, PricePublic
 from niveshpy.models.provider import Provider, ProviderInfo
 from niveshpy.models.security import SecurityPublic
 
@@ -43,7 +45,7 @@ class PriceService:
         queries: tuple[str, ...],
         limit: int = 30,
         offset: int = 0,
-    ) -> Sequence[PricePublicWithRelations]:
+    ) -> Sequence[PricePublic]:
         """List latest prices for securities matching the queries.
 
         Args:
@@ -64,10 +66,7 @@ class PriceService:
             # Otherwise, return all prices matching the filters
             prices = self.price_repository.find_all_prices(filters, limit, offset)
 
-        return [
-            PricePublicWithRelations(**price.model_dump(), security=price.security)
-            for price in prices
-        ]
+        return prices
 
     def update_price(
         self,
@@ -495,5 +494,9 @@ class PriceService:
     def _add_metadata(self, price_data: PriceCreate, source: str) -> PriceCreate:
         """Add source metadata to price data."""
         if "source" not in price_data.properties:
-            price_data.properties["source"] = source
-        return price_data
+            return evolve(
+                price_data,
+                properties={**price_data.properties, "source": source},
+            )
+        else:
+            return price_data

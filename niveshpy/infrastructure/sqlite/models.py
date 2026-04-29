@@ -1,11 +1,20 @@
 """SQLite models for NiveshPy."""
 
-from datetime import datetime
+import datetime
+from decimal import Decimal
 from typing import Any
 
-from sqlmodel import JSON, Column, Field, SQLModel, UniqueConstraint
+from sqlmodel import (
+    JSON,
+    NUMERIC,
+    Column,
+    Field,
+    Relationship,
+    SQLModel,
+    UniqueConstraint,
+)
 
-from niveshpy.models.security import SecurityCategory, SecurityType
+from niveshpy.models.security import SecurityCategory, SecurityPublic, SecurityType
 
 
 class Account(SQLModel, table=True):
@@ -27,7 +36,7 @@ class Account(SQLModel, table=True):
     name: str
     institution: str
     properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
 
 
 class Security(SQLModel, table=True):
@@ -47,4 +56,43 @@ class Security(SQLModel, table=True):
     type: SecurityType = Field()
     category: SecurityCategory = Field()
     properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-    created: datetime = Field(default_factory=datetime.now)
+    created: datetime.datetime = Field(default_factory=datetime.datetime.now)
+
+    def to_public(self) -> SecurityPublic:
+        """Convert a Security database model to a SecurityPublic domain model."""
+        return SecurityPublic(
+            key=self.key,
+            name=self.name,
+            type=self.type,
+            category=self.category,
+            properties=self.properties,
+            created=self.created,
+        )
+
+
+class Price(SQLModel, table=True):
+    """Database model for price data.
+
+    Attributes:
+        security_key (str): Foreign key to the associated security.
+        security (Security): Related security object.
+        date (datetime.date): Date of the price data.
+        open (Decimal): Opening price.
+        high (Decimal): Highest price.
+        low (Decimal): Lowest price.
+        close (Decimal): Closing price.
+        properties (dict[str, Any]): Additional properties of the price data.
+        created (datetime.datetime): Timestamp when the price data was created.
+    """
+
+    security_key: str = Field(foreign_key="security.key", primary_key=True)
+    security: Security = Relationship()
+    date: datetime.date = Field(primary_key=True)
+    open: Decimal = Field(sa_column=Column(NUMERIC(24, 4)))
+    high: Decimal = Field(sa_column=Column(NUMERIC(24, 4)))
+    low: Decimal = Field(sa_column=Column(NUMERIC(24, 4)))
+    close: Decimal = Field(sa_column=Column(NUMERIC(24, 4)))
+    properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    created: datetime.datetime = Field(
+        default_factory=datetime.datetime.now, title="Created"
+    )

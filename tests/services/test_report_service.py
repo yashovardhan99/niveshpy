@@ -9,7 +9,7 @@ import pytest
 from niveshpy.domain.services import LotAccountingService
 from niveshpy.exceptions import InvalidInputError, OperationError
 from niveshpy.models.account import AccountCreate, AccountPublic
-from niveshpy.models.price import Price, PriceCreate
+from niveshpy.models.price import PriceCreate, PricePublic
 from niveshpy.models.report import (
     Allocation,
     Holding,
@@ -209,7 +209,7 @@ def sample_transactions(
 def sample_prices(
     price_repository: MockPriceRepository,
     sample_securities: list[SecurityPublic],
-) -> Sequence[Price]:
+) -> Sequence[PricePublic]:
     """Create sample prices for testing."""
     prices = [
         # HDFC Equity Fund prices

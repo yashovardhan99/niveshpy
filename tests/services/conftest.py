@@ -19,7 +19,7 @@ from niveshpy.exceptions import (
     ResourceNotFoundError,
 )
 from niveshpy.models.account import AccountCreate, AccountPublic
-from niveshpy.models.price import Price, PriceCreate
+from niveshpy.models.price import PriceCreate, PricePublic
 from niveshpy.models.report import Allocation, HoldingUnitRow
 from niveshpy.models.security import SecurityCreate, SecurityPublic
 from niveshpy.models.transaction import Transaction, TransactionCreate
@@ -605,7 +605,7 @@ class MockPriceRepository:
 
     def __init__(self, security_repository: MockSecurityRepository):
         """Initialize the mock price repository."""
-        self._prices: dict[str, dict[datetime.date, Price]] = {}
+        self._prices: dict[str, dict[datetime.date, PricePublic]] = {}
         self._security_repository = security_repository
 
     def get_price_by_key_and_date(
@@ -613,7 +613,7 @@ class MockPriceRepository:
         security_key: str,
         date: datetime.date,
         fetch_profile: PriceFetchProfile = PriceFetchProfile.WITH_SECURITY,
-    ) -> Price | None:
+    ) -> PricePublic | None:
         """Fetch a price by its security key and date.
 
         Args:
@@ -622,7 +622,7 @@ class MockPriceRepository:
             fetch_profile: The profile determining the level of detail to fetch for the price.
 
         Returns:
-            The Price object if found, otherwise None.
+            The PricePublic object if found, otherwise None.
         """
         return self._prices.get(security_key, {}).get(date)
 
@@ -682,7 +682,7 @@ class MockPriceRepository:
         limit: int | None = None,
         offset: int = 0,
         fetch_profile: PriceFetchProfile = PriceFetchProfile.WITH_SECURITY,
-    ) -> Sequence[Price]:
+    ) -> Sequence[PricePublic]:
         """Find all prices matching the given filters with optional pagination.
 
         Args:
@@ -692,7 +692,7 @@ class MockPriceRepository:
             fetch_profile: The profile determining the level of detail to fetch for the prices.
 
         Returns:
-            A sequence of Price objects matching the filters and pagination criteria.
+            A sequence of PricePublic objects matching the filters and pagination criteria.
         """
         securities = self._security_repository.find_securities([])
         securities = self._search_security_filter(filters, securities)
@@ -715,7 +715,7 @@ class MockPriceRepository:
         limit: int | None = None,
         offset: int = 0,
         fetch_profile: PriceFetchProfile = PriceFetchProfile.WITH_SECURITY,
-    ) -> Sequence[Price]:
+    ) -> Sequence[PricePublic]:
         """Find the latest prices for securities matching the given filters with optional pagination.
 
         Args:
@@ -725,7 +725,7 @@ class MockPriceRepository:
             fetch_profile: The profile determining the level of detail to fetch for the prices.
 
         Returns:
-            A sequence of the latest Price objects for securities matching the filters and pagination criteria.
+            A sequence of the latest PricePublic objects for securities matching the filters and pagination criteria.
         """
         securities = self._security_repository.find_securities([])
         securities = self._search_security_filter(filters, securities)
@@ -753,7 +753,17 @@ class MockPriceRepository:
                 "Security", price.security_key, f"for price on {price.date}"
             )
         prices = self._prices.setdefault(price.security_key, {})
-        prices[price.date] = Price(**price.model_dump(), security=security)
+        prices[price.date] = PricePublic(
+            security_key=price.security_key,
+            security=security,
+            open=price.open,
+            high=price.high,
+            low=price.low,
+            close=price.close,
+            date=price.date,
+            properties=price.properties,
+            created=datetime.datetime.now(),
+        )
 
     def replace_prices_in_range(
         self,
@@ -826,4 +836,14 @@ class MockPriceRepository:
                 del prices[date]
         # Insert new prices
         for price in new_prices:
-            prices[price.date] = Price(**price.model_dump(), security=security)
+            prices[price.date] = PricePublic(
+                security_key=price.security_key,
+                security=security,
+                open=price.open,
+                high=price.high,
+                low=price.low,
+                close=price.close,
+                date=price.date,
+                properties=price.properties,
+                created=datetime.datetime.now(),
+            )

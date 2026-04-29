@@ -6,7 +6,7 @@ from enum import Enum, auto
 from typing import Protocol
 
 from niveshpy.core.query.ast import FilterNode
-from niveshpy.models.price import Price, PriceCreate
+from niveshpy.models.price import PriceCreate, PricePublic
 
 
 class PriceFetchProfile(Enum):
@@ -27,7 +27,7 @@ class PriceRepository(Protocol):
         security_key: str,
         date: datetime.date,
         fetch_profile: PriceFetchProfile = PriceFetchProfile.WITH_SECURITY,
-    ) -> Price | None:
+    ) -> PricePublic | None:
         """Fetch a price by its security key and date.
 
         Args:
@@ -36,7 +36,7 @@ class PriceRepository(Protocol):
             fetch_profile: The profile determining the level of detail to fetch for the price.
 
         Returns:
-            The Price object if found, otherwise None.
+            The PricePublic object if found, otherwise None.
         """
 
     def find_all_prices(
@@ -45,7 +45,7 @@ class PriceRepository(Protocol):
         limit: int | None = None,
         offset: int = 0,
         fetch_profile: PriceFetchProfile = PriceFetchProfile.WITH_SECURITY,
-    ) -> Sequence[Price]:
+    ) -> Sequence[PricePublic]:
         """Find all prices matching the given filters with optional pagination.
 
         Args:
@@ -55,7 +55,7 @@ class PriceRepository(Protocol):
             fetch_profile: The profile determining the level of detail to fetch for the prices.
 
         Returns:
-            A sequence of Price objects matching the filters and pagination criteria.
+            A sequence of PricePublic objects matching the filters and pagination criteria.
         """
 
     def find_latest_prices(
@@ -64,7 +64,7 @@ class PriceRepository(Protocol):
         limit: int | None = None,
         offset: int = 0,
         fetch_profile: PriceFetchProfile = PriceFetchProfile.WITH_SECURITY,
-    ) -> Sequence[Price]:
+    ) -> Sequence[PricePublic]:
         """Find the latest prices for securities matching the given filters with optional pagination.
 
         Args:
@@ -74,7 +74,7 @@ class PriceRepository(Protocol):
             fetch_profile: The profile determining the level of detail to fetch for the prices.
 
         Returns:
-            A sequence of the latest Price objects for securities matching the filters and pagination criteria.
+            A sequence of the latest PricePublic objects for securities matching the filters and pagination criteria.
         """
 
     def overwrite_price(self, price: PriceCreate) -> None:

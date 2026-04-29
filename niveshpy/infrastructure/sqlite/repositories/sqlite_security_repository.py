@@ -22,17 +22,6 @@ from niveshpy.models.security import SecurityCreate, SecurityPublic
 class SqliteSecurityRepository:
     """Repository for performing database operations related to securities."""
 
-    def _convert_to_public(self, security: Security) -> SecurityPublic:
-        """Convert a Security database model to a SecurityPublic domain model."""
-        return SecurityPublic(
-            key=security.key,
-            name=security.name,
-            type=security.type,
-            category=security.category,
-            properties=security.properties,
-            created=security.created,
-        )
-
     # SELECT operations for single security
 
     def get_security_by_key(self, key: str) -> SecurityPublic | None:
@@ -40,7 +29,7 @@ class SqliteSecurityRepository:
         with get_session() as session:
             security = session.get(Security, key)
             logger.debug("Fetched security by key '%s': %s", key, str(security))
-            return self._convert_to_public(security) if security else None
+            return security.to_public() if security else None
 
     # SELECT operations for multiple securities
 
@@ -70,7 +59,7 @@ class SqliteSecurityRepository:
                 offset,
                 len(securities),
             )
-            return [self._convert_to_public(sec) for sec in securities]
+            return [sec.to_public() for sec in securities]
 
     def find_securities_by_keys(self, keys: Sequence[str]) -> Sequence[SecurityPublic]:
         """Find securities matching the given list of keys."""
@@ -83,7 +72,7 @@ class SqliteSecurityRepository:
             logger.debug(
                 "Fetched securities by %d keys: %d results", len(keys), len(securities)
             )
-            return [self._convert_to_public(sec) for sec in securities]
+            return [sec.to_public() for sec in securities]
 
     # INSERT operations for single security
 
