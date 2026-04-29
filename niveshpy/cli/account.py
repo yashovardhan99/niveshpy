@@ -20,6 +20,7 @@ from niveshpy.cli.utils.display import (
 from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
+from niveshpy.core.converter import get_csv_converter, get_json_converter
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import (
     OperationError,
@@ -90,15 +91,17 @@ def show(
             table = build_table(accounts, AccountDisplay.columns)
             display(table)
         elif format == OutputFormat.CSV:
+            c = get_csv_converter()
             csv = build_csv(
-                map(AccountDisplay.to_csv_dict, accounts),
+                c.unstructure(result),
                 fields=AccountDisplay.csv_fields,
                 output_file=output_file,
             )
             if csv:
                 display(csv)
         elif format == OutputFormat.JSON:
-            data = [acc.to_json_dict() for acc in accounts]
+            c = get_json_converter()
+            data = c.unstructure(result)
             if output_file:
                 with output_file.open("w") as f:
                     json.dump(data, f, indent=4)

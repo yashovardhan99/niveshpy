@@ -33,6 +33,7 @@ class AccountPublic:
         institution (str): Financial institution managing the account.
         created_at (datetime): Timestamp when the account was created.
         properties (Mapping[str, Any]): Additional properties of the account.
+        source (str | None): Optional source identifier extracted from properties.
     """
 
     id: int
@@ -40,3 +41,8 @@ class AccountPublic:
     institution: str
     created_at: datetime
     properties: Mapping[str, Any]
+    source: str | None = field(default=None, init=False)
+
+    def __attrs_post_init__(self) -> None:
+        """Extract source from properties if available."""
+        object.__setattr__(self, "source", self.properties.get("source"))
