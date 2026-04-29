@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0a6] - 2026-04-29
+
 ### Added
 
 - (Internal) Add new repository function to update security properties.
@@ -119,7 +121,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pre-built plugin: amfi (Mutual Fund)
 - Documentation
 
-[unreleased]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a5...HEAD
+[unreleased]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a6...HEAD
+[1.0.0a6]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a5...v1.0.0a6
 [1.0.0a5]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a4...v1.0.0a5
 [1.0.0a4]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a3...v1.0.0a4
 [1.0.0a3]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a2...v1.0.0a3
