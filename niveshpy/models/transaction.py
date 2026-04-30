@@ -73,6 +73,7 @@ class TransactionPublic:
         security (SecurityPublic | None): Related security object, if available.
         account (AccountPublic | None): Related account object, if available.
         cost (Decimal | None): Cost basis of the transaction, if applicable.
+        source (str | None): Source of the transaction, extracted from properties if available.
     """
 
     id: int
@@ -88,3 +89,8 @@ class TransactionPublic:
     cost: Decimal | None = None
     security: SecurityPublic | None = None
     account: AccountPublic | None = None
+    source: str | None = field(init=False)
+
+    def __attrs_post_init__(self):
+        """Set the source field based on properties after initialization."""
+        object.__setattr__(self, "source", self.properties.get("source"))

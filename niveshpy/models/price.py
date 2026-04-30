@@ -47,6 +47,7 @@ class PricePublic:
         properties (dict[str, Any]): Additional properties of the price data.
         created (datetime.datetime): Timestamp when the price data was created.
         security (Security): Related security object, if set.
+        source (str | None): Source of the price data, extracted from properties if available.
     """
 
     security_key: str
@@ -58,3 +59,8 @@ class PricePublic:
     properties: Mapping[str, Any]
     created: datetime.datetime
     security: SecurityPublic | None = field(default=None, repr=False)
+    source: str | None = field(init=False)
+
+    def __attrs_post_init__(self):
+        """Set the source field based on properties after initialization."""
+        object.__setattr__(self, "source", self.properties.get("source"))

@@ -22,6 +22,7 @@ from niveshpy.cli.utils.display import (
 )
 from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.core.app import AppState
+from niveshpy.core.converter import get_csv_converter, get_json_converter
 from niveshpy.exceptions import InvalidInputError
 
 
@@ -114,15 +115,17 @@ def list_prices(
             if extra_message:
                 display(extra_message)
         elif format == OutputFormat.CSV:
+            c = get_csv_converter()
             csv = build_csv(
-                map(PriceDisplay.to_csv_dict, prices),
+                c.unstructure(result),
                 fields=PriceDisplay.csv_fields,
                 output_file=output_file,
             )
             if csv:
                 display(csv)
         elif format == OutputFormat.JSON:
-            data = [price.to_json_dict() for price in prices]
+            c = get_json_converter()
+            data = c.unstructure(result)
             if output_file:
                 with output_file.open("w") as f:
                     json.dump(data, f, indent=4)

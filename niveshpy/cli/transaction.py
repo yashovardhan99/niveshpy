@@ -23,6 +23,7 @@ from niveshpy.cli.utils.display import (
 from niveshpy.cli.utils.models import OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
+from niveshpy.core.converter import get_csv_converter, get_json_converter
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import InvalidInputError, ResourceNotFoundError
 from niveshpy.models.transaction import TransactionType
@@ -102,8 +103,9 @@ def show(
             )
             display(table)
         elif format == OutputFormat.CSV:
+            c = get_csv_converter()
             csv = build_csv(
-                (t.to_csv_dict(include_cost=cost) for t in transactions),
+                c.unstructure(result),
                 fields=(
                     TransactionDisplay.csv_fields_with_cost
                     if cost
@@ -114,7 +116,8 @@ def show(
             if csv:
                 display(csv)
         elif format == OutputFormat.JSON:
-            data = [t.to_json_dict(include_cost=cost) for t in transactions]
+            c = get_json_converter()
+            data = c.unstructure(result)
             if output_file:
                 with output_file.open("w") as f:
                     json.dump(data, f, indent=4)
