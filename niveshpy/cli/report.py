@@ -16,7 +16,6 @@ from niveshpy.cli.models.report import (
     PerformanceHoldingDisplay,
     SummaryResultDisplay,
 )
-from niveshpy.cli.models.security import format_security_category
 from niveshpy.cli.utils import essentials, flags
 from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
@@ -26,7 +25,11 @@ from niveshpy.cli.utils.display import (
     display_warning,
     loading_spinner,
 )
-from niveshpy.cli.utils.formatters import format_decimal, format_percentage
+from niveshpy.cli.utils.formatters import (
+    format_decimal,
+    format_percentage,
+    format_security_category,
+)
 from niveshpy.cli.utils.models import OutputFormat, SectionBreak, TotalRow
 from niveshpy.cli.utils.overrides import NiveshPyCommand
 from niveshpy.core.app import AppState

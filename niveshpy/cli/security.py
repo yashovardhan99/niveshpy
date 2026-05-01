@@ -6,7 +6,6 @@ from textwrap import dedent
 
 import click
 
-from niveshpy.cli.models.security import SecurityDisplay
 from niveshpy.cli.utils import essentials, flags
 from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
@@ -18,7 +17,12 @@ from niveshpy.cli.utils.display import (
     display_warning,
     loading_spinner,
 )
-from niveshpy.cli.utils.models import OutputFormat
+from niveshpy.cli.utils.formatters import (
+    format_datetime,
+    format_security_category,
+    format_security_type,
+)
+from niveshpy.cli.utils.models import Column, OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.converter import get_csv_converter, get_json_converter
@@ -67,7 +71,6 @@ def show(
         display_warning(msg)
         ctx.exit()
 
-    securities = map(SecurityDisplay.from_domain, result)
     extra_message = (
         f"Showing first {limit:,} securities."
         if len(result) == limit and offset == 0
@@ -87,13 +90,22 @@ def show(
                     "Output file specified, but table format does not support file output. Ignoring --output-file flag."
                 )
 
-            table = build_table(securities, SecurityDisplay.columns)
+            columns = [
+                Column("key", style="green", justify="right"),
+                Column("name"),
+                Column("type", formatter=format_security_type),
+                Column("category", formatter=format_security_category),
+                Column("created", style="dim", formatter=format_datetime),
+                Column("source", style="dim"),
+            ]
+
+            table = build_table(result, columns)
             display(table)
         elif format == OutputFormat.CSV:
             c = get_csv_converter()
             csv = build_csv(
                 c.unstructure(result),
-                fields=SecurityDisplay.csv_fields,
+                fields=["key", "name", "type", "category", "created", "source"],
                 output_file=output_file,
             )
             if csv:

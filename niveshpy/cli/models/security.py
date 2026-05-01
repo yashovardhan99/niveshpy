@@ -3,40 +3,10 @@
 from __future__ import annotations
 
 import datetime
-from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import ClassVar, Self
+from typing import Self
 
-from niveshpy.cli.utils.formatters import format_datetime
-from niveshpy.cli.utils.models import Column
 from niveshpy.models.security import SecurityCategory, SecurityPublic, SecurityType
-
-
-def _format_security_type(sec_type: SecurityType) -> str:
-    from niveshpy.models.security import SecurityType
-
-    type_format_map = {
-        SecurityType.STOCK.value: "[white]Stock",
-        SecurityType.BOND.value: "[cyan]Bond",
-        SecurityType.ETF.value: "[yellow]ETF",
-        SecurityType.MUTUAL_FUND.value: "[green]Mutual Fund",
-        SecurityType.OTHER.value: "[dim]Other",
-    }
-    return type_format_map.get(sec_type, "[reverse]Unknown")
-
-
-def format_security_category(category: SecurityCategory) -> str:
-    """Format the security category for display in the CLI."""
-    from niveshpy.models.security import SecurityCategory
-
-    category_format_map = {
-        SecurityCategory.EQUITY.value: "[white]Equity",
-        SecurityCategory.DEBT.value: "[cyan]Debt",
-        SecurityCategory.COMMODITY.value: "[yellow]Commodity",
-        SecurityCategory.REAL_ESTATE.value: "[bright_red]Real Estate",
-        SecurityCategory.OTHER.value: "[dim]Other",
-    }
-    return category_format_map.get(category, "[reverse]Unknown")
 
 
 @dataclass(slots=True, frozen=True)
@@ -49,22 +19,6 @@ class SecurityDisplay:
     category: SecurityCategory
     created: datetime.datetime
     source: str | None
-    columns: ClassVar[Sequence[Column]] = [
-        Column("key", style="green", justify="right"),
-        Column("name"),
-        Column("type", formatter=_format_security_type),
-        Column("category", formatter=format_security_category),
-        Column("created", style="dim", formatter=format_datetime),
-        Column("source", style="dim"),
-    ]
-    csv_fields: ClassVar[Sequence[str]] = [
-        "key",
-        "name",
-        "type",
-        "category",
-        "created",
-        "source",
-    ]
 
     @classmethod
     def from_domain(cls, security: SecurityPublic) -> Self:
@@ -88,7 +42,3 @@ class SecurityDisplay:
             "created": self.created.isoformat(),
             "source": self.source,
         }
-
-    def to_csv_dict(self) -> dict[str, str | None]:
-        """Convert the SecurityDisplay instance to a dictionary suitable for CSV output."""
-        return self.to_json_dict()
