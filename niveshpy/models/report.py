@@ -5,6 +5,9 @@ import decimal
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+from attrs import field as attrs_field
+from attrs import frozen
+
 from niveshpy.models.account import AccountPublic
 from niveshpy.models.security import (
     SecurityCategory,
@@ -15,9 +18,20 @@ from niveshpy.models.security import (
 # Holdings
 
 
-@dataclass(slots=True, frozen=True)
+@frozen
 class Holding:
-    """Data class for a single holding used in report computations."""
+    """Data class for a single holding used in report computations.
+
+    Attributes:
+        account: The account associated with the holding.
+        security: The security associated with the holding.
+        date: The date of the holding.
+        units: The number of units held.
+        invested: The total amount invested in the holding.
+        amount: The current total value of the holding.
+        account_id: The ID of the account associated with the holding.
+        security_key: The key of the security associated with the holding.
+    """
 
     account: AccountPublic
     security: SecurityPublic
@@ -25,6 +39,13 @@ class Holding:
     units: decimal.Decimal
     invested: decimal.Decimal
     amount: decimal.Decimal
+    account_id: int = attrs_field(init=False)
+    security_key: str = attrs_field(init=False)
+
+    def __attrs_post_init__(self) -> None:
+        """Set account_id and security_key after initialization."""
+        object.__setattr__(self, "account_id", self.account.id)
+        object.__setattr__(self, "security_key", self.security.key)
 
 
 @dataclass(slots=True, frozen=True)

@@ -4,7 +4,6 @@ import datetime
 import decimal
 import json
 import textwrap
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
@@ -12,7 +11,6 @@ import click
 
 from niveshpy.cli.models.report import (
     AllocationDisplay,
-    HoldingDisplay,
     PerformanceHoldingDisplay,
     SummaryResultDisplay,
 )
@@ -26,16 +24,21 @@ from niveshpy.cli.utils.display import (
     loading_spinner,
 )
 from niveshpy.cli.utils.formatters import (
+    format_account,
+    format_date,
     format_decimal,
     format_percentage,
+    format_security,
     format_security_category,
 )
-from niveshpy.cli.utils.models import OutputFormat, SectionBreak, TotalRow
+from niveshpy.cli.utils.models import Column, OutputFormat, SectionBreak, TotalRow
 from niveshpy.cli.utils.overrides import NiveshPyCommand
 from niveshpy.core.app import AppState
+from niveshpy.core.converter import get_csv_converter, get_json_converter
 from niveshpy.core.logging import logger
 from niveshpy.core.query import tokens
 from niveshpy.core.query.tokenizer import QueryLexer
+from niveshpy.models.report import Holding
 
 DAYS_FOR_OLD = 15
 """Number of days after which holdings are considered old."""
@@ -122,19 +125,16 @@ def holdings(
                 "Consider syncing latest prices using 'niveshpy prices sync'."
             )
 
-        items = [HoldingDisplay.from_domain(h) for h in holdings]
         with capture_for_pager(
             enabled=output_file is None or format == OutputFormat.TABLE
         ):
             if format == OutputFormat.TABLE:
-                table_items: Sequence[HoldingDisplay | TotalRow]
+                items: list[Holding | TotalRow] = list(holdings)
                 if total:
                     total_value = sum(
                         (h.amount for h in holdings), decimal.Decimal("0")
                     )
-                    table_items = items + [TotalRow(format_decimal(total_value))]
-                else:
-                    table_items = items
+                    items.append(TotalRow(format_decimal(total_value)))
 
                 if extra_message:
                     display(extra_message)
@@ -144,18 +144,49 @@ def holdings(
                         "Output file specified, but table format does not support file output. Ignoring --output-file flag."
                     )
 
-                table = build_table(table_items, HoldingDisplay.columns)
+                columns = [
+                    Column("account", style="dim", formatter=format_account),
+                    Column("security", style="bold", formatter=format_security),
+                    Column("date", style="cyan", formatter=format_date),
+                    Column(
+                        "units", style="dim", formatter=format_decimal, justify="right"
+                    ),
+                    Column(
+                        "invested",
+                        style="dim",
+                        formatter=format_decimal,
+                        justify="right",
+                    ),
+                    Column(
+                        "amount",
+                        name="current",
+                        style="bold",
+                        formatter=format_decimal,
+                        justify="right",
+                    ),
+                ]
+
+                table = build_table(items, columns)
                 display(table)
             elif format == OutputFormat.CSV:
+                c = get_csv_converter()
                 csv = build_csv(
-                    map(HoldingDisplay.to_csv_dict, items),
-                    fields=HoldingDisplay.csv_fields,
+                    c.unstructure(holdings),
+                    fields=[
+                        "account",
+                        "security",
+                        "date",
+                        "units",
+                        "invested",
+                        "current",
+                    ],
                     output_file=output_file,
                 )
                 if csv:
                     display(csv)
             elif format == OutputFormat.JSON:
-                data = [h.to_json_dict() for h in items]
+                c = get_json_converter()
+                data = c.unstructure(holdings)
                 if output_file:
                     with output_file.open("w") as f:
                         json.dump(data, f, indent=4)
