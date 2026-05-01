@@ -4,7 +4,9 @@ import datetime
 import decimal
 import functools
 
+from niveshpy.models.account import AccountPublic
 from niveshpy.models.security import SecurityCategory, SecurityPublic, SecurityType
+from niveshpy.models.transaction import TransactionType
 
 
 def format_decimal(
@@ -97,3 +99,17 @@ def format_security_category(category: SecurityCategory) -> str:
 def format_security(security: SecurityPublic) -> str:
     """Format a security for display in the CLI."""
     return f"{security.name} ({security.key})"
+
+
+def format_transaction_type(txn_type: TransactionType) -> str:
+    """Format a transaction type for display in the CLI."""
+    type_format_map = {
+        TransactionType.PURCHASE: "[green]Purchase",
+        TransactionType.SALE: "[red]Sale",
+    }
+    return type_format_map.get(txn_type, "[reverse]Unknown")
+
+
+def format_account(account: AccountPublic) -> str:
+    """Format an account for display in the CLI."""
+    return f"{account.name} ({account.institution})"

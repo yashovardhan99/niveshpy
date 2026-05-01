@@ -8,7 +8,6 @@ from pathlib import Path
 
 import click
 
-from niveshpy.cli.models.transaction import TransactionDisplay
 from niveshpy.cli.utils import essentials, flags, inputs
 from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
@@ -20,7 +19,15 @@ from niveshpy.cli.utils.display import (
     display_warning,
     loading_spinner,
 )
-from niveshpy.cli.utils.models import OutputFormat
+from niveshpy.cli.utils.formatters import (
+    format_account,
+    format_date,
+    format_datetime,
+    format_decimal,
+    format_security,
+    format_transaction_type,
+)
+from niveshpy.cli.utils.models import Column, OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.converter import get_csv_converter, get_json_converter
@@ -75,7 +82,6 @@ def show(
         display_warning(msg)
         ctx.exit()
 
-    transactions = map(TransactionDisplay.from_domain, result)
     extra_message = (
         f"Showing first {limit:,} transactions."
         if len(result) == limit and offset == 0
@@ -93,25 +99,55 @@ def show(
                 )
             if extra_message:
                 display(extra_message)
-            table = build_table(
-                transactions,
-                (
-                    TransactionDisplay.columns_with_cost
-                    if cost
-                    else TransactionDisplay.columns
+
+            columns = [
+                Column("id", style="dim", justify="right"),
+                Column(
+                    "transaction_date",
+                    name="Date",
+                    formatter=format_date,
+                    style="cyan",
                 ),
-            )
+                Column("type", formatter=format_transaction_type),
+                Column("description"),
+                Column("security", formatter=format_security),
+                Column("amount", formatter=format_decimal, style="bold"),
+                Column("units", formatter=format_decimal, style="cyan"),
+                Column("account", formatter=format_account, style="dim"),
+                Column("created", style="dim", formatter=format_datetime),
+                Column("source", style="dim"),
+            ]
+            if cost:
+                columns.insert(
+                    6,
+                    Column(
+                        "cost",
+                        formatter=lambda cost: (
+                            format_decimal(cost) if cost is not None else ""
+                        ),
+                        style="bold magenta",
+                    ),
+                )
+            table = build_table(result, columns)
             display(table)
         elif format == OutputFormat.CSV:
             c = get_csv_converter()
+            fields = [
+                "id",
+                "transaction_date",
+                "type",
+                "description",
+                "security",
+                "amount",
+                "units",
+                "account",
+                "created",
+                "source",
+            ]
+            if cost:
+                fields.insert(6, "cost")
             csv = build_csv(
-                c.unstructure(result),
-                fields=(
-                    TransactionDisplay.csv_fields_with_cost
-                    if cost
-                    else TransactionDisplay.csv_fields
-                ),
-                output_file=output_file,
+                c.unstructure(result), fields=fields, output_file=output_file
             )
             if csv:
                 display(csv)
@@ -381,10 +417,22 @@ def delete(
 
     if dry_run or not force:
         display("You have selected the following transaction:")
-        table = build_table(
-            [TransactionDisplay.from_domain(transaction)],
-            TransactionDisplay.columns,
-        )
+        columns = [
+            Column("id", style="dim", justify="right"),
+            Column(
+                "transaction_date",
+                name="Date",
+                formatter=format_date,
+                style="cyan",
+            ),
+            Column("type", formatter=format_transaction_type),
+            Column("description"),
+            Column("security", formatter=format_security),
+            Column("amount", formatter=format_decimal, style="bold"),
+            Column("units", formatter=format_decimal, style="cyan"),
+            Column("account", formatter=format_account, style="dim"),
+        ]
+        table = build_table((transaction,), columns)
         display(table)
         if (
             not dry_run
