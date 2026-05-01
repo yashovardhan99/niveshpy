@@ -4,7 +4,7 @@ import datetime
 import decimal
 import functools
 
-from niveshpy.models.security import SecurityCategory, SecurityType
+from niveshpy.models.security import SecurityCategory, SecurityPublic, SecurityType
 
 
 def format_decimal(
@@ -92,3 +92,8 @@ def format_security_category(category: SecurityCategory) -> str:
         SecurityCategory.OTHER.value: "[dim]Other",
     }
     return category_format_map.get(category, "[reverse]Unknown")
+
+
+def format_security(security: SecurityPublic) -> str:
+    """Format a security for display in the CLI."""
+    return f"{security.name} ({security.key})"
