@@ -31,7 +31,7 @@ class AccountPublic:
         id (int): Primary key ID of the account.
         name (str): Name of the account.
         institution (str): Financial institution managing the account.
-        created_at (datetime): Timestamp when the account was created.
+        created (datetime): Timestamp when the account was created.
         properties (Mapping[str, Any]): Additional properties of the account.
         source (str | None): Optional source identifier extracted from properties.
     """
@@ -39,7 +39,7 @@ class AccountPublic:
     id: int
     name: str
     institution: str
-    created_at: datetime
+    created: datetime
     properties: Mapping[str, Any]
     source: str | None = field(default=None, init=False)
 

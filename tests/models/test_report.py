@@ -34,7 +34,7 @@ class TestPerformanceHoldingModel:
             id=1,
             name="Savings",
             institution="Bank",
-            created_at=datetime.datetime.now(),
+            created=datetime.datetime.now(),
             properties={},
         )
         security = SecurityPublic(
@@ -108,7 +108,7 @@ class TestPerformanceResultModel:
             id=1,
             name="Savings",
             institution="Bank",
-            created_at=datetime.datetime.now(),
+            created=datetime.datetime.now(),
             properties={},
         )
         security = SecurityPublic(
@@ -186,7 +186,7 @@ class TestSummaryResultModel:
             id=1,
             name="Savings",
             institution="Bank",
-            created_at=datetime.datetime.now(),
+            created=datetime.datetime.now(),
             properties={},
         )
         security = SecurityPublic(

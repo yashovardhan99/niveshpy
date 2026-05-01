@@ -116,7 +116,7 @@ class MockAccountRepository:
             name=account.name,
             institution=account.institution,
             properties=account.properties,
-            created_at=datetime.datetime.now(),
+            created=datetime.datetime.now(),
         )
         self._next_id += 1
         return account_id

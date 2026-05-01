@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import datetime
-from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import ClassVar, Self
+from typing import Self
 
-from niveshpy.cli.utils.formatters import format_datetime
-from niveshpy.cli.utils.models import Column
 from niveshpy.models.account import AccountPublic
 
 
@@ -21,20 +18,6 @@ class AccountDisplay:
     institution: str
     created: datetime.datetime
     source: str | None
-    columns: ClassVar[Sequence[Column]] = [
-        Column("id", name="ID", style="dim"),
-        Column("name"),
-        Column("institution", style="bold"),
-        Column("created", style="dim", formatter=format_datetime),
-        Column("source", style="dim"),
-    ]
-    csv_fields: ClassVar[Sequence[str]] = [
-        "id",
-        "name",
-        "institution",
-        "created",
-        "source",
-    ]
 
     @classmethod
     def from_domain(cls, account: AccountPublic) -> Self:
@@ -43,7 +26,7 @@ class AccountDisplay:
             id=account.id,
             name=account.name,
             institution=account.institution,
-            created=account.created_at,
+            created=account.created,
             source=account.properties.get("source"),
         )
 
@@ -56,7 +39,3 @@ class AccountDisplay:
             "created": self.created.isoformat(),
             "source": self.source,
         }
-
-    def to_csv_dict(self) -> dict[str, str | int | None]:
-        """Convert the AccountDisplay instance to a dictionary suitable for CSV output."""
-        return self.to_json_dict()

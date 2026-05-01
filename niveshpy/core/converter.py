@@ -44,20 +44,12 @@ def _unstructure_str_enum(enum_val: StrEnum) -> str:
     return enum_val.value
 
 
-_json_converter.register_unstructure_hook(
-    AccountPublic,
-    make_dict_unstructure_fn(
-        AccountPublic, _json_converter, created_at=override(rename="created")
-    ),
-)
-
 _csv_converter.register_unstructure_hook(
     AccountPublic,
     make_dict_unstructure_fn(
         AccountPublic,
         _csv_converter,
         source=override(omit=False),
-        created_at=override(rename="created"),
         properties=override(omit=True),
     ),
 )

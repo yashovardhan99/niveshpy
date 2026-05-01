@@ -444,7 +444,7 @@ class TestResolveAccountId:
 
         assert isinstance(accounts[0], AccountPublic)
         assert hasattr(accounts[0], "id")
-        assert hasattr(accounts[0], "created_at")
+        assert hasattr(accounts[0], "created")
 
 
 class TestDeleteAccount:
