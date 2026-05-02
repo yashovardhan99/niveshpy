@@ -7,9 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Automatic database migration support.
+
 ### Changed
 
 - (Internal) Migrate all CLI commands to use domain objects directly with cattrs instead of separate display models.
+- (Internal) Update database layer to use sqlalchemy instedd of sqlmodel.
+- Updated database table schemas.
+
+### Removed
+
+- (Internal) Remove Sqlmodel dependency.
 
 ## [1.0.0a6] - 2026-04-29
 

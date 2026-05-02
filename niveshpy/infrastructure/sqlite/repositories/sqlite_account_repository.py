@@ -2,16 +2,15 @@
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import cast
 
-from sqlalchemy import tuple_
+from sqlalchemy import CursorResult, delete, select, tuple_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlmodel import col, delete, select
+from sqlalchemy.orm import Session, sessionmaker
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_sqlalchemy_filters
-from niveshpy.database import get_session
 from niveshpy.exceptions import InvalidInputError
 from niveshpy.infrastructure.sqlite.models import Account
 from niveshpy.models.account import AccountCreate, AccountPublic
@@ -19,17 +18,19 @@ from niveshpy.models.account import AccountCreate, AccountPublic
 
 @dataclass(slots=True, frozen=True)
 class SqliteAccountRepository:
-    """Repository for performing database operations related to accounts."""
+    """Repository for performing database operations related to accounts.
 
-    _column_mappings: ClassVar[dict[Field, list[str]]] = {
-        Field.ACCOUNT: ["name", "institution"],
-    }
+    Attributes:
+        session_factory: The sessionmaker instance used for creating database sessions.
+    """
+
+    session_factory: sessionmaker[Session]
 
     # SELECT operations for single account
 
     def get_account_by_id(self, account_id: int) -> AccountPublic | None:
         """Fetch an account by its ID."""
-        with get_session() as session:
+        with self.session_factory() as session:
             account = session.get(Account, account_id)
             logger.debug("Fetched account by ID %d: %s", account_id, str(account))
             return account.to_public() if account else None
@@ -39,10 +40,10 @@ class SqliteAccountRepository:
     ) -> AccountPublic | None:
         """Fetch an account by its name and institution."""
         query = select(Account).where(
-            col(Account.name) == name, col(Account.institution) == institution
+            Account.name == name, Account.institution == institution
         )
-        with get_session() as session:
-            account = session.exec(query).one_or_none()
+        with self.session_factory() as session:
+            account = session.scalar(query)
             logger.debug(
                 "Fetched account by name '%s' and institution '%s': %s",
                 name,
@@ -58,15 +59,18 @@ class SqliteAccountRepository:
     ) -> Sequence[AccountPublic]:
         """Find accounts matching the given filters with optional pagination."""
         where_clause = get_sqlalchemy_filters(
-            filters, SqliteAccountRepository._column_mappings
+            filters,
+            {
+                Field.ACCOUNT: ["name", "institution"],
+            },
         )
-        with get_session() as session:
-            accounts = session.exec(
+        with self.session_factory() as session:
+            accounts = session.scalars(
                 select(Account)
                 .where(*where_clause)
                 .offset(offset)
                 .limit(limit)
-                .order_by(col(Account.id))
+                .order_by(Account.id)
             ).all()
             logger.debug("Fetched %d accounts with filters: %s", len(accounts), filters)
             return [account.to_public() for account in accounts]
@@ -85,9 +89,9 @@ class SqliteAccountRepository:
         if not account_ids:
             logger.debug("No account IDs provided for search.")
             return []
-        query = select(Account).where(col(Account.id).in_(account_ids))
-        with get_session() as session:
-            accounts = session.exec(query).all()
+        query = select(Account).where(Account.id.in_(account_ids))
+        with self.session_factory() as session:
+            accounts = session.scalars(query).all()
             logger.debug(
                 "Fetched %d accounts with IDs in %s", len(accounts), account_ids
             )
@@ -106,12 +110,12 @@ class SqliteAccountRepository:
                 "Names and institutions lists must be of the same length.",
             )
         query = select(Account).where(
-            tuple_(col(Account.name), col(Account.institution)).in_(
+            tuple_(Account.name, Account.institution).in_(
                 zip(names, institutions, strict=True)
             )
         )
-        with get_session() as session:
-            accounts = session.exec(query).all()
+        with self.session_factory() as session:
+            accounts = session.scalars(query).all()
             logger.debug(
                 "Fetched %d accounts with names in %s and institutions in %s",
                 len(accounts),
@@ -124,7 +128,7 @@ class SqliteAccountRepository:
 
     def insert_account(self, account: AccountCreate) -> int | None:
         """Insert a new account into the database."""
-        with get_session() as session:
+        with self.session_factory.begin() as session:
             stmt = (
                 sqlite_insert(Account)
                 .values(
@@ -133,15 +137,14 @@ class SqliteAccountRepository:
                     properties=account.properties,
                 )
                 .on_conflict_do_nothing()
-                .returning(col(Account.id))
+                .returning(Account.id)
             )
             inserted_account_id = session.scalar(stmt)
-            session.commit()
-            if inserted_account_id is not None:
-                logger.debug("Inserted new account with ID: %d", inserted_account_id)
-            else:
-                logger.debug("Account already exists, skipping insert: %s", account)
-            return inserted_account_id
+        if inserted_account_id is not None:
+            logger.debug("Inserted new account with ID: %d", inserted_account_id)
+        else:
+            logger.debug("Account already exists, skipping insert: %s", account)
+        return inserted_account_id
 
     # INSERT operations for multiple accounts
 
@@ -158,23 +161,21 @@ class SqliteAccountRepository:
         if not account_dicts:
             logger.debug("No accounts to insert.")
             return 0
-        with get_session() as session:
+        with self.session_factory.begin() as session:
             stmt = sqlite_insert(Account).values(account_dicts).on_conflict_do_nothing()
-            result = session.exec(stmt).rowcount
-            session.commit()
-            logger.debug("Inserted %d new accounts.", result)
-            return result
+            result = cast(CursorResult, session.execute(stmt))
+        logger.debug("Inserted %d new accounts.", result.rowcount)
+        return result.rowcount
 
     # DELETE operations for single account
 
     def delete_account_by_id(self, account_id: int) -> bool:
         """Delete an account by its ID."""
-        with get_session() as session:
-            stmt = delete(Account).where(col(Account.id) == account_id)
-            result = session.exec(stmt)
+        with self.session_factory.begin() as session:
+            stmt = delete(Account).where(Account.id == account_id)
+            result = cast(CursorResult, session.execute(stmt))
             if result.rowcount == 0:
                 logger.debug("No account found with ID %d to delete.", account_id)
                 return False
-            session.commit()
-            logger.debug("Deleted account with ID %d.", account_id)
-            return True
+        logger.debug("Deleted account with ID %d.", account_id)
+        return True

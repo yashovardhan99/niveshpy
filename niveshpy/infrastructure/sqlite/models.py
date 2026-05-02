@@ -4,15 +4,17 @@ import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlmodel import (
+from sqlalchemy import (
     JSON,
     NUMERIC,
-    Column,
-    Field,
-    Relationship,
-    SQLModel,
+    DateTime,
+    Enum,
+    ForeignKey,
+    TypeDecorator,
     UniqueConstraint,
+    func,
 )
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from niveshpy.exceptions import InvalidInputError
 from niveshpy.models.account import AccountPublic
@@ -21,26 +23,54 @@ from niveshpy.models.security import SecurityCategory, SecurityPublic, SecurityT
 from niveshpy.models.transaction import TransactionPublic, TransactionType
 
 
-class Account(SQLModel, table=True):
+class TZDateTime(TypeDecorator):
+    """Custom SQLAlchemy type to handle timezone-aware datetimes in SQLite."""
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        """Convert timezone-aware datetime to UTC naive datetime for storage."""
+        if value is not None:
+            if not value.tzinfo or value.tzinfo.utcoffset(value) is None:
+                raise TypeError("tzinfo is required")
+            value = value.astimezone(datetime.UTC).replace(tzinfo=None)
+        return value
+
+    def process_result_value(self, value, dialect):
+        """Convert stored UTC naive datetime back to timezone-aware datetime."""
+        if value is not None:
+            value = value.replace(tzinfo=datetime.UTC)
+        return value
+
+
+class Base(DeclarativeBase):
+    """Base class for all SQLAlchemy models."""
+
+
+class Account(Base):
     """Database model for investment accounts.
 
     Attributes:
-        id (int | None): Primary key ID of the account. None if not yet stored in DB.
+        id (int): Primary key ID of the account.
         name (str): Name of the account.
         institution (str): Financial institution managing the account.
         properties (dict[str, Any]): Additional properties of the account.
         created_at (datetime): Timestamp when the account was created.
     """
 
+    __tablename__ = "account"
     __table_args__ = (
         UniqueConstraint("name", "institution", name="uix_name_institution"),
     )
 
-    id: int | None = Field(default=None, primary_key=True)
-    name: str
-    institution: str
-    properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    institution: Mapped[str]
+    properties: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        TZDateTime, server_default=func.current_timestamp()
+    )
 
     def to_public(self) -> AccountPublic:
         """Convert an Account database model to an AccountPublic domain model."""
@@ -51,11 +81,11 @@ class Account(SQLModel, table=True):
             name=self.name,
             institution=self.institution,
             properties=self.properties,
-            created=self.created_at,
+            created=self.created_at.astimezone().replace(tzinfo=None),
         )
 
 
-class Security(SQLModel, table=True):
+class Security(Base):
     """Database model for securities.
 
     Attributes:
@@ -67,12 +97,28 @@ class Security(SQLModel, table=True):
         created (datetime): Timestamp when the security was created.
     """
 
-    key: str = Field(primary_key=True)
-    name: str = Field()
-    type: SecurityType = Field()
-    category: SecurityCategory = Field()
-    properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-    created: datetime.datetime = Field(default_factory=datetime.datetime.now)
+    __tablename__ = "security"
+
+    key: Mapped[str] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    type: Mapped[SecurityType] = mapped_column(
+        Enum(
+            SecurityType,
+            create_constraint=True,
+            values_callable=lambda x: [e.value for e in x],
+        )
+    )
+    category: Mapped[SecurityCategory] = mapped_column(
+        Enum(
+            SecurityCategory,
+            create_constraint=True,
+            values_callable=lambda x: [e.value for e in x],
+        )
+    )
+    properties: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created: Mapped[datetime.datetime] = mapped_column(
+        TZDateTime, server_default=func.current_timestamp()
+    )
 
     def to_public(self) -> SecurityPublic:
         """Convert a Security database model to a SecurityPublic domain model."""
@@ -82,11 +128,11 @@ class Security(SQLModel, table=True):
             type=self.type,
             category=self.category,
             properties=self.properties,
-            created=self.created,
+            created=self.created.astimezone().replace(tzinfo=None),
         )
 
 
-class Price(SQLModel, table=True):
+class Price(Base):
     """Database model for price data.
 
     Attributes:
@@ -101,16 +147,20 @@ class Price(SQLModel, table=True):
         created (datetime.datetime): Timestamp when the price data was created.
     """
 
-    security_key: str = Field(foreign_key="security.key", primary_key=True)
-    security: Security = Relationship()
-    date: datetime.date = Field(primary_key=True)
-    open: Decimal = Field(sa_column=Column(NUMERIC(24, 4)))
-    high: Decimal = Field(sa_column=Column(NUMERIC(24, 4)))
-    low: Decimal = Field(sa_column=Column(NUMERIC(24, 4)))
-    close: Decimal = Field(sa_column=Column(NUMERIC(24, 4)))
-    properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-    created: datetime.datetime = Field(
-        default_factory=datetime.datetime.now, title="Created"
+    __tablename__ = "price"
+
+    security_key: Mapped[str] = mapped_column(
+        ForeignKey("security.key"), primary_key=True
+    )
+    security: Mapped[Security] = relationship()
+    date: Mapped[datetime.date] = mapped_column(primary_key=True)
+    open: Mapped[Decimal] = mapped_column(NUMERIC(24, 4))
+    high: Mapped[Decimal] = mapped_column(NUMERIC(24, 4))
+    low: Mapped[Decimal] = mapped_column(NUMERIC(24, 4))
+    close: Mapped[Decimal] = mapped_column(NUMERIC(24, 4))
+    properties: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created: Mapped[datetime.datetime] = mapped_column(
+        TZDateTime, server_default=func.current_timestamp()
     )
 
     def to_public(self, *, include_security: bool = True) -> PricePublic:
@@ -123,12 +173,12 @@ class Price(SQLModel, table=True):
             low=self.low,
             close=self.close,
             properties=self.properties,
-            created=self.created,
+            created=self.created.astimezone().replace(tzinfo=None),
             security=self.security.to_public() if include_security else None,
         )
 
 
-class Transaction(SQLModel, table=True):
+class Transaction(Base):
     """Database model for transactions.
 
     Attributes:
@@ -146,18 +196,28 @@ class Transaction(SQLModel, table=True):
         created (datetime.datetime): Timestamp when the transaction was created.
     """
 
-    id: int | None = Field(default=None, primary_key=True)
-    transaction_date: datetime.date
-    type: TransactionType
-    description: str
-    amount: Decimal = Field(sa_column=Column(NUMERIC(24, 2)))
-    units: Decimal = Field(sa_column=Column(NUMERIC(24, 3)))
-    security_key: str = Field(foreign_key="security.key")
-    security: Security = Relationship()
-    account_id: int = Field(foreign_key="account.id")
-    account: Account = Relationship()
-    properties: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-    created: datetime.datetime = Field(default_factory=datetime.datetime.now)
+    __tablename__ = "transaction"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    transaction_date: Mapped[datetime.date] = mapped_column()
+    type: Mapped[TransactionType] = mapped_column(
+        Enum(
+            TransactionType,
+            create_constraint=True,
+            values_callable=lambda x: [e.value for e in x],
+        )
+    )
+    description: Mapped[str] = mapped_column()
+    amount: Mapped[Decimal] = mapped_column(NUMERIC(24, 2))
+    units: Mapped[Decimal] = mapped_column(NUMERIC(24, 3))
+    security_key: Mapped[str] = mapped_column(ForeignKey("security.key"))
+    security: Mapped[Security] = relationship()
+    account_id: Mapped[int] = mapped_column(ForeignKey("account.id"))
+    account: Mapped[Account] = relationship()
+    properties: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created: Mapped[datetime.datetime] = mapped_column(
+        TZDateTime, server_default=func.current_timestamp()
+    )
 
     def to_public(self, *, include_relations: bool = True) -> TransactionPublic:
         """Convert a Transaction database model to a TransactionPublic domain model."""
@@ -173,7 +233,7 @@ class Transaction(SQLModel, table=True):
             security_key=self.security_key,
             account_id=self.account_id,
             properties=self.properties,
-            created=self.created,
+            created=self.created.astimezone().replace(tzinfo=None),
             security=self.security.to_public() if include_relations else None,
             account=self.account.to_public() if include_relations else None,
         )
