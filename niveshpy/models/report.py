@@ -3,10 +3,9 @@
 import datetime
 import decimal
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from attrs import field as attrs_field
-from attrs import frozen
+from attrs import field, frozen
 
 from niveshpy.models.account import AccountPublic
 from niveshpy.models.security import (
@@ -39,8 +38,8 @@ class Holding:
     units: decimal.Decimal
     invested: decimal.Decimal
     amount: decimal.Decimal
-    account_id: int = attrs_field(init=False)
-    security_key: str = attrs_field(init=False)
+    account_id: int = field(init=False)
+    security_key: str = field(init=False)
 
     def __attrs_post_init__(self) -> None:
         """Set account_id and security_key after initialization."""
@@ -105,12 +104,14 @@ class Allocation:
 # Performance
 
 
-@dataclass(slots=True, frozen=True)
+@frozen
 class PerformanceHolding:
-    """Data class for per-holding performance data used in reports."""
+    """Model representing per-holding performance data used in reports."""
 
     account: AccountPublic
+    account_id: int = field(init=False)
     security: SecurityPublic
+    security_key: str = field(init=False)
     date: datetime.date
     current_value: decimal.Decimal
     invested: decimal.Decimal | None
@@ -118,8 +119,10 @@ class PerformanceHolding:
     gains_pct: decimal.Decimal | None = field(init=False)
     xirr: decimal.Decimal | None
 
-    def __post_init__(self) -> None:
-        """Compute gains and gains percentage after initialization."""
+    def __attrs_post_init__(self) -> None:
+        """Set account ID, security key, and compute gains and gains percentage after initialization."""
+        object.__setattr__(self, "account_id", self.account.id)
+        object.__setattr__(self, "security_key", self.security.key)
         object.__setattr__(
             self,
             "gains",

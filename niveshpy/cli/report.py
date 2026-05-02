@@ -9,7 +9,7 @@ from typing import Literal
 
 import click
 
-from niveshpy.cli.models.report import PerformanceHoldingDisplay, SummaryResultDisplay
+from niveshpy.cli.models.report import SummaryResultDisplay
 from niveshpy.cli.utils import essentials, flags
 from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
@@ -35,7 +35,7 @@ from niveshpy.core.converter import get_csv_converter, get_json_converter
 from niveshpy.core.logging import logger
 from niveshpy.core.query import tokens
 from niveshpy.core.query.tokenizer import QueryLexer
-from niveshpy.models.report import Holding
+from niveshpy.models.report import Holding, PerformanceHolding
 
 DAYS_FOR_OLD = 15
 """Number of days after which holdings are considered old."""
@@ -362,12 +362,10 @@ def performance(
         )
     )
 
-    items = map(PerformanceHoldingDisplay.from_domain, result.holdings)
-
     with capture_for_pager(enabled=output_file is None or format == OutputFormat.TABLE):
         if format == OutputFormat.TABLE:
-            table_items: list[PerformanceHoldingDisplay | SectionBreak | TotalRow] = (
-                list(items)
+            table_items: list[PerformanceHolding | SectionBreak | TotalRow] = list(
+                result.holdings
             )
             if extra_message:
                 display(extra_message)
@@ -385,18 +383,57 @@ def performance(
                 table_items.append(SectionBreak())
                 table_items.append(total_row)
 
-            table = build_table(table_items, PerformanceHoldingDisplay.columns)
+            columns = [
+                Column("account", style="dim", formatter=format_account),
+                Column("security", style="bold", formatter=format_security),
+                Column("date", style="cyan", formatter=format_date),
+                Column("current_value", formatter=format_decimal, justify="right"),
+                Column(
+                    "invested", style="dim", formatter=format_decimal, justify="right"
+                ),
+                Column(
+                    "gains",
+                    name="Absolute Gains",
+                    formatter=format_decimal,
+                    justify="right",
+                ),
+                Column(
+                    "gains_pct",
+                    name="Gains (%)",
+                    formatter=format_percentage,
+                    justify="right",
+                ),
+                Column(
+                    "xirr",
+                    name="XIRR (%)",
+                    formatter=format_percentage,
+                    justify="right",
+                ),
+            ]
+
+            table = build_table(table_items, columns)
             display(table)
         elif format == OutputFormat.CSV:
+            c = get_csv_converter()
             csv = build_csv(
-                map(PerformanceHoldingDisplay.to_csv_dict, items),
-                fields=PerformanceHoldingDisplay.csv_fields,
+                c.unstructure(result.holdings),
+                fields=[
+                    "account",
+                    "security",
+                    "date",
+                    "current_value",
+                    "invested",
+                    "gains",
+                    "gains_pct",
+                    "xirr",
+                ],
                 output_file=output_file,
             )
             if csv:
                 display(csv)
         elif format == OutputFormat.JSON:
-            data = [h.to_json_dict() for h in items]
+            c = get_json_converter()
+            data = c.unstructure(result.holdings)
             if output_file:
                 with output_file.open("w") as f:
                     json.dump(data, f, indent=4)
