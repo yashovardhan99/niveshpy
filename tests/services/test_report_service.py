@@ -979,7 +979,7 @@ def _make_holding(
         id=1,
         name="Test",
         institution="Test",
-        created_at=datetime.datetime.now(),
+        created=datetime.datetime.now(),
         properties={},
     )
     security = SecurityPublic(

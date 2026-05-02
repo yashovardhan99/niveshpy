@@ -5,7 +5,6 @@ from pathlib import Path
 
 import click
 
-from niveshpy.cli.models.account import AccountDisplay
 from niveshpy.cli.utils import essentials, flags
 from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
@@ -17,9 +16,11 @@ from niveshpy.cli.utils.display import (
     display_warning,
     loading_spinner,
 )
-from niveshpy.cli.utils.models import OutputFormat
+from niveshpy.cli.utils.formatters import format_datetime
+from niveshpy.cli.utils.models import Column, OutputFormat
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
+from niveshpy.core.converter import get_csv_converter, get_json_converter
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import (
     OperationError,
@@ -66,7 +67,6 @@ def show(
             display_warning(msg)
             ctx.exit()
 
-    accounts = map(AccountDisplay.from_domain, result)
     extra_message = (
         f"Showing first {limit:,} accounts."
         if len(result) == limit and offset == 0
@@ -87,18 +87,27 @@ def show(
                     "Output file specified, but table format does not support file output. Ignoring --output-file flag."
                 )
 
-            table = build_table(accounts, AccountDisplay.columns)
+            columns = [
+                Column("id", name="ID", style="dim"),
+                Column("name"),
+                Column("institution", style="bold"),
+                Column("created", style="dim", formatter=format_datetime),
+                Column("source", style="dim"),
+            ]
+            table = build_table(result, columns)
             display(table)
         elif format == OutputFormat.CSV:
+            c = get_csv_converter()
             csv = build_csv(
-                map(AccountDisplay.to_csv_dict, accounts),
-                fields=AccountDisplay.csv_fields,
+                c.unstructure(result),
+                fields=["id", "name", "institution", "created", "source"],
                 output_file=output_file,
             )
             if csv:
                 display(csv)
         elif format == OutputFormat.JSON:
-            data = [acc.to_json_dict() for acc in accounts]
+            c = get_json_converter()
+            data = c.unstructure(result)
             if output_file:
                 with output_file.open("w") as f:
                     json.dump(data, f, indent=4)

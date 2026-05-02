@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- (Internal) Migrate all CLI commands to use domain objects directly with cattrs instead of separate display models.
+
 ## [1.0.0a6] - 2026-04-29
 
 ### Added

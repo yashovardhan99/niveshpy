@@ -9,7 +9,6 @@ from pathlib import Path
 import click
 import click.shell_completion
 
-from niveshpy.cli.models.price import PriceDisplay
 from niveshpy.cli.utils import essentials, flags, overrides
 from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
@@ -20,8 +19,15 @@ from niveshpy.cli.utils.display import (
     display_warning,
     loading_spinner,
 )
-from niveshpy.cli.utils.models import OutputFormat
+from niveshpy.cli.utils.formatters import (
+    format_date,
+    format_datetime,
+    format_decimal,
+    format_security,
+)
+from niveshpy.cli.utils.models import Column, OutputFormat
 from niveshpy.core.app import AppState
+from niveshpy.core.converter import get_csv_converter, get_json_converter
 from niveshpy.exceptions import InvalidInputError
 
 
@@ -92,7 +98,6 @@ def list_prices(
         )
         display_warning(msg)
         ctx.exit()
-    prices = map(PriceDisplay.from_domain, result)
     extra_message = (
         f"Showing first {limit:,} prices."
         if len(result) == limit and offset == 0
@@ -105,7 +110,21 @@ def list_prices(
 
     with capture_for_pager(enabled=output_file is None or format == OutputFormat.TABLE):
         if format == OutputFormat.TABLE:
-            table = build_table(prices, PriceDisplay.columns)
+            columns = [
+                Column("security", formatter=format_security),
+                Column("date", formatter=format_date, style="cyan"),
+                Column("open", formatter=format_decimal, justify="right"),
+                Column(
+                    "high", formatter=format_decimal, style="green", justify="right"
+                ),
+                Column("low", formatter=format_decimal, style="red", justify="right"),
+                Column(
+                    "close", formatter=format_decimal, style="bold", justify="right"
+                ),
+                Column("created", style="dim", formatter=format_datetime),
+                Column("source", style="dim"),
+            ]
+            table = build_table(result, columns)
             if output_file:
                 display_warning(
                     "Output file specified, but table format does not support file output. Ignoring --output-file flag."
@@ -114,15 +133,26 @@ def list_prices(
             if extra_message:
                 display(extra_message)
         elif format == OutputFormat.CSV:
+            c = get_csv_converter()
             csv = build_csv(
-                map(PriceDisplay.to_csv_dict, prices),
-                fields=PriceDisplay.csv_fields,
+                c.unstructure(result),
+                fields=[
+                    "security",
+                    "date",
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "created",
+                    "source",
+                ],
                 output_file=output_file,
             )
             if csv:
                 display(csv)
         elif format == OutputFormat.JSON:
-            data = [price.to_json_dict() for price in prices]
+            c = get_json_converter()
+            data = c.unstructure(result)
             if output_file:
                 with output_file.open("w") as f:
                     json.dump(data, f, indent=4)

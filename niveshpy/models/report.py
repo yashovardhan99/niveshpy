@@ -3,7 +3,9 @@
 import datetime
 import decimal
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
+from attrs import field, frozen
 
 from niveshpy.models.account import AccountPublic
 from niveshpy.models.security import (
@@ -15,9 +17,20 @@ from niveshpy.models.security import (
 # Holdings
 
 
-@dataclass(slots=True, frozen=True)
+@frozen
 class Holding:
-    """Data class for a single holding used in report computations."""
+    """Model representing a single holding used in report computations.
+
+    Attributes:
+        account: The account associated with the holding.
+        security: The security associated with the holding.
+        date: The date of the holding.
+        units: The number of units held.
+        invested: The total amount invested in the holding.
+        amount: The current total value of the holding.
+        account_id: The ID of the account associated with the holding.
+        security_key: The key of the security associated with the holding.
+    """
 
     account: AccountPublic
     security: SecurityPublic
@@ -25,6 +38,13 @@ class Holding:
     units: decimal.Decimal
     invested: decimal.Decimal
     amount: decimal.Decimal
+    account_id: int = field(init=False)
+    security_key: str = field(init=False)
+
+    def __attrs_post_init__(self) -> None:
+        """Set account_id and security_key after initialization."""
+        object.__setattr__(self, "account_id", self.account.id)
+        object.__setattr__(self, "security_key", self.security.key)
 
 
 @dataclass(slots=True, frozen=True)
@@ -40,7 +60,7 @@ class HoldingUnitRow:
 # Portfolio Totals
 
 
-@dataclass(slots=True)
+@frozen
 class PortfolioTotals:
     """Portfolio-level aggregate totals."""
 
@@ -55,15 +75,23 @@ class PortfolioTotals:
 # Allocations
 
 
-@dataclass(slots=True, frozen=True)
+@frozen
 class Allocation:
-    """Data class for allocation data."""
+    """Model representing allocation data for security type/category.
+
+    Attributes:
+        date: The date of the allocation.
+        amount: The total amount allocated.
+        allocation: The percentage allocation.
+        security_type: The type of security (optional).
+        security_category: The category of security (optional).
+    """
 
     date: datetime.date
     amount: decimal.Decimal
     allocation: decimal.Decimal
-    security_type: SecurityType | None
-    security_category: SecurityCategory | None
+    security_type: SecurityType | None = None
+    security_category: SecurityCategory | None = None
 
     def __post_init__(self) -> None:
         """Validate that at least one of security_type or security_category is provided."""
@@ -76,12 +104,14 @@ class Allocation:
 # Performance
 
 
-@dataclass(slots=True, frozen=True)
+@frozen
 class PerformanceHolding:
-    """Data class for per-holding performance data used in reports."""
+    """Model representing per-holding performance data used in reports."""
 
     account: AccountPublic
+    account_id: int = field(init=False)
     security: SecurityPublic
+    security_key: str = field(init=False)
     date: datetime.date
     current_value: decimal.Decimal
     invested: decimal.Decimal | None
@@ -89,8 +119,10 @@ class PerformanceHolding:
     gains_pct: decimal.Decimal | None = field(init=False)
     xirr: decimal.Decimal | None
 
-    def __post_init__(self) -> None:
-        """Compute gains and gains percentage after initialization."""
+    def __attrs_post_init__(self) -> None:
+        """Set account ID, security key, and compute gains and gains percentage after initialization."""
+        object.__setattr__(self, "account_id", self.account.id)
+        object.__setattr__(self, "security_key", self.security.key)
         object.__setattr__(
             self,
             "gains",

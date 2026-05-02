@@ -4,6 +4,10 @@ import datetime
 import decimal
 import functools
 
+from niveshpy.models.account import AccountPublic
+from niveshpy.models.security import SecurityCategory, SecurityPublic, SecurityType
+from niveshpy.models.transaction import TransactionType
+
 
 def format_decimal(
     value: decimal.Decimal | None,
@@ -62,3 +66,50 @@ def format_datetime(dt: datetime.datetime) -> str:
 def format_date(d: datetime.date) -> str:
     """Format a date object to a string in the format 'DD MMM YYYY'."""
     return d.strftime("%d %b %Y")
+
+
+def format_security_type(sec_type: SecurityType) -> str:
+    """Format the security type for display in the CLI."""
+    from niveshpy.models.security import SecurityType
+
+    type_format_map = {
+        SecurityType.STOCK.value: "[white]Stock",
+        SecurityType.BOND.value: "[cyan]Bond",
+        SecurityType.ETF.value: "[yellow]ETF",
+        SecurityType.MUTUAL_FUND.value: "[green]Mutual Fund",
+        SecurityType.OTHER.value: "[dim]Other",
+    }
+    return type_format_map.get(sec_type, "[reverse]Unknown")
+
+
+def format_security_category(category: SecurityCategory) -> str:
+    """Format the security category for display in the CLI."""
+    from niveshpy.models.security import SecurityCategory
+
+    category_format_map = {
+        SecurityCategory.EQUITY.value: "[white]Equity",
+        SecurityCategory.DEBT.value: "[cyan]Debt",
+        SecurityCategory.COMMODITY.value: "[yellow]Commodity",
+        SecurityCategory.REAL_ESTATE.value: "[bright_red]Real Estate",
+        SecurityCategory.OTHER.value: "[dim]Other",
+    }
+    return category_format_map.get(category, "[reverse]Unknown")
+
+
+def format_security(security: SecurityPublic) -> str:
+    """Format a security for display in the CLI."""
+    return f"{security.name} ({security.key})"
+
+
+def format_transaction_type(txn_type: TransactionType) -> str:
+    """Format a transaction type for display in the CLI."""
+    type_format_map = {
+        TransactionType.PURCHASE: "[green]Purchase",
+        TransactionType.SALE: "[red]Sale",
+    }
+    return type_format_map.get(txn_type, "[reverse]Unknown")
+
+
+def format_account(account: AccountPublic) -> str:
+    """Format an account for display in the CLI."""
+    return f"{account.name} ({account.institution})"

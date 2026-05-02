@@ -115,7 +115,7 @@ def accounts_for_transactions():
             id=1,
             name=TEST_FOLIO,
             institution=TEST_AMC,
-            created_at=datetime.datetime(2025, 1, 1),
+            created=datetime.datetime(2025, 1, 1),
             properties={"source": "cas"},
         ),
     ]
@@ -376,7 +376,7 @@ class TestGetTransactions:
                     id=99,
                     name="UNKNOWN",
                     institution="OTHER AMC",
-                    created_at=datetime.datetime(2025, 1, 1),
+                    created=datetime.datetime(2025, 1, 1),
                     properties={},
                 ),
             ]

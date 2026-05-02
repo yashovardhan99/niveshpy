@@ -69,6 +69,7 @@ class SecurityPublic:
         category (SecurityCategory): Category of the security.
         properties (dict[str, Any]): Additional properties of the security.
         created (datetime): Timestamp when the security was created.
+        source (str | None): Optional source identifier extracted from properties.
     """
 
     key: str
@@ -77,3 +78,8 @@ class SecurityPublic:
     category: SecurityCategory
     properties: Mapping[str, Any]
     created: datetime
+    source: str | None = field(default=None, init=False)
+
+    def __attrs_post_init__(self) -> None:
+        """Extract source from properties if available."""
+        object.__setattr__(self, "source", self.properties.get("source"))
