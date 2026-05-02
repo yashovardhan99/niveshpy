@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
+from attrs import evolve
+
 from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field
 from niveshpy.core.query.prepare import get_prepared_filters_from_queries
@@ -162,16 +164,18 @@ class ReportService:
             txn_groups.setdefault(key, []).append(txn)
 
         try:
-            totals.xirr = (
-                compute_xirr(
-                    transactions, totals.total_current_value, totals.last_updated
-                )
-                if transactions
-                else None
+            totals = evolve(
+                totals,
+                xirr=(
+                    compute_xirr(
+                        transactions, totals.total_current_value, totals.last_updated
+                    )
+                    if transactions
+                    else None
+                ),
             )
         except OperationError as exc:
             logger.warning("Could not compute portfolio XIRR: %s", exc)
-            totals.xirr = None
 
         performance_holdings = []
         for holding in holdings:

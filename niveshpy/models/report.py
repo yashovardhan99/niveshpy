@@ -60,7 +60,7 @@ class HoldingUnitRow:
 # Portfolio Totals
 
 
-@dataclass(slots=True)
+@frozen
 class PortfolioTotals:
     """Portfolio-level aggregate totals."""
 
