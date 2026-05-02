@@ -9,7 +9,6 @@ from typing import Literal
 
 import click
 
-from niveshpy.cli.models.report import SummaryResultDisplay
 from niveshpy.cli.utils import essentials, flags
 from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
@@ -482,8 +481,6 @@ def summary(
             display(msg)
 
     else:
-        display_result = SummaryResultDisplay.from_domain(result)
-
         if format == OutputFormat.TABLE:
             from rich import box
             from rich.bar import Bar
@@ -498,17 +495,17 @@ def summary(
             metrics.add_column(justify="right", style="bold")
             metrics.add_row(
                 "Total Current Value",
-                format_decimal(display_result.metrics.total_current_value),
+                format_decimal(result.metrics.total_current_value),
             )
             metrics.add_row(
-                "Total Invested", format_decimal(display_result.metrics.total_invested)
+                "Total Invested", format_decimal(result.metrics.total_invested)
             )
-            gains = format_decimal(display_result.metrics.total_gains)
-            gains_pct = format_percentage(display_result.metrics.gains_percentage)
+            gains = format_decimal(result.metrics.total_gains)
+            gains_pct = format_percentage(result.metrics.gains_percentage)
             metrics.add_row(
                 "Absolute Gains", f"[green]{gains}", f"[green]({gains_pct})"
             )
-            xirr = format_percentage(display_result.metrics.xirr)
+            xirr = format_percentage(result.metrics.xirr)
             metrics.add_row("XIRR (%)", f"[green]{xirr}")
 
             subtitle = []
@@ -518,18 +515,15 @@ def summary(
                 subtitle.append(
                     textwrap.shorten(f"Query: {queries[0]}", 20, placeholder="...")
                 )
-            if display_result.metrics.last_updated:
-                subtitle.append(
-                    f"Last Updated: {display_result.metrics.last_updated:%d %b %Y}"
-                )
+            if result.metrics.last_updated:
+                subtitle.append(f"Last Updated: {result.metrics.last_updated:%d %b %Y}")
 
             top_panel = Panel.fit(
                 metrics,
                 title="Portfolio Summary",
                 border_style=(
                     "green"
-                    if display_result.metrics.total_gains
-                    and display_result.metrics.total_gains >= 0
+                    if result.metrics.total_gains and result.metrics.total_gains >= 0
                     else "red"
                 ),
                 subtitle=" | ".join(subtitle) if subtitle else None,
@@ -545,7 +539,7 @@ def summary(
             )
             holdings.add_column("Current Value", justify="right", min_width=10)
             holdings.add_column("XIRR", justify="right", min_width=7, style="bold")
-            for h in display_result.top_holdings:
+            for h in result.top_holdings:
                 holdings.add_row(
                     f"{h.account.name} ({h.account.institution})",
                     h.security.name,
@@ -560,7 +554,7 @@ def summary(
             allocation.add_column("Category", no_wrap=True)
             allocation.add_column("Weight", justify="right", style="bold")
             allocation.add_column("", justify="left", no_wrap=True, width=30)
-            for a in display_result.allocation:
+            for a in result.allocation:
                 allocation.add_row(
                     (
                         format_security_category(a.security_category)
@@ -582,7 +576,8 @@ def summary(
                 display(allocation)
         else:
             with capture_for_pager(enabled=output_file is None):
-                data = display_result.to_json_dict()
+                c = get_json_converter()
+                data = c.unstructure(result)
                 if output_file:
                     with output_file.open("w") as f:
                         json.dump(data, f, indent=4)
