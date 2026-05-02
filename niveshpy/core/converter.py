@@ -10,7 +10,7 @@ from cattrs.gen import make_dict_unstructure_fn, override
 
 from niveshpy.models.account import AccountPublic
 from niveshpy.models.price import PricePublic
-from niveshpy.models.report import Holding
+from niveshpy.models.report import Allocation, Holding
 from niveshpy.models.security import SecurityPublic
 from niveshpy.models.transaction import TransactionPublic
 
@@ -129,6 +129,26 @@ _csv_converter.register_unstructure_hook(
         security=override(omit=True),
         account_id=override(rename="account", omit=False),
         security_key=override(rename="security", omit=False),
+    ),
+)
+
+_json_converter.register_unstructure_hook(
+    Allocation,
+    make_dict_unstructure_fn(
+        Allocation,
+        _json_converter,
+        security_category=override(omit_if_default=True),
+        security_type=override(omit_if_default=True),
+    ),
+)
+
+_csv_converter.register_unstructure_hook(
+    Allocation,
+    make_dict_unstructure_fn(
+        Allocation,
+        _csv_converter,
+        security_category=override(omit_if_default=True),
+        security_type=override(omit_if_default=True),
     ),
 )
 

@@ -20,7 +20,7 @@ from niveshpy.models.security import (
 
 @frozen
 class Holding:
-    """Data class for a single holding used in report computations.
+    """Model representing a single holding used in report computations.
 
     Attributes:
         account: The account associated with the holding.
@@ -76,15 +76,23 @@ class PortfolioTotals:
 # Allocations
 
 
-@dataclass(slots=True, frozen=True)
+@frozen
 class Allocation:
-    """Data class for allocation data."""
+    """Model representing allocation data for security type/category.
+
+    Attributes:
+        date: The date of the allocation.
+        amount: The total amount allocated.
+        allocation: The percentage allocation.
+        security_type: The type of security (optional).
+        security_category: The category of security (optional).
+    """
 
     date: datetime.date
     amount: decimal.Decimal
     allocation: decimal.Decimal
-    security_type: SecurityType | None
-    security_category: SecurityCategory | None
+    security_type: SecurityType | None = None
+    security_category: SecurityCategory | None = None
 
     def __post_init__(self) -> None:
         """Validate that at least one of security_type or security_category is provided."""

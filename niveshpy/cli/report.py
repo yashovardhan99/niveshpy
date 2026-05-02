@@ -9,11 +9,7 @@ from typing import Literal
 
 import click
 
-from niveshpy.cli.models.report import (
-    AllocationDisplay,
-    PerformanceHoldingDisplay,
-    SummaryResultDisplay,
-)
+from niveshpy.cli.models.report import PerformanceHoldingDisplay, SummaryResultDisplay
 from niveshpy.cli.utils import essentials, flags
 from niveshpy.cli.utils.builders import build_csv, build_table
 from niveshpy.cli.utils.display import (
@@ -30,6 +26,7 @@ from niveshpy.cli.utils.formatters import (
     format_percentage,
     format_security,
     format_security_category,
+    format_security_type,
 )
 from niveshpy.cli.utils.models import Column, OutputFormat, SectionBreak, TotalRow
 from niveshpy.cli.utils.overrides import NiveshPyCommand
@@ -251,12 +248,35 @@ def allocation(
         )
         display_warning(msg)
     else:
-        items = map(AllocationDisplay.from_domain, allocations)
         with capture_for_pager(
             enabled=output_file is None or format == OutputFormat.TABLE
         ):
             if format == OutputFormat.TABLE:
-                table = build_table(items, AllocationDisplay.get_columns(group_by))
+                columns = [
+                    Column("date", style="cyan", formatter=format_date),
+                    Column(
+                        "amount",
+                        style="bold",
+                        formatter=format_decimal,
+                        justify="right",
+                    ),
+                    Column(
+                        "allocation",
+                        style="bold",
+                        formatter=format_percentage,
+                        justify="right",
+                    ),
+                ]
+                if group_by in ("both", "category"):
+                    columns.insert(
+                        0,
+                        Column("security_category", formatter=format_security_category),
+                    )
+                if group_by in ("both", "type"):
+                    columns.insert(
+                        0, Column("security_type", formatter=format_security_type)
+                    )
+                table = build_table(allocations, columns)
 
                 if output_file:
                     display_warning(
@@ -265,15 +285,20 @@ def allocation(
 
                 display(table)
             elif format == OutputFormat.CSV:
+                c = get_csv_converter()
+                fields = ["date", "amount", "allocation"]
+                if group_by in ("both", "category"):
+                    fields.insert(0, "security_category")
+                if group_by in ("both", "type"):
+                    fields.insert(0, "security_type")
                 csv = build_csv(
-                    map(AllocationDisplay.to_csv_dict, items),
-                    fields=AllocationDisplay.get_csv_fields(group_by),
-                    output_file=output_file,
+                    c.unstructure(allocations), fields=fields, output_file=output_file
                 )
                 if csv:
                     display(csv)
             elif format == OutputFormat.JSON:
-                data = [a.to_json_dict() for a in items]
+                c = get_json_converter()
+                data = c.unstructure(allocations)
                 if output_file:
                     with output_file.open("w") as f:
                         json.dump(data, f, indent=4)
