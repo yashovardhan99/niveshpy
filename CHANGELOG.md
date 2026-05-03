@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0a7] - 2026-05-03
+
 ### Added
 
 - Automatic database migration support.
@@ -135,7 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pre-built plugin: amfi (Mutual Fund)
 - Documentation
 
-[unreleased]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a6...HEAD
+[unreleased]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a7...HEAD
+[1.0.0a7]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a6...v1.0.0a7
 [1.0.0a6]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a5...v1.0.0a6
 [1.0.0a5]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a4...v1.0.0a5
 [1.0.0a4]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a3...v1.0.0a4
