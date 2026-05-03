@@ -38,13 +38,12 @@ class Application:
     @functools.cached_property
     def db(self) -> SqliteDatabase:
         """Return the database instance."""
-        from niveshpy.infrastructure.sqlite.models import Base
         from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
 
         logger.debug("Initializing database connection")
 
         db = SqliteDatabase(debug=self._debug)
-        db.initialize(Base)
+        db.initialize()
         return db
 
     @functools.cached_property

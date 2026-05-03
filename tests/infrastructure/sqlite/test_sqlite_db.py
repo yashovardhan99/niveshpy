@@ -7,12 +7,7 @@ import pytest
 from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 
-from niveshpy.infrastructure.sqlite.models import (
-    Account,
-    Base,
-    Price,
-    Security,
-)
+from niveshpy.infrastructure.sqlite.models import Account, Price, Security
 from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase, _iregexp
 from niveshpy.models.security import SecurityCategory, SecurityType
 
@@ -123,7 +118,7 @@ class TestIregexpInSQL:
     def sql_db(self):
         """Create an in-memory SqliteDatabase with iregexp registered."""
         db = SqliteDatabase(db_path=Path(":memory:"))
-        db.initialize(Base)
+        db.initialize()
         return db
 
     def test_iregexp_function_callable(self, sql_db):
@@ -192,7 +187,7 @@ class TestIregexpInSQL:
 def memory_db():
     """Create an in-memory SqliteDatabase."""
     db = SqliteDatabase(db_path=Path(":memory:"))
-    db.initialize(Base)
+    db.initialize()
     return db
 
 
@@ -230,12 +225,12 @@ class TestSqliteDatabase:
         with memory_db.session_factory() as session:
             assert isinstance(session, Session)
 
-    def test_initialize_is_idempotent(self, memory_db):
+    def test_initialize_is_idempotent(self, memory_db: SqliteDatabase):
         """Test that initialize can be called multiple times safely."""
         inspector = inspect(memory_db._engine)
         tables_before = set(inspector.get_table_names())
 
-        memory_db.initialize(Base)
+        memory_db.initialize()
 
         tables_after = set(inspector.get_table_names())
         assert tables_before == tables_after
@@ -365,9 +360,32 @@ class TestMigrations:
     def test_migrations_are_idempotent(self):
         """Test that initializing twice is safe."""
         db = SqliteDatabase(db_path=Path(":memory:"))
-        db.initialize(Base)
-        db.initialize(Base)
+        db.initialize()
+        db.initialize()
 
         inspector = inspect(db._engine)
         tables = set(inspector.get_table_names())
         assert {"account", "security", "price", "transaction"}.issubset(tables)
+
+    def test_migrations_create_schema_from_scratch(self):
+        """Test that migrations can create the full schema on an empty database."""
+        db = SqliteDatabase(db_path=Path(":memory:"))
+        db.initialize()
+
+        inspector = inspect(db._engine)
+        tables = set(inspector.get_table_names())
+        assert {"account", "security", "price", "transaction"}.issubset(tables)
+
+    def test_all_migrations_recorded(self, memory_db):
+        """Test that all migrations are recorded in the migration table."""
+        migrations_path = (
+            Path(__file__).parents[3]
+            / "niveshpy"
+            / "infrastructure"
+            / "sqlite"
+            / "migrations"
+        )
+        with memory_db.session_factory() as session:
+            result = session.execute(text("SELECT file FROM migration")).scalars().all()
+            expected_migrations = {f.name for f in migrations_path.glob("*.sql")}
+            assert expected_migrations == set(result)

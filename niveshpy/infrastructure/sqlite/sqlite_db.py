@@ -7,9 +7,11 @@ from pathlib import Path
 import platformdirs
 from attrs import field, frozen
 from sqlalchemy import Engine, create_engine, event, text
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session, sessionmaker
 
 from niveshpy.core.logging import logger
+from niveshpy.exceptions import DatabaseError
 
 
 @frozen
@@ -55,11 +57,10 @@ class SqliteDatabase:
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
 
-    def initialize(self, base: type[DeclarativeBase]) -> None:
+    def initialize(self) -> None:
         """Create database and tables if they do not exist."""
         logger.info("Initializing database at path: %s", self.db_path)
         object.__setattr__(self, "session_factory", sessionmaker(bind=self._engine))
-        base.metadata.create_all(self._engine)
         self.run_migrations()
 
     def run_migrations(self) -> None:
@@ -72,22 +73,28 @@ class SqliteDatabase:
         file VARCHAR NOT NULL UNIQUE,
         applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )"""
-        with self.session_factory.begin() as session:
-            session.execute(text(stmt))
+        try:
+            with self.session_factory.begin() as session:
+                session.execute(text(stmt))
+        except SQLAlchemyError as e:
+            raise DatabaseError("Failed to create migration table") from e
 
         # Check for pending migration files and apply them
         migrations_folder = Path(__file__).parent / "migrations"
         applied_migrations = set()
-        with self.session_factory() as session:
-            result = session.execute(text("SELECT file FROM migration"))
-            applied_migrations = {row[0] for row in result}
+        try:
+            with self.session_factory() as session:
+                result = session.execute(text("SELECT file FROM migration"))
+                applied_migrations = {row[0] for row in result}
+        except SQLAlchemyError as e:
+            raise DatabaseError("Failed to read applied migrations") from e
 
         # Sort migration files to ensure they are applied in the correct order
         migration_files = sorted(migrations_folder.glob("*.sql"))
 
         for migration_file in migration_files:
             if migration_file.name not in applied_migrations:
-                logger.info("Applying migration: %s", migration_file.name)
+                logger.info("Applying migration: %s", migration_file.stem)
                 migration_sql_contents = migration_file.read_text()
                 # Strip comments
                 migration_sql_contents = re.sub(r"--.*", "", migration_sql_contents)
@@ -97,13 +104,18 @@ class SqliteDatabase:
                     for stmt in re.split(r";\s*(?=\b)", migration_sql_contents)
                     if stmt.strip()
                 ]
-                with self.session_factory.begin() as session:
-                    for statement in statements:
-                        session.execute(text(statement))
-                    session.execute(
-                        text("INSERT INTO migration (file) VALUES (:file)"),
-                        {"file": migration_file.name},
-                    )
+                try:
+                    with self.session_factory.begin() as session:
+                        for statement in statements:
+                            session.execute(text(statement))
+                        session.execute(
+                            text("INSERT INTO migration (file) VALUES (:file)"),
+                            {"file": migration_file.name},
+                        )
+                except SQLAlchemyError as e:
+                    raise DatabaseError(
+                        f"Failed to apply migration: {migration_file.name}"
+                    ) from e
 
 
 def _iregexp(pattern: str, value: str | None) -> bool:
