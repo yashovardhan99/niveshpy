@@ -59,8 +59,8 @@ class SqliteDatabase:
         """Create database and tables if they do not exist."""
         logger.info("Initializing database at path: %s", self.db_path)
         object.__setattr__(self, "session_factory", sessionmaker(bind=self._engine))
-        self.run_migrations()
         base.metadata.create_all(self._engine)
+        self.run_migrations()
 
     def run_migrations(self) -> None:
         """Run database migrations to update schema as needed."""
