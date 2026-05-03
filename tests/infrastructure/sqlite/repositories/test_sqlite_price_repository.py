@@ -2,7 +2,6 @@
 
 import datetime
 from decimal import Decimal
-from unittest.mock import patch
 
 import pytest
 
@@ -17,23 +16,15 @@ from niveshpy.models.security import SecurityCategory, SecurityCreate, SecurityT
 
 
 @pytest.fixture(scope="function")
-def price_repository(session):
+def price_repository(session_factory):
     """Provide a fresh SqlitePriceRepository for each test."""
-    with patch(
-        "niveshpy.infrastructure.sqlite.repositories.sqlite_price_repository.get_session",
-        return_value=session,
-    ):
-        yield SqlitePriceRepository()
+    return SqlitePriceRepository(session_factory)
 
 
 @pytest.fixture(scope="function")
-def security_repository(session):
+def security_repository(session_factory):
     """Provide a fresh SqliteSecurityRepository for each test."""
-    with patch(
-        "niveshpy.infrastructure.sqlite.repositories.sqlite_security_repository.get_session",
-        return_value=session,
-    ):
-        yield SqliteSecurityRepository()
+    return SqliteSecurityRepository(session_factory)
 
 
 def test_overwrite_price_persists_row(

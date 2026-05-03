@@ -2,7 +2,6 @@
 
 import datetime
 from decimal import Decimal
-from unittest.mock import patch
 
 import pytest
 
@@ -18,33 +17,21 @@ from niveshpy.models.transaction import TransactionCreate, TransactionType
 
 
 @pytest.fixture(scope="function")
-def transaction_repository(session):
+def transaction_repository(session_factory):
     """Provide a fresh SqliteTransactionRepository for each test."""
-    with patch(
-        "niveshpy.infrastructure.sqlite.repositories.sqlite_transaction_repository.get_session",
-        return_value=session,  # This session is defined in a higher-level fixture.
-    ):
-        yield SqliteTransactionRepository()
+    return SqliteTransactionRepository(session_factory)
 
 
 @pytest.fixture(scope="function")
-def account_repository(session):
+def account_repository(session_factory):
     """Provide a fresh SqliteAccountRepository for each test."""
-    with patch(
-        "niveshpy.infrastructure.sqlite.repositories.sqlite_account_repository.get_session",
-        return_value=session,
-    ):
-        yield SqliteAccountRepository()
+    return SqliteAccountRepository(session_factory)
 
 
 @pytest.fixture(scope="function")
-def security_repository(session):
+def security_repository(session_factory):
     """Provide a fresh SqliteSecurityRepository for each test."""
-    with patch(
-        "niveshpy.infrastructure.sqlite.repositories.sqlite_security_repository.get_session",
-        return_value=session,
-    ):
-        yield SqliteSecurityRepository()
+    return SqliteSecurityRepository(session_factory)
 
 
 def test_insert_transaction_returns_id_and_persists_row(

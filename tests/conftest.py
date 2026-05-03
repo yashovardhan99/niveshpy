@@ -1,12 +1,12 @@
 """Pytest fixtures for database setup and teardown."""
 
-import re
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from sqlalchemy import event
-from sqlmodel import Session, SQLModel, create_engine
+
+from niveshpy.infrastructure.sqlite.models import Base
+from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -18,50 +18,33 @@ def mock_platformdirs(tmp_path_factory):
     """
     temp_dir = tmp_path_factory.mktemp("niveshpy_test_data")
 
-    mock_path = MagicMock(spec=Path)
-    mock_path.mkdir = MagicMock()
-    mock_path.__truediv__ = lambda self, other: temp_dir / other
-    mock_path.__str__ = lambda self: str(temp_dir)
-
     with patch("platformdirs.user_data_path", return_value=temp_dir):
         yield temp_dir
 
 
-def _iregexp(pattern: str, value: str) -> bool:
-    """Case-insensitive regex match for SQLite."""
-    if value is None:
-        return False
-    return bool(re.search(pattern, value, re.IGNORECASE))
+@pytest.fixture
+def db():
+    """Create an in-memory SqliteDatabase for testing."""
+    database = SqliteDatabase(db_path=Path(":memory:"))
+    database.initialize(Base)
+    return database
 
 
 @pytest.fixture
-def engine():
-    """Create an in-memory SQLite database engine for testing."""
-    engine = create_engine("sqlite:///:memory:")
-
-    # Enable foreign key constraints and add custom functions for SQLite
-    @event.listens_for(engine, "connect")
-    def set_sqlite_pragma(dbapi_conn, connection_record):
-        dbapi_conn.create_function("iregexp", 2, _iregexp)
-        cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-    from niveshpy.infrastructure.sqlite.models import (  # noqa: F401
-        Account,
-        Price,
-        Security,
-        Transaction,
-    )
-
-    # Import all models to ensure they are registered with SQLModel
-    SQLModel.metadata.create_all(engine)
-    return engine
+def engine(db):
+    """Expose the SQLAlchemy engine from the test database."""
+    return db._engine
 
 
 @pytest.fixture
-def session(engine):
+def session(db):
     """Create a new database session for a test."""
-    with Session(engine) as session:
+    with db.session_factory() as session:
         yield session
-        session.rollback()  # Clean up after each test
+        session.rollback()
+
+
+@pytest.fixture
+def session_factory(db):
+    """Expose the session factory from the test database."""
+    return db.session_factory

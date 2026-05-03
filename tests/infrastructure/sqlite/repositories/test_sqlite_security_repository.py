@@ -1,7 +1,5 @@
 """SQLite security repository unit tests."""
 
-from unittest.mock import patch
-
 import pytest
 
 from niveshpy.core.query.ast import Field, FilterNode, Operator
@@ -11,13 +9,9 @@ from niveshpy.models.security import SecurityCategory, SecurityCreate, SecurityT
 
 
 @pytest.fixture(scope="function")
-def security_repository(session):
+def security_repository(session_factory):
     """Provide a fresh SqliteSecurityRepository for each test."""
-    with patch(
-        "niveshpy.infrastructure.sqlite.repositories.sqlite_security_repository.get_session",
-        return_value=session,  # This session is defined in a higher-level fixture.
-    ):
-        yield SqliteSecurityRepository()
+    return SqliteSecurityRepository(session_factory)
 
 
 def test_insert_security_returns_true_and_persists_row(
