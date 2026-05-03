@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Update how migrations are applied for a more consistent database build.
+
 ## [1.0.0a7] - 2026-05-03
 
 ### Added

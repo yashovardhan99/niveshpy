@@ -94,7 +94,7 @@ class SqliteDatabase:
 
         for migration_file in migration_files:
             if migration_file.name not in applied_migrations:
-                logger.info("Applying migration: %s", migration_file.name)
+                logger.info("Applying migration: %s", migration_file.stem)
                 migration_sql_contents = migration_file.read_text()
                 # Strip comments
                 migration_sql_contents = re.sub(r"--.*", "", migration_sql_contents)

@@ -366,3 +366,26 @@ class TestMigrations:
         inspector = inspect(db._engine)
         tables = set(inspector.get_table_names())
         assert {"account", "security", "price", "transaction"}.issubset(tables)
+
+    def test_migrations_create_schema_from_scratch(self):
+        """Test that migrations can create the full schema on an empty database."""
+        db = SqliteDatabase(db_path=Path(":memory:"))
+        db.initialize()
+
+        inspector = inspect(db._engine)
+        tables = set(inspector.get_table_names())
+        assert {"account", "security", "price", "transaction"}.issubset(tables)
+
+    def test_all_migrations_recorded(self, memory_db):
+        """Test that all migrations are recorded in the migration table."""
+        migrations_path = (
+            Path(__file__).parents[3]
+            / "niveshpy"
+            / "infrastructure"
+            / "sqlite"
+            / "migrations"
+        )
+        with memory_db.session_factory() as session:
+            result = session.execute(text("SELECT file FROM migration")).scalars().all()
+            expected_migrations = {f.name for f in migrations_path.glob("*.sql")}
+            assert expected_migrations == set(result)
