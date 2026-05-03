@@ -5,15 +5,11 @@ from collections import defaultdict
 from collections.abc import Container, Iterable
 from dataclasses import replace
 
-from sqlalchemy import column, func
-from sqlalchemy.sql.expression import ColumnClause, ColumnElement, or_
-
 from niveshpy.core.logging import logger
-from niveshpy.core.query import ast
 from niveshpy.core.query.ast import Field, FilterNode, FilterValue, Operator
 from niveshpy.core.query.parser import QueryParser
 from niveshpy.core.query.tokenizer import QueryLexer
-from niveshpy.exceptions import OperationError, QuerySyntaxError
+from niveshpy.exceptions import QuerySyntaxError
 
 
 def prepare_filters(
@@ -107,52 +103,6 @@ COMBINED = {
 }
 
 
-def prepare_expression(filter: FilterNode, column: ColumnClause) -> ColumnElement[bool]:
-    """Prepare a SQLAlchemy expression for a given filter and column.
-
-    Args:
-        filter (FilterNode): The filter node to prepare.
-        column (str): The database column name.
-
-    Returns:
-        ColumnElement[bool]: The prepared SQLAlchemy expression.
-    """
-    op = filter.operator
-    match op:
-        case ast.Operator.REGEX_MATCH if isinstance(filter.value, str):
-            return func.iregexp(filter.value, column)
-        case ast.Operator.NOT_REGEX_MATCH if isinstance(filter.value, str):
-            return ~func.iregexp(filter.value, column)
-        case ast.Operator.EQUALS:
-            return column == filter.value
-        case ast.Operator.NOT_EQUALS:
-            return column != filter.value
-        case ast.Operator.GREATER_THAN:
-            return column > filter.value
-        case ast.Operator.GREATER_THAN_EQ:
-            return column >= filter.value
-        case ast.Operator.LESS_THAN:
-            return column < filter.value
-        case ast.Operator.LESS_THAN_EQ:
-            return column <= filter.value
-        case ast.Operator.BETWEEN if (
-            isinstance(filter.value, tuple) and len(filter.value) == 2
-        ):
-            return column.between(filter.value[0], filter.value[1])
-        case ast.Operator.NOT_BETWEEN if (
-            isinstance(filter.value, tuple) and len(filter.value) == 2
-        ):
-            return ~column.between(filter.value[0], filter.value[1])
-        case ast.Operator.IN if isinstance(filter.value, tuple):
-            return column.in_(filter.value)
-        case ast.Operator.NOT_IN if isinstance(filter.value, tuple):
-            return ~column.in_(filter.value)
-        case _:
-            raise OperationError(
-                f"Unsupported operator / value for WHERE clause: {op} / {filter.value}"
-            )
-
-
 def get_prepared_filters_from_queries(
     queries: tuple[str, ...],
     default_field: Field,
@@ -179,75 +129,6 @@ def get_prepared_filters_from_queries(
     except QuerySyntaxError as e:
         e.add_note(f"Error was reported on input: {e.input_value}")
         raise QuerySyntaxError(" ".join(queries), cause=e.cause) from e
-
-
-def get_sqlalchemy_filters(
-    filters: Iterable[FilterNode],
-    column_mappings: dict[Field, list],
-    include_fields: Container[Field] | None = None,
-) -> list[ColumnElement[bool]]:
-    """Convert prepared filter nodes into SQLAlchemy filter expressions."""
-    # Regex expressions for text search
-    text_expressions: list[ColumnElement[bool]] = []
-
-    # All expressions
-    expressions: list[ColumnElement[bool]] = []
-
-    for filter in filters:
-        cols = column_mappings.get(filter.field, [])
-
-        if include_fields is not None and filter.field not in include_fields:
-            # Skip this filter as its field is not in the included fields
-            continue
-
-        if not cols:
-            raise QuerySyntaxError(
-                str(filter), f"Field {filter.field} not mapped to any column."
-            )
-
-        col_expressions: list[ColumnElement[bool]] = []
-        for col in cols:
-            col_expressions.append(
-                prepare_expression(filter, column(col) if isinstance(col, str) else col)
-            )
-        if filter.operator in {ast.Operator.REGEX_MATCH, ast.Operator.NOT_REGEX_MATCH}:
-            text_expressions.extend(col_expressions)
-        else:
-            expressions.append(or_(*col_expressions))
-
-    if text_expressions:
-        expressions.append(or_(*text_expressions))
-
-    return expressions
-
-
-def get_filters_from_queries(
-    queries: tuple[str, ...],
-    default_field: Field,
-    column_mappings: dict[Field, list],
-    include_fields: Container[Field] | None = None,
-) -> list[ColumnElement[bool]]:
-    """Convert query strings into a combined SQLAlchemy filter expression.
-
-    Args:
-        queries (tuple): Tuple of query strings.
-        default_field (Field): The default field to use for filters.
-        column_mappings (dict): Mapping of Fields to database column names.
-        include_fields (Container[Field], optional): Set of Fields to include. \
-        If provided, only filters with fields in this set will be included.
-
-    Returns:
-        list: The list of SQLAlchemy filter expressions.
-    """
-    filters = get_prepared_filters_from_queries(queries, default_field)
-    try:
-        sqlalchemy_filters = get_sqlalchemy_filters(
-            filters, column_mappings, include_fields
-        )
-    except QuerySyntaxError as e:
-        e.add_note(f"Error was reported on filter: {e.input_value}")
-        raise QuerySyntaxError(" ".join(queries), cause=e.cause) from e
-    return sqlalchemy_filters
 
 
 def get_fields_from_queries(queries: tuple[str, ...]) -> set[Field]:

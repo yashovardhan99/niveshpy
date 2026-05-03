@@ -9,21 +9,20 @@ from typing import TYPE_CHECKING
 from attrs import define
 
 from niveshpy.core.logging import logger
-from niveshpy.domain.repositories import (
-    AccountRepository,
-    PriceRepository,
-    SecurityRepository,
-    TransactionRepository,
-)
-from niveshpy.domain.services import LotAccountingService
-from niveshpy.services.report_service import ReportService
 
 if TYPE_CHECKING:
+    from niveshpy.domain.repositories import (
+        AccountRepository,
+        PriceRepository,
+        SecurityRepository,
+        TransactionRepository,
+    )
     from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
     from niveshpy.models.parser import Parser
     from niveshpy.services.account import AccountService
     from niveshpy.services.parsing import ParsingService
     from niveshpy.services.price import PriceService
+    from niveshpy.services.report_service import ReportService
     from niveshpy.services.security import SecurityService
     from niveshpy.services.transaction import TransactionService
 
@@ -77,6 +76,7 @@ class Application:
     @functools.cached_property
     def transaction(self) -> TransactionService:
         """Return the transaction service."""
+        from niveshpy.domain.services import LotAccountingService
         from niveshpy.services.transaction import TransactionService
 
         return TransactionService(
@@ -128,6 +128,9 @@ class Application:
     @functools.cached_property
     def report_service(self) -> ReportService:
         """Return the report service."""
+        from niveshpy.domain.services import LotAccountingService
+        from niveshpy.services.report_service import ReportService
+
         return ReportService(
             transaction_repository=self.transaction_repository,
             price_repository=self.price_repository,

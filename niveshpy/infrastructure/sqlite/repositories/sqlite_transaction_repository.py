@@ -19,13 +19,14 @@ from sqlalchemy.orm import (
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
-from niveshpy.core.query.prepare import get_fields_from_filters, get_sqlalchemy_filters
+from niveshpy.core.query.prepare import get_fields_from_filters
 from niveshpy.domain.repositories.transaction_repository import (
     TransactionFetchProfile,
     TransactionSortOrder,
 )
 from niveshpy.exceptions import DatabaseError, OperationError
 from niveshpy.infrastructure.sqlite.models import Account, Price, Security, Transaction
+from niveshpy.infrastructure.sqlite.query_filters import get_sqlalchemy_filters
 from niveshpy.models.report import Allocation, HoldingUnitRow
 from niveshpy.models.transaction import TransactionCreate, TransactionPublic
 

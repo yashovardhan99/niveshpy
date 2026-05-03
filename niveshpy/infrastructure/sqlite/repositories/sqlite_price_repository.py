@@ -19,10 +19,11 @@ from sqlalchemy.orm import (
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
-from niveshpy.core.query.prepare import get_fields_from_filters, get_sqlalchemy_filters
+from niveshpy.core.query.prepare import get_fields_from_filters
 from niveshpy.domain.repositories.price_repository import PriceFetchProfile
 from niveshpy.exceptions import DatabaseError, InvalidInputError, ResourceNotFoundError
 from niveshpy.infrastructure.sqlite.models import Price, Security
+from niveshpy.infrastructure.sqlite.query_filters import get_sqlalchemy_filters
 from niveshpy.models.price import PriceCreate, PricePublic
 
 if sys.version_info >= (3, 12):

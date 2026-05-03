@@ -1,8 +1,13 @@
 """Utility functions for setting up the CLI application state."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from rich.console import Console
 
-from niveshpy.core.app import AppState
+if TYPE_CHECKING:
+    from niveshpy.core.app import AppState
 
 _console = Console()  # Global console instance for utility functions
 _error_console = Console(stderr=True)  # Console for error messages
