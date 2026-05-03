@@ -18,13 +18,14 @@ class SqliteDatabase:
 
     Attributes:
         debug (bool): Whether to enable debug logging for database operations.
-        app_path (Path): Directory where the SQLite database file is stored.
+        db_path (Path): Path to the SQLite database file.
         session (sessionmaker[Session]): SQLAlchemy session factory for database interactions.
     """
 
     _debug: bool = field(default=False, repr=False, alias="debug")
-    app_path: Path = field(factory=lambda: platformdirs.user_data_path("niveshpy"))
-    _db_path: Path = field(init=False)
+    db_path: Path = field(
+        factory=lambda: platformdirs.user_data_path("niveshpy") / "niveshpy.db"
+    )
     _sqlite_url: str = field(init=False)
     _engine: Engine = field(init=False)
     session_factory: sessionmaker[Session] = field(init=False)
@@ -36,10 +37,9 @@ class SqliteDatabase:
 
     def __attrs_post_init__(self) -> None:
         """Initialize database paths, engine, and session factory."""
-        self.app_path.mkdir(parents=True, exist_ok=True)
-        object.__setattr__(self, "_db_path", (self.app_path / "niveshpy.db").resolve())
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        object.__setattr__(self, "_sqlite_url", f"sqlite:///{self._db_path}")
+        object.__setattr__(self, "_sqlite_url", f"sqlite:///{self.db_path}")
 
         object.__setattr__(
             self, "_engine", create_engine(self._sqlite_url, echo=self._debug)
@@ -57,7 +57,7 @@ class SqliteDatabase:
 
     def initialize(self, base: type[DeclarativeBase]) -> None:
         """Create database and tables if they do not exist."""
-        logger.info("Initializing database at path: %s", self._db_path)
+        logger.info("Initializing database at path: %s", self.db_path)
         object.__setattr__(self, "session_factory", sessionmaker(bind=self._engine))
         self.run_migrations()
         base.metadata.create_all(self._engine)
