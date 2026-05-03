@@ -27,7 +27,7 @@ def runner() -> CliRunner:
 def cli_in_memory_db(monkeypatch: pytest.MonkeyPatch):
     """Use an isolated in-memory SqliteDatabase for CLI integration tests."""
     db = SqliteDatabase(db_path=Path(":memory:"))
-    db.initialize(Base)
+    db.initialize()
     monkeypatch.setattr(Application, "db", property(lambda self: db))
     yield db
     db._engine.dispose()

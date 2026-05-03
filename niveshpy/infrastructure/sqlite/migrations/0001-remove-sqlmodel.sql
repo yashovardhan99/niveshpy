@@ -66,7 +66,7 @@ CREATE TABLE
     );
 
 CREATE TABLE
-    IF NOT EXISTS "transaction" (
+    "transaction" (
         id INTEGER NOT NULL,
         transaction_date DATE NOT NULL,
         type VARCHAR(8) NOT NULL,

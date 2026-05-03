@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 import pytest
 
-from niveshpy.infrastructure.sqlite.models import Base
 from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
 
 
@@ -26,7 +25,7 @@ def mock_platformdirs(tmp_path_factory):
 def db():
     """Create an in-memory SqliteDatabase for testing."""
     database = SqliteDatabase(db_path=Path(":memory:"))
-    database.initialize(Base)
+    database.initialize()
     return database
 
 

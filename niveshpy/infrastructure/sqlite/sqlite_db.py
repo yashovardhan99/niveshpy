@@ -8,7 +8,7 @@ import platformdirs
 from attrs import field, frozen
 from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import DatabaseError
@@ -57,11 +57,10 @@ class SqliteDatabase:
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
 
-    def initialize(self, base: type[DeclarativeBase]) -> None:
+    def initialize(self) -> None:
         """Create database and tables if they do not exist."""
         logger.info("Initializing database at path: %s", self.db_path)
         object.__setattr__(self, "session_factory", sessionmaker(bind=self._engine))
-        base.metadata.create_all(self._engine)
         self.run_migrations()
 
     def run_migrations(self) -> None:
