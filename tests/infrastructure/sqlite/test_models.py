@@ -1,11 +1,11 @@
 """Tests for SQLite models."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import select
 
 from niveshpy.infrastructure.sqlite.models import Account, Price, Security, Transaction
 from niveshpy.models.security import SecurityCategory, SecurityCreate, SecurityType
@@ -25,7 +25,7 @@ class TestAccountModels:
         account = Account(name="HDFC Savings", institution="HDFC Bank")
         assert account.name == "HDFC Savings"
         assert account.institution == "HDFC Bank"
-        assert account.properties == {}
+        assert account.properties is None
 
     def test_account_create_with_properties(self):
         """Test creating an Account instance with properties."""
@@ -78,7 +78,7 @@ class TestAccountDatabase:
     # Database persistence tests
     def test_account_insert_and_retrieve(self, session):
         """Test inserting and retrieving an Account from the database."""
-        account = Account(name="HDFC", institution="Bank")
+        account = Account(name="HDFC", institution="Bank", properties={})
         session.add(account)
         session.commit()
 
@@ -90,7 +90,7 @@ class TestAccountDatabase:
 
     def test_account_auto_generated_id(self, session):
         """Test that the Account ID is auto-generated upon insertion."""
-        account = Account(name="Test", institution="Bank")
+        account = Account(name="Test", institution="Bank", properties={})
         assert account.id is None
 
         session.add(account)
@@ -101,11 +101,11 @@ class TestAccountDatabase:
 
     def test_account_created_at_auto_set(self, session):
         """Test that the created_at timestamp is auto-set upon insertion."""
-        before = datetime.now()
-        account = Account(name="Test", institution="Bank")
+        before = datetime.now(tz=UTC).replace(microsecond=0)
+        account = Account(name="Test", institution="Bank", properties={})
         session.add(account)
         session.commit()
-        after = datetime.now()
+        after = datetime.now(tz=UTC).replace(microsecond=0)
 
         assert before <= account.created_at <= after
 
@@ -113,11 +113,11 @@ class TestAccountDatabase:
     @pytest.mark.filterwarnings("ignore::sqlalchemy.exc.SAWarning")
     def test_account_unique_constraint_violation(self, session):
         """Test that inserting duplicate Account violates unique constraint."""
-        account1 = Account(name="Savings", institution="HDFC")
+        account1 = Account(name="Savings", institution="HDFC", properties={})
         session.add(account1)
         session.commit()
 
-        account2 = Account(name="Savings", institution="HDFC")
+        account2 = Account(name="Savings", institution="HDFC", properties={})
         session.add(account2)
 
         with pytest.raises(IntegrityError, match="UNIQUE constraint failed"):
@@ -125,8 +125,8 @@ class TestAccountDatabase:
 
     def test_account_same_name_different_institution(self, session):
         """Test inserting Accounts with same name but different institutions."""
-        account1 = Account(name="Savings", institution="HDFC")
-        account2 = Account(name="Savings", institution="ICICI")
+        account1 = Account(name="Savings", institution="HDFC", properties={})
+        account2 = Account(name="Savings", institution="ICICI", properties={})
 
         session.add(account1)
         session.add(account2)
@@ -136,8 +136,8 @@ class TestAccountDatabase:
 
     def test_account_different_name_same_institution(self, session):
         """Test inserting Accounts with different names but same institution."""
-        account1 = Account(name="Savings", institution="HDFC")
-        account2 = Account(name="Current", institution="HDFC")
+        account1 = Account(name="Savings", institution="HDFC", properties={})
+        account2 = Account(name="Current", institution="HDFC", properties={})
 
         session.add(account1)
         session.add(account2)
@@ -307,6 +307,7 @@ class TestSecurityDatabase:
             name="HDFC Equity Fund",
             type=SecurityType.MUTUAL_FUND,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add(security)
         session.commit()
@@ -320,16 +321,17 @@ class TestSecurityDatabase:
         """Test that created timestamp is auto-set upon insertion."""
         from datetime import datetime
 
-        before = datetime.now()
+        before = datetime.now(tz=UTC).replace(microsecond=0)
         security = Security(
             key="TEST",
             name="Test Security",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add(security)
         session.commit()
-        after = datetime.now()
+        after = datetime.now(tz=UTC).replace(microsecond=0)
 
         assert before <= security.created <= after
 
@@ -343,6 +345,7 @@ class TestSecurityDatabase:
             name="First Security",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add(security1)
         session.commit()
@@ -352,6 +355,7 @@ class TestSecurityDatabase:
             name="Second Security",
             type=SecurityType.BOND,
             category=SecurityCategory.DEBT,
+            properties={},
         )
         session.add(security2)
 
@@ -365,12 +369,14 @@ class TestSecurityDatabase:
             name="Common Name",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         security2 = Security(
             key="KEY2",
             name="Common Name",
             type=SecurityType.BOND,
             category=SecurityCategory.DEBT,
+            properties={},
         )
 
         session.add(security1)
@@ -390,6 +396,7 @@ class TestSecurityDatabase:
                 name=f"Test {sec_type.value}",
                 type=sec_type,
                 category=SecurityCategory.OTHER,
+                properties={},
             )
             session.add(security)
         session.commit()
@@ -407,6 +414,7 @@ class TestSecurityDatabase:
                 name=f"Test {category.value}",
                 type=SecurityType.OTHER,
                 category=category,
+                properties={},
             )
             session.add(security)
         session.commit()
@@ -479,7 +487,7 @@ class TestPriceDatabase:
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
             properties={},
-            created=datetime.now(),
+            created=datetime.now(tz=UTC),
         )
         session.add(security)
         session.commit()
@@ -491,6 +499,7 @@ class TestPriceDatabase:
             high=Decimal("105.7500"),
             low=Decimal("99.2500"),
             close=Decimal("103.0000"),
+            properties={},
         )
         session.add(price)
         session.commit()
@@ -513,12 +522,12 @@ class TestPriceDatabase:
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
             properties={},
-            created=datetime.now(),
+            created=datetime.now(tz=UTC),
         )
         session.add(security)
         session.commit()
 
-        before = datetime.now()
+        before = datetime.now(tz=UTC).replace(microsecond=0)
         price = Price(
             security_key=security.key,
             date=date(2024, 1, 15),
@@ -526,10 +535,11 @@ class TestPriceDatabase:
             high=Decimal("100.0000"),
             low=Decimal("100.0000"),
             close=Decimal("100.0000"),
+            properties={},
         )
         session.add(price)
         session.commit()
-        after = datetime.now()
+        after = datetime.now(tz=UTC).replace(microsecond=0)
 
         assert before <= price.created <= after
 
@@ -544,7 +554,7 @@ class TestPriceDatabase:
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
             properties={},
-            created=datetime.now(),
+            created=datetime.now(tz=UTC),
         )
         session.add(security)
         session.commit()
@@ -556,6 +566,7 @@ class TestPriceDatabase:
             high=Decimal("100.0000"),
             low=Decimal("100.0000"),
             close=Decimal("100.0000"),
+            properties={},
         )
         session.add(price1)
         session.commit()
@@ -567,6 +578,7 @@ class TestPriceDatabase:
             high=Decimal("200.0000"),
             low=Decimal("200.0000"),
             close=Decimal("200.0000"),
+            properties={},
         )
         session.add(price2)
 
@@ -581,7 +593,7 @@ class TestPriceDatabase:
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
             properties={},
-            created=datetime.now(),
+            created=datetime.now(tz=UTC),
         )
         session.add(security)
         session.commit()
@@ -593,6 +605,7 @@ class TestPriceDatabase:
             high=Decimal("100.0000"),
             low=Decimal("100.0000"),
             close=Decimal("100.0000"),
+            properties={},
         )
         price2 = Price(
             security_key=security.key,
@@ -601,6 +614,7 @@ class TestPriceDatabase:
             high=Decimal("101.0000"),
             low=Decimal("101.0000"),
             close=Decimal("101.0000"),
+            properties={},
         )
 
         session.add(price1)
@@ -624,7 +638,7 @@ class TestPriceDatabase:
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
             properties={},
-            created=datetime.now(),
+            created=datetime.now(tz=UTC),
         )
         security2 = Security(
             key="SEC2",
@@ -632,7 +646,7 @@ class TestPriceDatabase:
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
             properties={},
-            created=datetime.now(),
+            created=datetime.now(tz=UTC),
         )
         session.add_all([security1, security2])
         session.commit()
@@ -644,6 +658,7 @@ class TestPriceDatabase:
             high=Decimal("100.0000"),
             low=Decimal("100.0000"),
             close=Decimal("100.0000"),
+            properties={},
         )
         price2 = Price(
             security_key=security2.key,
@@ -652,6 +667,7 @@ class TestPriceDatabase:
             high=Decimal("200.0000"),
             low=Decimal("200.0000"),
             close=Decimal("200.0000"),
+            properties={},
         )
 
         session.add(price1)
@@ -679,6 +695,7 @@ class TestPriceDatabase:
             high=Decimal("100.0000"),
             low=Decimal("100.0000"),
             close=Decimal("100.0000"),
+            properties={},
         )
         session.add(price)
 
@@ -695,7 +712,7 @@ class TestPriceDatabase:
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
             properties={},
-            created=datetime.now(),
+            created=datetime.now(tz=UTC),
         )
         session.add(security)
         session.commit()
@@ -707,6 +724,7 @@ class TestPriceDatabase:
             high=Decimal("2550.0000"),
             low=Decimal("2480.0000"),
             close=Decimal("2530.0000"),
+            properties={},
         )
         session.add(price)
         session.commit()
@@ -728,7 +746,7 @@ class TestPriceDatabase:
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
             properties={},
-            created=datetime.now(),
+            created=datetime.now(tz=UTC),
         )
         session.add(security)
         session.commit()
@@ -740,6 +758,7 @@ class TestPriceDatabase:
             high=Decimal("1235.9999"),
             low=Decimal("1233.0001"),
             close=Decimal("1234.1234"),
+            properties={},
         )
         session.add(price)
         session.commit()
@@ -761,7 +780,7 @@ class TestPriceDatabase:
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
             properties={},
-            created=datetime.now(),
+            created=datetime.now(tz=UTC),
         )
         session.add(security)
         session.commit()
@@ -791,7 +810,7 @@ class TestPriceDatabase:
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
             properties={},
-            created=datetime.now(),
+            created=datetime.now(tz=UTC),
         )
         session.add(security)
         session.commit()
@@ -829,7 +848,7 @@ class TestPriceDatabase:
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
             properties={},
-            created=datetime.now(),
+            created=datetime.now(tz=UTC),
         )
         session.add(security)
         session.commit()
@@ -842,6 +861,7 @@ class TestPriceDatabase:
                 high=Decimal(f"{105 + i}.0000"),
                 low=Decimal(f"{95 + i}.0000"),
                 close=Decimal(f"{103 + i}.0000"),
+                properties={},
             )
             for i in range(1, 6)
         ]
@@ -849,11 +869,13 @@ class TestPriceDatabase:
         session.commit()
 
         # Verify all 5 prices are stored
-        from sqlmodel import select
+        from sqlalchemy import select
 
-        retrieved_prices = session.exec(
-            select(Price).where(Price.security_key == "TEST")
-        ).all()
+        retrieved_prices = (
+            session.execute(select(Price).where(Price.security_key == "TEST"))
+            .scalars()
+            .all()
+        )
         assert len(retrieved_prices) == 5
         assert all(p.security_key == "TEST" for p in retrieved_prices)
 
@@ -881,7 +903,7 @@ class TestTransactionModels:
         assert transaction.units == Decimal("100.500")
         assert transaction.security_key == "123456"
         assert transaction.account_id == 1
-        assert transaction.properties == {}
+        assert transaction.properties is None
 
     def test_transaction_with_properties(self):
         """Test creating a Transaction with properties."""
@@ -1001,12 +1023,13 @@ class TestTransactionDatabase:
     def test_transaction_insert_and_retrieve(self, session):
         """Test inserting and retrieving a Transaction from database."""
         # Create prerequisite account and security
-        account = Account(name="Test Account", institution="Test Bank")
+        account = Account(name="Test Account", institution="Test Bank", properties={})
         security = Security(
             key="TEST123",
             name="Test Security",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add(account)
         session.add(security)
@@ -1022,6 +1045,7 @@ class TestTransactionDatabase:
             units=Decimal("100.500"),
             security_key=security.key,
             account_id=account.id,
+            properties={},
         )
         session.add(transaction)
         session.commit()
@@ -1038,12 +1062,13 @@ class TestTransactionDatabase:
 
     def test_transaction_auto_generated_id(self, session):
         """Test that the Transaction ID is auto-generated upon insertion."""
-        account = Account(name="Test Account", institution="Test Bank")
+        account = Account(name="Test Account", institution="Test Bank", properties={})
         security = Security(
             key="TEST",
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add_all([account, security])
         session.commit()
@@ -1057,6 +1082,7 @@ class TestTransactionDatabase:
             units=Decimal("1.000"),
             security_key=security.key,
             account_id=account.id,
+            properties={},
         )
         assert transaction.id is None
 
@@ -1068,18 +1094,19 @@ class TestTransactionDatabase:
 
     def test_transaction_created_timestamp_auto_set(self, session):
         """Test that created timestamp is auto-set upon insertion."""
-        account = Account(name="Test Account", institution="Test Bank")
+        account = Account(name="Test Account", institution="Test Bank", properties={})
         security = Security(
             key="TEST",
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add_all([account, security])
         session.commit()
         assert account.id is not None
 
-        before = datetime.now()
+        before = datetime.now(tz=UTC).replace(microsecond=0)
         transaction = Transaction(
             transaction_date=date(2024, 1, 15),
             type=TransactionType.PURCHASE,
@@ -1088,10 +1115,11 @@ class TestTransactionDatabase:
             units=Decimal("1.000"),
             security_key=security.key,
             account_id=account.id,
+            properties={},
         )
         session.add(transaction)
         session.commit()
-        after = datetime.now()
+        after = datetime.now(tz=UTC).replace(microsecond=0)
 
         assert before <= transaction.created <= after
 
@@ -1100,7 +1128,7 @@ class TestTransactionDatabase:
     @pytest.mark.filterwarnings("ignore::sqlalchemy.exc.SAWarning")
     def test_transaction_invalid_security_key_fails(self, session):
         """Test that invalid security_key raises IntegrityError."""
-        account = Account(name="Test Account", institution="Test Bank")
+        account = Account(name="Test Account", institution="Test Bank", properties={})
         session.add(account)
         session.commit()
         assert account.id is not None
@@ -1113,6 +1141,7 @@ class TestTransactionDatabase:
             units=Decimal("1.000"),
             security_key="NONEXISTENT",
             account_id=account.id,
+            properties={},
         )
         session.add(transaction)
 
@@ -1127,6 +1156,7 @@ class TestTransactionDatabase:
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add(security)
         session.commit()
@@ -1139,6 +1169,7 @@ class TestTransactionDatabase:
             units=Decimal("1.000"),
             security_key=security.key,
             account_id=99999,
+            properties={},
         )
         session.add(transaction)
 
@@ -1149,12 +1180,13 @@ class TestTransactionDatabase:
 
     def test_transaction_security_relationship(self, session):
         """Test that Transaction.security relationship loads correctly."""
-        account = Account(name="Test Account", institution="Test Bank")
+        account = Account(name="Test Account", institution="Test Bank", properties={})
         security = Security(
             key="REL123",
             name="Reliance Industries",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add_all([account, security])
         session.commit()
@@ -1168,6 +1200,7 @@ class TestTransactionDatabase:
             units=Decimal("50.000"),
             security_key=security.key,
             account_id=account.id,
+            properties={},
         )
         session.add(transaction)
         session.commit()
@@ -1181,12 +1214,13 @@ class TestTransactionDatabase:
 
     def test_transaction_account_relationship(self, session):
         """Test that Transaction.account relationship loads correctly."""
-        account = Account(name="HDFC Savings", institution="HDFC Bank")
+        account = Account(name="HDFC Savings", institution="HDFC Bank", properties={})
         security = Security(
             key="TEST",
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add_all([account, security])
         session.commit()
@@ -1200,6 +1234,7 @@ class TestTransactionDatabase:
             units=Decimal("10.000"),
             security_key=security.key,
             account_id=account.id,
+            properties={},
         )
         session.add(transaction)
         session.commit()
@@ -1215,12 +1250,13 @@ class TestTransactionDatabase:
 
     def test_transaction_amount_precision_persists(self, session):
         """Test that amount precision (24,2) is preserved."""
-        account = Account(name="Test", institution="Bank")
+        account = Account(name="Test", institution="Bank", properties={})
         security = Security(
             key="TEST",
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add_all([account, security])
         session.commit()
@@ -1234,6 +1270,7 @@ class TestTransactionDatabase:
             units=Decimal("100.123"),
             security_key=security.key,
             account_id=account.id,
+            properties={},
         )
         session.add(transaction)
         session.commit()
@@ -1245,12 +1282,13 @@ class TestTransactionDatabase:
 
     def test_transaction_units_precision_persists(self, session):
         """Test that units precision (24,3) is preserved."""
-        account = Account(name="Test", institution="Bank")
+        account = Account(name="Test", institution="Bank", properties={})
         security = Security(
             key="TEST",
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add_all([account, security])
         session.commit()
@@ -1264,6 +1302,7 @@ class TestTransactionDatabase:
             units=Decimal("99.999"),
             security_key=security.key,
             account_id=account.id,
+            properties={},
         )
         session.add(transaction)
         session.commit()
@@ -1277,12 +1316,13 @@ class TestTransactionDatabase:
 
     def test_transaction_type_persists_correctly(self, session):
         """Test that TransactionType enum persists and retrieves correctly."""
-        account = Account(name="Test", institution="Bank")
+        account = Account(name="Test", institution="Bank", properties={})
         security = Security(
             key="TEST",
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add_all([account, security])
         session.commit()
@@ -1297,12 +1337,13 @@ class TestTransactionDatabase:
                 units=Decimal("1.000"),
                 security_key=security.key,
                 account_id=account.id,
+                properties={},
             )
             session.add(transaction)
         session.commit()
         session.expunge_all()
 
-        transactions = session.exec(select(Transaction)).all()
+        transactions = session.execute(select(Transaction)).scalars().all()
         retrieved_types = {t.type for t in transactions}
         assert retrieved_types == set(TransactionType)
 
@@ -1310,12 +1351,13 @@ class TestTransactionDatabase:
 
     def test_transaction_properties_persist_as_json(self, session):
         """Test that properties are persisted and retrieved correctly as JSON."""
-        account = Account(name="Test", institution="Bank")
+        account = Account(name="Test", institution="Bank", properties={})
         security = Security(
             key="TEST",
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add_all([account, security])
         session.commit()
@@ -1342,12 +1384,13 @@ class TestTransactionDatabase:
 
     def test_transaction_complex_properties_persist(self, session):
         """Test that complex properties persist correctly."""
-        account = Account(name="Test", institution="Bank")
+        account = Account(name="Test", institution="Bank", properties={})
         security = Security(
             key="TEST",
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add_all([account, security])
         session.commit()
@@ -1382,12 +1425,13 @@ class TestTransactionDatabase:
 
     def test_multiple_transactions_same_security_and_account(self, session):
         """Test inserting multiple transactions for same security and account."""
-        account = Account(name="Test", institution="Bank")
+        account = Account(name="Test", institution="Bank", properties={})
         security = Security(
             key="TEST",
             name="Test",
             type=SecurityType.STOCK,
             category=SecurityCategory.EQUITY,
+            properties={},
         )
         session.add_all([account, security])
         session.commit()
@@ -1400,14 +1444,15 @@ class TestTransactionDatabase:
                 amount=Decimal(f"{i * 100}.00"),
                 units=Decimal(f"{i}.000"),
                 security_key=security.key,
-                account_id=account.id,  # ty:ignore[invalid-argument-type]
+                account_id=account.id,
+                properties={},
             )
             for i in range(1, 6)
         ]
         session.add_all(transactions)
         session.commit()
 
-        retrieved_transactions = session.exec(select(Transaction)).all()
+        retrieved_transactions = session.execute(select(Transaction)).scalars().all()
         assert len(retrieved_transactions) == 5
         assert all(t.security_key == "TEST" for t in retrieved_transactions)
         assert all(t.account_id == account.id for t in retrieved_transactions)

@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pytest
 from click.testing import CliRunner, Result
-from sqlalchemy import event
-from sqlalchemy.pool import StaticPool
-from sqlmodel import SQLModel, create_engine
 
 from niveshpy.cli.main import cli
+from niveshpy.core.app import Application
+from niveshpy.infrastructure.sqlite.models import Base
+from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
 
 
 @pytest.fixture
@@ -24,47 +24,20 @@ def runner() -> CliRunner:
 
 
 @pytest.fixture(autouse=True)
-def cli_in_memory_engine(monkeypatch: pytest.MonkeyPatch):
-    """Use an isolated in-memory SQLite engine for CLI integration tests."""
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(engine, "connect")
-    def set_sqlite_pragma(dbapi_conn: sqlite3.Connection, _):
-        dbapi_conn.create_function("iregexp", 2, _iregexp)
-        cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-    import niveshpy.database as database
-
-    monkeypatch.setattr(database, "_engine", engine)
-    yield engine
-    engine.dispose()
+def cli_in_memory_db(monkeypatch: pytest.MonkeyPatch):
+    """Use an isolated in-memory SqliteDatabase for CLI integration tests."""
+    db = SqliteDatabase(db_path=Path(":memory:"))
+    db.initialize(Base)
+    monkeypatch.setattr(Application, "db", property(lambda self: db))
+    yield db
+    db._engine.dispose()
 
 
 @pytest.fixture(autouse=True)
-def reset_cli_database(cli_in_memory_engine) -> None:
+def reset_cli_database(cli_in_memory_db) -> None:
     """Reset the in-memory database between CLI integration tests."""
-    from niveshpy.infrastructure.sqlite.models import (  # noqa: F401
-        Account,
-        Price,
-        Security,
-        Transaction,
-    )
-
-    SQLModel.metadata.drop_all(cli_in_memory_engine)
-    SQLModel.metadata.create_all(cli_in_memory_engine)
-
-
-def _iregexp(pattern: str, value: str | None) -> bool:
-    """Case-insensitive regex match for SQLite."""
-    if value is None:
-        return False
-    return bool(re.search(pattern, value, re.IGNORECASE))
+    Base.metadata.drop_all(cli_in_memory_db._engine)
+    Base.metadata.create_all(cli_in_memory_db._engine)
 
 
 def parse_json_output(result_output: str) -> Any:

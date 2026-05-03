@@ -1,7 +1,5 @@
 """SQLite account repository unit tests."""
 
-from unittest.mock import patch
-
 import pytest
 
 from niveshpy.core.query.ast import Field, FilterNode, Operator
@@ -10,13 +8,9 @@ from niveshpy.models.account import AccountCreate
 
 
 @pytest.fixture(scope="function")
-def account_repository(session):
+def account_repository(session_factory):
     """Provide a fresh SqliteAccountRepository for each test."""
-    with patch(
-        "niveshpy.infrastructure.sqlite.repositories.sqlite_account_repository.get_session",
-        return_value=session,
-    ):
-        yield SqliteAccountRepository()
+    return SqliteAccountRepository(session_factory)
 
 
 def test_insert_account_returns_new_id_and_persists_row(

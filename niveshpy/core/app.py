@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+from attrs import define
 
 from niveshpy.core.logging import logger
 from niveshpy.domain.repositories import (
@@ -18,6 +19,7 @@ from niveshpy.domain.services import LotAccountingService
 from niveshpy.services.report_service import ReportService
 
 if TYPE_CHECKING:
+    from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
     from niveshpy.models.parser import Parser
     from niveshpy.services.account import AccountService
     from niveshpy.services.parsing import ParsingService
@@ -27,65 +29,63 @@ if TYPE_CHECKING:
 
 
 class Application:
-    """Main application class to hold state for the CLI."""
+    """Main application container."""
 
-    def __init__(self) -> None:
-        """Initialize the application with its services."""
-        from niveshpy.database import initialize as initialize_database
+    def __init__(self, debug: bool = False) -> None:
+        """Initialize the application container."""
+        self._debug = debug
 
-        logger.info("Initializing application")
-        initialize_database()
-        self._security: SecurityService | None = None
-        self._account: AccountService | None = None
-        self._transaction: TransactionService | None = None
-        self._price: PriceService | None = None
-        logger.info("Application initialized")
+    @functools.cached_property
+    def db(self) -> SqliteDatabase:
+        """Return the database instance."""
+        from niveshpy.infrastructure.sqlite.models import Base
+        from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
 
-    @property
+        logger.debug("Initializing database connection")
+
+        db = SqliteDatabase(debug=self._debug)
+        db.initialize(Base)
+        return db
+
+    @functools.cached_property
     def security(self) -> SecurityService:
         """Return the security service."""
-        if self._security is None:
-            from niveshpy.services.security import SecurityService
+        from niveshpy.services.security import SecurityService
 
-            self._security = SecurityService(self.security_repository)
-        return self._security
+        return SecurityService(self.security_repository)
 
     @functools.cached_property
     def security_repository(self) -> SecurityRepository:
         """Return the security repository."""
         from niveshpy.infrastructure.sqlite.repositories import SqliteSecurityRepository
 
-        return SqliteSecurityRepository()
+        return SqliteSecurityRepository(self.db.session_factory)
 
-    @property
+    @functools.cached_property
     def account(self) -> AccountService:
         """Return the account service."""
-        if self._account is None:
-            from niveshpy.services.account import AccountService
+        from niveshpy.services.account import AccountService
 
-            self._account = AccountService(self.account_repository)
-        return self._account
+        return AccountService(self.account_repository)
 
     @functools.cached_property
     def account_repository(self) -> AccountRepository:
         """Return the account repository."""
         from niveshpy.infrastructure.sqlite.repositories import SqliteAccountRepository
 
-        return SqliteAccountRepository()
+        return SqliteAccountRepository(self.db.session_factory)
 
-    @property
+    @functools.cached_property
     def transaction(self) -> TransactionService:
         """Return the transaction service."""
-        if self._transaction is None:
-            from niveshpy.services.transaction import TransactionService
+        from niveshpy.services.transaction import TransactionService
 
-            self._transaction = TransactionService(
-                transaction_repository=self.transaction_repository,
-                account_repository=self.account_repository,
-                security_repository=self.security_repository,
-                lot_accounting_service=LotAccountingService(),
-            )
-        return self._transaction
+        return TransactionService(
+            transaction_repository=self.transaction_repository,
+            account_repository=self.account_repository,
+            security_repository=self.security_repository,
+            lot_accounting_service=LotAccountingService(),
+        )
 
     @functools.cached_property
     def transaction_repository(self) -> TransactionRepository:
@@ -94,7 +94,7 @@ class Application:
             SqliteTransactionRepository,
         )
 
-        return SqliteTransactionRepository()
+        return SqliteTransactionRepository(self.db.session_factory)
 
     def get_parsing_service(
         self,
@@ -117,16 +117,14 @@ class Application:
         """Return the price repository."""
         from niveshpy.infrastructure.sqlite.repositories import SqlitePriceRepository
 
-        return SqlitePriceRepository()
+        return SqlitePriceRepository(self.db.session_factory)
 
-    @property
+    @functools.cached_property
     def price(self) -> PriceService:
         """Return the price service."""
-        if self._price is None:
-            from niveshpy.services.price import PriceService
+        from niveshpy.services.price import PriceService
 
-            self._price = PriceService(self.price_repository, self.security_repository)
-        return self._price
+        return PriceService(self.price_repository, self.security_repository)
 
     @functools.cached_property
     def report_service(self) -> ReportService:
@@ -140,7 +138,7 @@ class Application:
         )
 
 
-@dataclass
+@define
 class AppState:
     """State for the application."""
 
@@ -151,4 +149,4 @@ class AppState:
     @functools.cached_property[Application]
     def app(self) -> Application:
         """The main application instance."""
-        return Application()
+        return Application(self.debug)

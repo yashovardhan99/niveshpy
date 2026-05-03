@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from sqlmodel import column
+from sqlalchemy import column
 
 from niveshpy.core.query.ast import Field, FilterNode, Operator
 from niveshpy.core.query.prepare import (

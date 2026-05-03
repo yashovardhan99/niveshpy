@@ -6,15 +6,20 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from itertools import islice
 
+from sqlalchemy import delete, func, insert, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import contains_eager, raiseload, selectinload
-from sqlmodel import col, delete, func, insert, select
+from sqlalchemy.orm import (
+    Session,
+    contains_eager,
+    raiseload,
+    selectinload,
+    sessionmaker,
+)
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_fields_from_filters, get_sqlalchemy_filters
-from niveshpy.database import get_session
 from niveshpy.domain.repositories.price_repository import PriceFetchProfile
 from niveshpy.exceptions import DatabaseError, InvalidInputError, ResourceNotFoundError
 from niveshpy.infrastructure.sqlite.models import Price, Security
@@ -35,7 +40,13 @@ else:
 
 @dataclass(slots=True, frozen=True)
 class SqlitePriceRepository:
-    """SQLite-based repository implementation for managing price data."""
+    """SQLite-based repository implementation for managing price data.
+
+    Attributes:
+        session_factory: The sessionmaker instance used for creating database sessions.
+    """
+
+    session_factory: sessionmaker[Session]
 
     def get_price_by_key_and_date(
         self,
@@ -54,16 +65,16 @@ class SqlitePriceRepository:
             The PricePublic object if found, otherwise None.
         """
         stmt = select(Price).where(
-            col(Price.security_key) == security_key,
-            col(Price.date) == date,
+            Price.security_key == security_key,
+            Price.date == date,
         )
         if fetch_profile == PriceFetchProfile.WITH_SECURITY:
-            stmt = stmt.options(selectinload(Price.security))  # ty:ignore[invalid-argument-type]
+            stmt = stmt.options(selectinload(Price.security))
         else:
             stmt = stmt.options(raiseload("*"))
 
-        with get_session() as session:
-            result = session.exec(stmt).first()
+        with self.session_factory() as session:
+            result = session.scalar(stmt)
             if result:
                 return result.to_public(
                     include_security=fetch_profile == PriceFetchProfile.WITH_SECURITY,
@@ -108,11 +119,11 @@ class SqlitePriceRepository:
             stmt = stmt.join(Security)
             # If the filters include security fields, we need to eager load the security relationship to avoid N+1 queries
             if fetch_profile == PriceFetchProfile.WITH_SECURITY:
-                stmt = stmt.options(contains_eager(Price.security))  # ty:ignore[invalid-argument-type]
+                stmt = stmt.options(contains_eager(Price.security))
         # If the filters don't include security fields but the fetch profile requires security,
         # we can use selectinload to load the related securities in a separate query, which is more efficient than a join in this case
         elif fetch_profile == PriceFetchProfile.WITH_SECURITY:
-            stmt = stmt.options(selectinload(Price.security))  # ty:ignore[invalid-argument-type]
+            stmt = stmt.options(selectinload(Price.security))
 
         # If the fetch profile is minimal, we can use raiseload to prevent loading any relationships,
         # which can improve performance if we don't need the related data
@@ -123,8 +134,8 @@ class SqlitePriceRepository:
         if limit is not None:
             stmt = stmt.limit(limit)
 
-        with get_session() as session:
-            results = session.exec(stmt).all()
+        with self.session_factory() as session:
+            results = session.scalars(stmt).all()
             return [
                 result.to_public(
                     include_security=fetch_profile == PriceFetchProfile.WITH_SECURITY,
@@ -172,8 +183,8 @@ class SqlitePriceRepository:
             select(Price)
             .join(
                 subquery,
-                (col(Price.security_key) == subquery.c.security_key)
-                & (col(Price.date) == subquery.c.max_date),
+                (Price.security_key == subquery.c.security_key)
+                & (Price.date == subquery.c.max_date),
             )
             .offset(offset)
         )
@@ -181,12 +192,12 @@ class SqlitePriceRepository:
             stmt = stmt.limit(limit)
 
         if fetch_profile == PriceFetchProfile.WITH_SECURITY:
-            stmt = stmt.options(selectinload(Price.security))  # ty:ignore[invalid-argument-type]
+            stmt = stmt.options(selectinload(Price.security))
         else:
             stmt = stmt.options(raiseload("*"))
 
-        with get_session() as session:
-            results = session.exec(stmt).all()
+        with self.session_factory() as session:
+            results = session.scalars(stmt).all()
             return [
                 result.to_public(
                     include_security=fetch_profile == PriceFetchProfile.WITH_SECURITY,
@@ -221,13 +232,13 @@ class SqlitePriceRepository:
                     "low": price.low,
                     "close": price.close,
                     "properties": price.properties,
-                    "created": datetime.datetime.now(),
+                    "created": datetime.datetime.now(tz=datetime.UTC),
                 },
             )
         )
-        with get_session() as session:
+        with self.session_factory() as session:
             try:
-                session.exec(stmt)
+                session.execute(stmt)
                 session.commit()
             except IntegrityError as e:
                 session.rollback()
@@ -304,14 +315,14 @@ class SqlitePriceRepository:
                     "High price must be greater than or equal to low, open, and close prices, and low price must be less than or equal to high, open, and close prices",
                 )
 
-        with get_session() as session:
+        with self.session_factory() as session:
             with session.begin():
                 # First, delete existing prices in the specified date range for the given security key
                 delete_stmt = delete(Price).where(
-                    col(Price.security_key) == security_key,
-                    col(Price.date).between(start_date, end_date),
+                    Price.security_key == security_key,
+                    Price.date.between(start_date, end_date),
                 )
-                session.exec(delete_stmt)
+                session.execute(delete_stmt)
 
                 if len(new_prices) == 0:
                     # If there are no new prices to insert, we can return early after deleting the existing prices
@@ -335,13 +346,12 @@ class SqlitePriceRepository:
                             "low": price.low,
                             "close": price.close,
                             "properties": price.properties,
-                            "created": datetime.datetime.now(),
                         }
                         for price in batch
                     ]
                     stmt = insert(Price).values(price_dicts)
                     try:
-                        session.exec(stmt)
+                        session.execute(stmt)
                     except IntegrityError as e:
                         session.rollback()
                         if "FOREIGN KEY constraint failed" in str(e):

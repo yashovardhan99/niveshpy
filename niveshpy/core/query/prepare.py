@@ -5,8 +5,8 @@ from collections import defaultdict
 from collections.abc import Container, Iterable
 from dataclasses import replace
 
-from sqlmodel import column, func
-from sqlmodel.sql.expression import ColumnClause, ColumnElement, or_
+from sqlalchemy import column, func
+from sqlalchemy.sql.expression import ColumnClause, ColumnElement, or_
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query import ast

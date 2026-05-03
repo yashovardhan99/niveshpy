@@ -3,16 +3,15 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import chain
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import func
+from sqlalchemy import CursorResult, delete, func, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlmodel import col, delete, select, update
+from sqlalchemy.orm import Session, sessionmaker
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_sqlalchemy_filters
-from niveshpy.database import get_session
 from niveshpy.exceptions import ResourceNotFoundError
 from niveshpy.infrastructure.sqlite.models import Security
 from niveshpy.models.security import SecurityCreate, SecurityPublic
@@ -20,13 +19,19 @@ from niveshpy.models.security import SecurityCreate, SecurityPublic
 
 @dataclass(slots=True, frozen=True)
 class SqliteSecurityRepository:
-    """Repository for performing database operations related to securities."""
+    """Repository for performing database operations related to securities.
+
+    Attributes:
+        session_factory: The sessionmaker instance used for creating database sessions.
+    """
+
+    session_factory: sessionmaker[Session]
 
     # SELECT operations for single security
 
     def get_security_by_key(self, key: str) -> SecurityPublic | None:
         """Fetch a security by its unique key."""
-        with get_session() as session:
+        with self.session_factory() as session:
             security = session.get(Security, key)
             logger.debug("Fetched security by key '%s': %s", key, str(security))
             return security.to_public() if security else None
@@ -44,8 +49,8 @@ class SqliteSecurityRepository:
                 Field.TYPE: ["type", "category"],
             },
         )
-        with get_session() as session:
-            securities = session.exec(
+        with self.session_factory() as session:
+            securities = session.scalars(
                 select(Security)
                 .where(*where_clause)
                 .offset(offset)
@@ -65,9 +70,9 @@ class SqliteSecurityRepository:
         """Find securities matching the given list of keys."""
         if not keys:
             return []
-        with get_session() as session:
-            securities = session.exec(
-                select(Security).where(col(Security.key).in_(keys))
+        with self.session_factory() as session:
+            securities = session.scalars(
+                select(Security).where(Security.key.in_(keys))
             ).all()
             logger.debug(
                 "Fetched securities by %d keys: %d results", len(keys), len(securities)
@@ -78,7 +83,7 @@ class SqliteSecurityRepository:
 
     def insert_security(self, security: SecurityCreate) -> bool:
         """Insert a new security into the database."""
-        with get_session() as session:
+        with self.session_factory() as session:
             stmt = (
                 sqlite_insert(Security)
                 .values(
@@ -90,7 +95,7 @@ class SqliteSecurityRepository:
                 )
                 .on_conflict_do_nothing()
             )
-            result = session.exec(stmt).rowcount
+            result = cast(CursorResult, session.execute(stmt)).rowcount
             session.commit()
             if result == 0:
                 logger.debug("Security already exists, skipping insert: %s", security)
@@ -116,11 +121,11 @@ class SqliteSecurityRepository:
             logger.debug("No securities provided for bulk insert.")
             return 0
 
-        with get_session() as session:
+        with self.session_factory() as session:
             stmt = (
                 sqlite_insert(Security).values(security_dicts).on_conflict_do_nothing()
             )
-            result = session.exec(stmt).rowcount
+            result = cast(CursorResult, session.execute(stmt)).rowcount
 
             session.commit()
             logger.debug(
@@ -134,10 +139,10 @@ class SqliteSecurityRepository:
 
     def delete_security_by_key(self, key: str) -> bool:
         """Delete a security from the database by its key."""
-        stmt = delete(Security).where(col(Security.key) == key)
-        with get_session() as session:
-            result = session.exec(stmt)
-            if result.rowcount == 0:
+        stmt = delete(Security).where(Security.key == key)
+        with self.session_factory() as session:
+            result = cast(CursorResult, session.execute(stmt)).rowcount
+            if result == 0:
                 logger.debug("No security found with key %s to delete.", key)
                 return False
             session.commit()
@@ -175,12 +180,12 @@ class SqliteSecurityRepository:
 
         stmt = (
             update(Security)
-            .where(col(Security.key) == security_key)
+            .where(Security.key == security_key)
             .values(properties=func.json_set(Security.properties, *args))
         )
-        with get_session() as session:
-            result = session.exec(stmt)
-            if result.rowcount == 0:
+        with self.session_factory() as session:
+            result = cast(CursorResult, session.execute(stmt)).rowcount
+            if result == 0:
                 raise ResourceNotFoundError("Security", security_key)
             session.commit()
             logger.debug(

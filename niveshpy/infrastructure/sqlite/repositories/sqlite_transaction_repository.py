@@ -4,17 +4,22 @@ import datetime
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, cast
 
-from sqlalchemy.orm import aliased, contains_eager, joinedload, raiseload, selectinload
-from sqlalchemy.sql.dml import ReturningInsert
-from sqlmodel import col, delete, func, insert, literal, select
-from sqlmodel.sql._expression_select_cls import SelectOfScalar
+from sqlalchemy import CursorResult, Select, delete, func, insert, literal, select
+from sqlalchemy.orm import (
+    Session,
+    aliased,
+    contains_eager,
+    joinedload,
+    raiseload,
+    selectinload,
+    sessionmaker,
+)
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_fields_from_filters, get_sqlalchemy_filters
-from niveshpy.database import get_session
 from niveshpy.domain.repositories.transaction_repository import (
     TransactionFetchProfile,
     TransactionSortOrder,
@@ -27,7 +32,13 @@ from niveshpy.models.transaction import TransactionCreate, TransactionPublic
 
 @dataclass(slots=True, frozen=True)
 class SqliteTransactionRepository:
-    """Repository for performing CRUD operations on transactions in a SQLite database."""
+    """Repository for performing CRUD operations on transactions in a SQLite database.
+
+    Attributes:
+       session_factory: The sessionmaker instance used for creating database sessions.
+    """
+
+    session_factory: sessionmaker[Session]
 
     _column_mapping: ClassVar[dict[Field, list]] = {
         Field.ACCOUNT: [Account.name, Account.institution],
@@ -44,20 +55,20 @@ class SqliteTransactionRepository:
     }
 
     def _get_ordered_stmt(
-        self, stmt: SelectOfScalar[Transaction], sort_order: TransactionSortOrder
-    ) -> SelectOfScalar[Transaction]:
+        self, stmt: Select[tuple[Transaction]], sort_order: TransactionSortOrder
+    ) -> Select[tuple[Transaction]]:
         if sort_order == TransactionSortOrder.DATE_DESC_ID_ASC:
             return stmt.order_by(
-                col(Transaction.transaction_date).desc(), col(Transaction.id).asc()
+                Transaction.transaction_date.desc(), Transaction.id.asc()
             )
         elif sort_order == TransactionSortOrder.DATE_ASC_ID_ASC:
             return stmt.order_by(
-                col(Transaction.transaction_date).asc(), col(Transaction.id).asc()
+                Transaction.transaction_date.asc(), Transaction.id.asc()
             )
         elif sort_order == TransactionSortOrder.ID_ASC:
-            return stmt.order_by(col(Transaction.id).asc())
+            return stmt.order_by(Transaction.id.asc())
         elif sort_order == TransactionSortOrder.ID_DESC:
-            return stmt.order_by(col(Transaction.id).desc())
+            return stmt.order_by(Transaction.id.desc())
         else:
             # This should never happen since TransactionSortOrder is an enum,
             # but we check just in case to avoid returning an unordered statement
@@ -78,21 +89,19 @@ class SqliteTransactionRepository:
         Returns:
             The TransactionPublic object if found, otherwise None.
         """
-        with get_session() as session:
-            stmt: SelectOfScalar[Transaction] = select(Transaction).where(
-                Transaction.id == transaction_id
-            )
+        with self.session_factory() as session:
+            stmt = select(Transaction).where(Transaction.id == transaction_id)
             if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
                 stmt = stmt.options(
-                    joinedload(Transaction.account),  # ty:ignore[invalid-argument-type]
-                    joinedload(Transaction.security),  # ty:ignore[invalid-argument-type]
+                    joinedload(Transaction.account),
+                    joinedload(Transaction.security),
                 )
             else:
                 stmt = stmt.options(
                     raiseload("*")
                 )  # Prevent loading any relationships for a more lightweight query
 
-            transaction = session.exec(stmt).first()
+            transaction = session.scalar(stmt)
             logger.debug(f"Fetched transaction with ID {transaction_id}: {transaction}")
             if transaction:
                 return transaction.to_public(
@@ -136,11 +145,11 @@ class SqliteTransactionRepository:
 
             if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
                 # Use contains_eager to load the account relationship in the same query
-                stmt = stmt.options(contains_eager(Transaction.account))  # ty:ignore[invalid-argument-type]
+                stmt = stmt.options(contains_eager(Transaction.account))
 
         elif fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
             # If account is not part of the filters but we want relations, we can still load it with a separate query
-            stmt = stmt.options(selectinload(Transaction.account))  # ty:ignore[invalid-argument-type]
+            stmt = stmt.options(selectinload(Transaction.account))
 
         if Field.SECURITY in fields:
             # Only join the Security table if security-related filters are present to avoid unnecessary joins for better performance
@@ -148,11 +157,11 @@ class SqliteTransactionRepository:
 
             if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
                 # Use contains_eager to load the security relationship in the same query
-                stmt = stmt.options(contains_eager(Transaction.security))  # ty:ignore[invalid-argument-type]
+                stmt = stmt.options(contains_eager(Transaction.security))
 
         elif fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
             # If security is not part of the filters but we want relations, we can still load it with a separate query
-            stmt = stmt.options(selectinload(Transaction.security))  # ty:ignore[invalid-argument-type]
+            stmt = stmt.options(selectinload(Transaction.security))
 
         if fetch_profile == TransactionFetchProfile.MINIMAL:
             stmt = stmt.options(
@@ -163,8 +172,8 @@ class SqliteTransactionRepository:
         stmt = self._get_ordered_stmt(stmt, sort_order)
         stmt = stmt.offset(offset).limit(limit)
 
-        with get_session() as session:
-            transactions = session.exec(stmt).all()
+        with self.session_factory() as session:
+            transactions = session.scalars(stmt).all()
             logger.debug(f"Found {len(transactions)} transactions matching filters")
             return [
                 transaction.to_public(
@@ -194,14 +203,12 @@ class SqliteTransactionRepository:
         if not ids:
             return []
 
-        stmt: SelectOfScalar[Transaction] = select(Transaction).where(
-            col(Transaction.id).in_(ids)
-        )
+        stmt = select(Transaction).where(Transaction.id.in_(ids))
 
         if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
             stmt = stmt.options(
-                selectinload(Transaction.account),  # ty:ignore[invalid-argument-type]
-                selectinload(Transaction.security),  # ty:ignore[invalid-argument-type]
+                selectinload(Transaction.account),
+                selectinload(Transaction.security),
             )
         else:
             stmt = stmt.options(
@@ -210,8 +217,8 @@ class SqliteTransactionRepository:
 
         stmt = self._get_ordered_stmt(stmt, sort_order)
 
-        with get_session() as session:
-            transactions = session.exec(stmt).all()
+        with self.session_factory() as session:
+            transactions = session.scalars(stmt).all()
             logger.debug(f"Found {len(transactions)} transactions matching IDs")
             return [
                 transaction.to_public(
@@ -231,7 +238,7 @@ class SqliteTransactionRepository:
         Returns:
             The unique ID of the newly inserted transaction.
         """
-        stmt: ReturningInsert[tuple[int | None]] = (
+        stmt = (
             insert(Transaction)
             .values(
                 transaction_date=transaction.transaction_date,
@@ -243,10 +250,10 @@ class SqliteTransactionRepository:
                 account_id=transaction.account_id,
                 properties=transaction.properties,
             )
-            .returning(col(Transaction.id))
+            .returning(Transaction.id)
         )
 
-        with get_session() as session:
+        with self.session_factory() as session:
             transaction_id = session.scalar(stmt)
             session.commit()
             logger.debug(f"Inserted transaction with ID {transaction_id}")
@@ -283,8 +290,8 @@ class SqliteTransactionRepository:
             for transaction in transactions
         ]
         stmt = insert(Transaction).values(transaction_dicts)
-        with get_session() as session:
-            result = session.exec(stmt).rowcount
+        with self.session_factory() as session:
+            result = cast(CursorResult, session.execute(stmt)).rowcount
             session.commit()
             logger.debug(f"Inserted {result} transactions.")
             return result
@@ -298,9 +305,9 @@ class SqliteTransactionRepository:
         Returns:
             True if the transaction was deleted successfully, False if no transaction with the given ID was found.
         """
-        stmt = delete(Transaction).where(col(Transaction.id) == transaction_id)
-        with get_session() as session:
-            result = session.exec(stmt)
+        stmt = delete(Transaction).where(Transaction.id == transaction_id)
+        with self.session_factory() as session:
+            result = cast(CursorResult, session.execute(stmt))
             if result.rowcount == 0:
                 logger.debug(
                     f"No transaction found with ID {transaction_id} to delete."
@@ -341,16 +348,19 @@ class SqliteTransactionRepository:
             }
             for transaction in transactions
         ]
-        with get_session() as session:
-            session.exec(
+        with self.session_factory() as session:
+            session.execute(
                 delete(Transaction).where(
-                    col(Transaction.transaction_date) >= date_range[0],
-                    col(Transaction.transaction_date) <= date_range[1],
-                    col(Transaction.account_id).in_(account_ids),
+                    Transaction.transaction_date >= date_range[0],
+                    Transaction.transaction_date <= date_range[1],
+                    Transaction.account_id.in_(account_ids),
                 )
             )
             result = (
-                session.exec(insert(Transaction).values(transaction_dicts)).rowcount
+                cast(
+                    CursorResult,
+                    session.execute(insert(Transaction).values(transaction_dicts)),
+                ).rowcount
                 if transaction_dicts
                 else 0
             )
@@ -387,26 +397,26 @@ class SqliteTransactionRepository:
         filter_fields = get_fields_from_filters(filters)
 
         holding_units_stmt = select(
-            col(Transaction.security_key),
-            col(Transaction.account_id),
+            Transaction.security_key,
+            Transaction.account_id,
             func.sum(Transaction.units).label("total_units"),
             func.max(Transaction.transaction_date).label("last_transaction_date"),
         )
         if Field.SECURITY in filter_fields:
             holding_units_stmt = holding_units_stmt.join(
-                Security, col(Security.key) == col(Transaction.security_key)
+                Security, Security.key == Transaction.security_key
             )
         if Field.ACCOUNT in filter_fields:
             holding_units_stmt = holding_units_stmt.join(
-                Account, col(Account.id) == col(Transaction.account_id)
+                Account, Account.id == Transaction.account_id
             )
         holding_units_stmt = (
             holding_units_stmt.where(*where_clauses)
-            .group_by(col(Transaction.account_id), col(Transaction.security_key))
+            .group_by(Transaction.account_id, Transaction.security_key)
             .having(func.sum(Transaction.units) >= Decimal("0.001"))
         )
-        with get_session() as session:
-            results = session.exec(holding_units_stmt).all()
+        with self.session_factory() as session:
+            results = session.execute(holding_units_stmt).all()
             holding_unit_rows = [HoldingUnitRow(*result) for result in results]
             logger.debug(
                 f"Found {len(holding_unit_rows)} holding unit rows matching filters."
@@ -462,21 +472,21 @@ class SqliteTransactionRepository:
 
         # CTE 1: total units held per security (grouped by security only, not account)
         holding_units_stmt = select(
-            col(Transaction.security_key),
+            Transaction.security_key,
             func.max(Transaction.transaction_date).label("last_transaction_date"),
             func.sum(Transaction.units).label("total_units"),
         )
         if Field.SECURITY in filter_fields:
             holding_units_stmt = holding_units_stmt.join(
-                Security, col(Security.key) == col(Transaction.security_key)
+                Security, Security.key == Transaction.security_key
             )
         if Field.ACCOUNT in filter_fields:
             holding_units_stmt = holding_units_stmt.join(
-                Account, col(Account.id) == col(Transaction.account_id)
+                Account, Account.id == Transaction.account_id
             )
         holding_units = (
             holding_units_stmt.where(*txn_where)
-            .group_by(col(Transaction.security_key))
+            .group_by(Transaction.security_key)
             .having(func.sum(Transaction.units) >= Decimal("0.001"))
             .cte("holding_units")
         )
@@ -485,13 +495,11 @@ class SqliteTransactionRepository:
         prices_stmt = select(
             Price,
             func.row_number()
-            .over(partition_by=Price.security_key, order_by=col(Price.date).desc())
+            .over(partition_by=Price.security_key, order_by=(Price.date).desc())
             .label("row_num"),
         )
         if Field.SECURITY in filter_fields:
-            prices_stmt = prices_stmt.join(
-                Security, col(Security.key) == col(Price.security_key)
-            )
+            prices_stmt = prices_stmt.join(Security, Security.key == Price.security_key)
         prices_stmt = prices_stmt.where(*price_where)
         cte_prices = prices_stmt.cte("cte_prices")
         aliased_price = aliased(Price, cte_prices)
@@ -502,8 +510,12 @@ class SqliteTransactionRepository:
         # CTE 3: holding values joined with security metadata for grouping
         cte_holdings = (
             select(
-                col(Security.category) if group_by in ("both", "category") else None,
-                col(Security.type) if group_by in ("both", "type") else None,
+                Security.category
+                if group_by in ("both", "category")
+                else literal(None).label("category"),
+                Security.type
+                if group_by in ("both", "type")
+                else literal(None).label("type"),
                 (holding_units.c.total_units * latest_prices.c.close).label(
                     "holding_value"
                 ),
@@ -511,8 +523,8 @@ class SqliteTransactionRepository:
                     holding_units.c.last_transaction_date, latest_prices.c.date
                 ).label("date"),
             )
-            .join(holding_units, col(Security.key) == holding_units.c.security_key)
-            .join(latest_prices, col(Security.key) == latest_prices.c.security_key)
+            .join(holding_units, Security.key == holding_units.c.security_key)
+            .join(latest_prices, Security.key == latest_prices.c.security_key)
             .cte("cte_holdings")
         )
 
@@ -524,28 +536,21 @@ class SqliteTransactionRepository:
         # Final: group by category/type and compute proportions
         stmt = (
             select(
-                col(cte_holdings.c.category)
-                if group_by in ("both", "category")
-                else None,
-                col(cte_holdings.c.type) if group_by in ("both", "type") else None,
+                cte_holdings.c.category,
+                cte_holdings.c.type,
                 func.min(cte_holdings.c.date).label("date"),
                 func.sum(cte_holdings.c.holding_value).label("total_amount"),
                 (
                     func.sum(cte_holdings.c.holding_value) / cte_total.c.total_value
                 ).label("proportion"),
-            )  # ty:ignore[no-matching-overload]
-            .join(cte_total, literal(True))
-            .group_by(
-                col(cte_holdings.c.category)
-                if group_by in ("both", "category")
-                else None,
-                col(cte_holdings.c.type) if group_by in ("both", "type") else None,
             )
+            .join(cte_total, literal(True))
+            .group_by(cte_holdings.c.category, cte_holdings.c.type)
             .order_by(func.sum(cte_holdings.c.holding_value).desc())
         )
 
-        with get_session() as session:
-            results = session.exec(stmt)
+        with self.session_factory() as session:
+            results = session.execute(stmt).all()
             return [
                 Allocation(
                     security_category=row[0],
