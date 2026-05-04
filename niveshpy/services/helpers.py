@@ -77,8 +77,8 @@ def compute_xirr(
     positive cash flow representing the current portfolio value is appended on
     ``current_date``.
 
-    Uses the formula: sum(cf_i / (1 + r)^((d_i - d_0) / 365.25)) = 0, solved
-    via Newton's method (``scipy.optimize.newton``).
+    We use the pyxirr library for a robust implementation that handles edge cases
+    better than a custom solver.
 
     Args:
         transactions: Transactions to include in the XIRR calculation.
@@ -93,7 +93,7 @@ def compute_xirr(
         OperationError: If no transactions are provided, all cash flows are
             zero, or the solver fails to find a solution.
     """
-    from scipy.optimize import newton
+    from pyxirr import InvalidPaymentsError, xirr
 
     if not transactions:
         raise OperationError("No transactions provided for XIRR calculation")
@@ -101,38 +101,20 @@ def compute_xirr(
     if current_date is None:
         current_date = datetime.date.today()
 
-    # Build cash flow list: (date, float_amount)
-    # Purchases are stored as positive amounts (outflows), sales as negative
-    # (inflows). Negating gives the correct XIRR sign convention.
-    cash_flows: list[tuple[datetime.date, float]] = [
-        (txn.transaction_date, -float(txn.amount)) for txn in transactions
-    ]
-    # Append terminal cash flow (current portfolio value)
-    cash_flows.append((current_date, float(current_value)))
-
-    # Sort by date so d_0 is the earliest
-    cash_flows.sort(key=lambda cf: cf[0])
-
-    # Check that not all cash flows are zero
-    if all(cf == 0.0 for _, cf in cash_flows):
-        raise OperationError("All cash flows are zero — cannot compute XIRR")
-
-    d_0 = cash_flows[0][0]
-
-    def _xnpv(rate: float) -> float:
-        """Compute net present value for the given annual rate."""
-        return sum(
-            cf / (1.0 + rate) ** ((d - d_0).days / 365.25) for d, cf in cash_flows
-        )
+    cash_flows = [(txn.transaction_date, -txn.amount) for txn in transactions]
+    cash_flows.append((current_date, current_value))
 
     try:
-        rate = float(newton(_xnpv, x0=0.1, tol=1e-12, maxiter=1000))
-    except (RuntimeError, ValueError, ZeroDivisionError, OverflowError) as exc:
-        raise OperationError("Could not compute XIRR — no solution found") from exc
+        rate = xirr(cash_flows)
+    except InvalidPaymentsError as exc:
+        raise OperationError("Could not compute XIRR — Invalid cash flows") from exc
 
-    if not math.isfinite(rate):
+    if rate is None:
         raise OperationError(
-            "Could not compute XIRR — solver returned non-finite result"
+            "Could not compute XIRR — Failed to converge to a solution"
         )
 
-    return Decimal(str(rate)).quantize(Decimal("0.0001"))
+    if math.isinf(rate):
+        raise OperationError("Could not compute XIRR — Result is infinite")
+
+    return Decimal(rate).quantize(Decimal("0.0001"))

@@ -314,7 +314,7 @@ class TestComputeXirr:
     def test_all_zero_cash_flows_raises(self):
         """All-zero cash flows should raise OperationError."""
         txns = [_buy(1, "100", "0", date=datetime.date(2023, 1, 1))]
-        with pytest.raises(OperationError, match="All cash flows are zero"):
+        with pytest.raises(OperationError, match="Invalid cash flows"):
             compute_xirr(
                 txns,
                 current_value=Decimal("0"),

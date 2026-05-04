@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Update how migrations are applied for a more consistent database build.
+- XIRR performance improvement.
 
 ## [1.0.0a7] - 2026-05-03
 

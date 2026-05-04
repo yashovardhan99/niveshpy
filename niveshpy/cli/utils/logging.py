@@ -1,11 +1,8 @@
 """Set up logging for Niveshpy CLI."""
 
 from logging import DEBUG, INFO, WARNING, Filter, Formatter
-from logging.handlers import RotatingFileHandler
 
-import platformdirs
 from rich.console import Console
-from rich.logging import RichHandler
 
 from niveshpy.core import logging
 
@@ -22,6 +19,11 @@ class TracebackInfoFilter(Filter):
 
 def setup(debug: bool, console: Console) -> None:
     """Set up logging configuration for CLI."""
+    from logging.handlers import RotatingFileHandler
+
+    import platformdirs
+    from rich.logging import RichHandler
+
     log_path = (
         platformdirs.user_log_path("niveshpy", ensure_exists=True) / "niveshpy.log"
     ).resolve()
