@@ -2,7 +2,7 @@
 
 import pytest
 
-from niveshpy.infrastructure.sqlite.query import Query, or_
+from niveshpy.infrastructure.sqlite.query import Delete, Insert, Query, or_
 
 
 class TestSelectClause:
@@ -396,3 +396,193 @@ class TestSQLClauseOrdering:
             sql.index("OFFSET"),
         ]
         assert positions == sorted(positions)
+
+
+class TestInsert:
+    """Tests for the INSERT statement builder."""
+
+    def test_simple_insert(self):
+        """Test basic INSERT INTO with columns and values."""
+        stmt = (
+            Insert()
+            .into("accounts")
+            .columns_("name", "institution")
+            .values_("Foo", "Bar")
+        )
+        sql = str(stmt)
+        assert "INSERT" in sql
+        assert "INTO accounts" in sql
+        assert "(name, institution)" in sql
+        assert "VALUES" in sql
+        assert "(?, ?)" in sql
+        assert stmt.params == ("Foo", "Bar")
+
+    def test_insert_or_ignore(self):
+        """Test INSERT OR IGNORE flag."""
+        stmt = (
+            Insert()
+            .or_ignore()
+            .into("accounts")
+            .columns_("name", "institution")
+            .values_("Foo", "Bar")
+        )
+        sql = str(stmt)
+        assert "INSERT OR IGNORE" in sql
+        assert "INTO accounts" in sql
+        assert stmt.params == ("Foo", "Bar")
+
+    def test_insert_or_replace(self):
+        """Test INSERT OR REPLACE flag."""
+        stmt = (
+            Insert()
+            .or_replace()
+            .into("prices")
+            .columns_("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 150.5)
+        )
+        sql = str(stmt)
+        assert "INSERT OR REPLACE" in sql
+        assert "INTO prices" in sql
+        assert "(?, ?, ?)" in sql
+        assert stmt.params == ("AXIS123", "2024-01-01", 150.5)
+
+    def test_insert_returning(self):
+        """Test RETURNING clause on insert."""
+        stmt = Insert().into("accounts").columns_("name").values_("Foo").returning("id")
+        sql = str(stmt)
+        assert "RETURNING id" in sql
+
+    def test_insert_returning_with_alias(self):
+        """Test RETURNING clause with aliased column."""
+        stmt = (
+            Insert()
+            .into("accounts")
+            .columns_("name")
+            .values_("Foo")
+            .returning(("name", "account_name"))
+        )
+        sql = str(stmt)
+        assert "RETURNING name AS account_name" in sql
+
+    def test_insert_bulk_values(self):
+        """Test multiple .values_() calls produce multi-row VALUES."""
+        stmt = (
+            Insert()
+            .into("accounts")
+            .columns_("name", "institution")
+            .values_("A", "X")
+            .values_("B", "Y")
+        )
+        sql = str(stmt)
+        assert sql.count("(?, ?)") == 2
+
+    def test_insert_params_single_row(self):
+        """Test params for a single row insert."""
+        stmt = Insert().into("t").columns_("a", "b", "c").values_(1, 2, 3)
+        assert stmt.params == (1, 2, 3)
+
+    def test_insert_params_bulk(self):
+        """Test params are flattened across multiple rows."""
+        stmt = (
+            Insert()
+            .into("t")
+            .columns_("a", "b")
+            .values_(1, 2)
+            .values_(3, 4)
+            .values_(5, 6)
+        )
+        assert stmt.params == (1, 2, 3, 4, 5, 6)
+
+    def test_insert_no_table_raises(self):
+        """Test ValueError when table is not specified."""
+        stmt = Insert().columns_("a").values_(1)
+        with pytest.raises(ValueError, match="Table must be specified"):
+            str(stmt)
+
+    def test_insert_value_count_mismatch_raises(self):
+        """Test ValueError when values count doesn't match columns."""
+        stmt = Insert().into("t").columns_("a", "b")
+        with pytest.raises(ValueError, match="Expected 2 values, got 3"):
+            stmt.values_(1, 2, 3)
+
+    def test_insert_chaining(self):
+        """Test fluent API returns same instance."""
+        stmt = Insert()
+        result = stmt.or_ignore().into("t").columns_("a").values_(1).returning("id")
+        assert result is stmt
+
+
+class TestDelete:
+    """Tests for the DELETE statement builder."""
+
+    def test_simple_delete(self):
+        """Test basic DELETE FROM with WHERE."""
+        stmt = Delete().from_("accounts").where(("id = ?", 5))
+        sql = str(stmt)
+        assert "DELETE FROM accounts" in sql
+        assert "WHERE" in sql
+        assert "id = ?" in sql
+        assert stmt.params == (5,)
+
+    def test_delete_multiple_conditions(self):
+        """Test DELETE with multiple AND conditions."""
+        stmt = (
+            Delete()
+            .from_("transactions")
+            .where(
+                ("account_id = ?", 1),
+                ("transaction_date >= ?", "2024-01-01"),
+            )
+        )
+        sql = str(stmt)
+        assert "account_id = ?" in sql
+        assert "AND" in sql
+        assert "transaction_date >= ?" in sql
+        assert stmt.params == (1, "2024-01-01")
+
+    def test_delete_with_or(self):
+        """Test DELETE with OR-combined conditions."""
+        stmt = (
+            Delete().from_("accounts").where(or_(("name = ?", "A"), ("name = ?", "B")))
+        )
+        sql = str(stmt)
+        assert "(name = ? OR name = ?)" in sql
+        assert stmt.params == ("A", "B")
+
+    def test_delete_returning(self):
+        """Test RETURNING clause on delete."""
+        stmt = Delete().from_("accounts").where(("id = ?", 1)).returning("id", "name")
+        sql = str(stmt)
+        assert "RETURNING id, name" in sql
+
+    def test_delete_no_table_raises(self):
+        """Test ValueError when table is not specified."""
+        stmt = Delete().where(("id = ?", 1))
+        with pytest.raises(ValueError, match="Table must be specified"):
+            str(stmt)
+
+    def test_delete_no_where(self):
+        """Test unconditional DELETE (no WHERE clause)."""
+        stmt = Delete().from_("temp_table")
+        sql = str(stmt)
+        assert "DELETE FROM temp_table" in sql
+        assert "WHERE" not in sql
+        assert stmt.params == ()
+
+    def test_delete_params(self):
+        """Test params collected from all conditions."""
+        stmt = (
+            Delete()
+            .from_("prices")
+            .where(
+                ("security_key = ?", "AXIS123"),
+                ("date BETWEEN ? AND ?", "2024-01-01", "2024-12-31"),
+            )
+        )
+        assert stmt.params == ("AXIS123", "2024-01-01", "2024-12-31")
+
+    def test_delete_chaining(self):
+        """Test fluent API returns same instance."""
+        stmt = Delete()
+        result = stmt.from_("t").where(("id = ?", 1)).returning("id")
+        assert result is stmt

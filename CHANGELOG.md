@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- (Internal) New light-weight query-builder for better performance.
+
 ### Changed
 
 - Update how migrations are applied for a more consistent database build.

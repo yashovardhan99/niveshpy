@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from enum import Enum
+from textwrap import dedent
 from typing import Any, Literal, NewType, Self
 
 from attrs import define, field, frozen
@@ -278,3 +279,145 @@ class Query:
             if i < len(expressions) - 1 and sep == ",":
                 yield sep
             yield "\n"
+
+
+class _InsertFlag(Enum):
+    DEFAULT = ""
+    OR_REPLACE = "OR REPLACE"
+    OR_IGNORE = "OR IGNORE"
+
+
+@define
+class Insert:
+    """Insert Builder for SQLite."""
+
+    table: str = ""
+    flag: _InsertFlag = _InsertFlag.DEFAULT
+    columns: list[str] = field(factory=list)
+    values: list[tuple[Any, ...]] = field(factory=list)
+    returning_columns: list[_AliasedExpr] = field(factory=list)
+
+    def or_ignore(self) -> Self:
+        """Set the insert flag to OR IGNORE."""
+        self.flag = _InsertFlag.OR_IGNORE
+        return self
+
+    def or_replace(self) -> Self:
+        """Set the insert flag to OR REPLACE."""
+        self.flag = _InsertFlag.OR_REPLACE
+        return self
+
+    def into(self, table: str) -> Self:
+        """Specify the table to insert into."""
+        self.table = table
+        return self
+
+    def columns_(self, *columns: str) -> Self:
+        """Specify the columns to insert values into."""
+        self.columns.extend(columns)
+        return self
+
+    def values_(self, *values: Any) -> Self:
+        """Add a row of values to insert.
+
+        This method can be called multiple times to add multiple rows.
+        The number of values must match the number of columns (if specified).
+        """
+        if self.columns and len(values) != len(self.columns):
+            raise ValueError(f"Expected {len(self.columns)} values, got {len(values)}.")
+        self.values.append(tuple(values))
+        return self
+
+    def returning(self, *columns: str | tuple[str, str]) -> Self:
+        """Add a RETURNING clause to the insert statement."""
+        self.returning_columns.extend(
+            _AliasedExpr.from_arg(column) for column in columns
+        )
+        return self
+
+    def __str__(self) -> str:
+        """Generate the SQL insert statement."""
+        if not self.table:
+            raise ValueError("Table must be specified.")
+
+        sql = dedent(f"""\
+        INSERT {self.flag.value}
+        INTO {self.table}
+        """)
+
+        if self.columns:
+            columns_str = ", ".join(self.columns)
+            sql += f"({columns_str})\n"
+
+        if self.values:
+            placeholders = ", ".join(["?"] * len(self.columns))
+            sql += "VALUES\n"
+            sql += ",\n".join(f"({placeholders})" for _ in self.values)
+
+        if self.returning_columns:
+            returning_str = ", ".join(str(col) for col in self.returning_columns)
+            sql += f"\nRETURNING {returning_str}"
+
+        return sql
+
+    @property
+    def params(self) -> tuple[Any, ...]:
+        """Get the parameters for the insert statement."""
+        return tuple(value for row in self.values for value in row)
+
+
+@define
+class Delete:
+    """Delete Builder for SQLite."""
+
+    table: str = ""
+    where_expressions: list[_Condition] = field(factory=list)
+    returning_columns: list[_AliasedExpr] = field(factory=list)
+
+    def from_(self, table: str) -> Self:
+        """Specify the table to delete from."""
+        self.table = table
+        return self
+
+    def where(
+        self, *conditions: str | tuple[str, Any] | tuple[str, Any, Any] | _Condition
+    ) -> Self:
+        """Add WHERE clause to the delete statement."""
+        for condition in conditions:
+            if isinstance(condition, _Condition):
+                self.where_expressions.append(condition)
+            else:
+                self.where_expressions.append(_Condition.from_arg(condition))
+        return self
+
+    def returning(self, *columns: str | tuple[str, str]) -> Self:
+        """Add a RETURNING clause to the delete statement."""
+        self.returning_columns.extend(
+            _AliasedExpr.from_arg(column) for column in columns
+        )
+        return self
+
+    def __str__(self) -> str:
+        """Generate the SQL delete statement."""
+        if not self.table:
+            raise ValueError("Table must be specified.")
+
+        sql = "DELETE FROM " + self.table + "\n"  # noqa: S608
+
+        if self.where_expressions:
+            sql += "WHERE "
+            sql += " AND ".join(str(cond.expression) for cond in self.where_expressions)
+
+        if self.returning_columns:
+            returning_str = ", ".join(str(col) for col in self.returning_columns)
+            sql += f"\nRETURNING {returning_str}"
+
+        return sql
+
+    @property
+    def params(self) -> tuple[Any, ...]:
+        """Get the parameters for the delete statement."""
+        params = []
+        for condition in self.where_expressions:
+            params.extend(condition.params)
+        return tuple(params)
