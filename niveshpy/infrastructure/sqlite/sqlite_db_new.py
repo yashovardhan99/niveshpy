@@ -4,16 +4,20 @@ import atexit
 import functools
 import re
 import sqlite3
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from textwrap import dedent
+from typing import TypeVar, overload
 
 import platformdirs
 from attrs import field, frozen
+from cattrs import Converter
 
 from niveshpy.core.logging import logger
 from niveshpy.exceptions import DatabaseError, IntegrityError
+from niveshpy.infrastructure.sqlite.converters import get_converter
+from niveshpy.infrastructure.sqlite.query import Delete, Insert, Query
 
 
 def _iregexp(pattern: str, value: str | None) -> bool:
@@ -23,6 +27,9 @@ def _iregexp(pattern: str, value: str | None) -> bool:
     return bool(re.search(pattern, value, re.IGNORECASE))
 
 
+T = TypeVar("T")
+
+
 @frozen
 class SqliteDatabase:
     """SQLite database session management and migrations."""
@@ -30,7 +37,7 @@ class SqliteDatabase:
     db_path: Path = field(
         factory=lambda: platformdirs.user_data_path("niveshpy") / "niveshpy.db"
     )
-    _debug: bool = field(default=False, repr=False, alias="debug")
+    _converter: Converter = field(init=False, repr=False, factory=get_converter)
 
     @functools.cached_property
     def connection(self) -> sqlite3.Connection:
@@ -39,10 +46,10 @@ class SqliteDatabase:
         try:
             conn = sqlite3.connect(self.db_path, check_same_thread=False)
             logger.debug("SQLite connection established to %s", self.db_path)
-            if self._debug:
-                conn.set_trace_callback(logger.debug)
+            conn.set_trace_callback(logger.debug)
             conn.create_function("iregexp", 2, _iregexp)
             conn.execute("PRAGMA foreign_keys=ON")
+            conn.row_factory = sqlite3.Row
             atexit.register(conn.close)
             return conn
         except sqlite3.Error as e:
@@ -111,3 +118,126 @@ class SqliteDatabase:
                     raise DatabaseError(
                         f"Failed to apply migration: {migration_file.name}"
                     ) from e
+
+    @overload
+    def select_many(self, query: Query, cl: type[T] = ...) -> Sequence[T]: ...
+
+    @overload
+    def select_many(self, query: Query, cl: None = ...) -> Sequence[sqlite3.Row]: ...
+
+    def select_many(
+        self, query: Query, cl: type[T] | None = None
+    ) -> Sequence[sqlite3.Row] | Sequence[T]:
+        """Execute a SELECT query and return the results as a list of rows or structured objects.
+
+        Args:
+            query: The SQL query to execute.
+            cl: Optional class type to structure the results into. If None, returns sqlite3.Row objects.
+
+        Returns:
+            A sequence of results, either as sqlite3.Row objects or structured instances of the specified class.
+
+        Raises:
+            DatabaseError: If there is an error executing the query.
+        """
+        try:
+            with self.connection as conn:
+                query_str = str(query)
+                query_params = query.params
+                results = conn.execute(query_str, query_params).fetchall()
+                logger.debug("Query returned %d rows", len(results))
+
+            if cl is not None:
+                # If a class is provided, structure the results into instances of that class
+                return [self._converter.structure(result, cl) for result in results]
+            else:
+                # Otherwise, return the raw sqlite3.Row objects
+                return results
+        except DatabaseError as e:
+            raise DatabaseError("Failed to execute SELECT query") from e
+
+    @overload
+    def select_one(self, query: Query, cl: type[T] = ...) -> T | None: ...
+
+    @overload
+    def select_one(self, query: Query, cl: None = ...) -> sqlite3.Row | None: ...
+
+    def select_one(
+        self, query: Query, cl: type[T] | None = None
+    ) -> T | sqlite3.Row | None:
+        """Execute a SELECT query and return a single result as a row or structured object.
+
+        Args:
+            query: The SQL query to execute.
+            cl: Optional class type to structure the result into. If None, returns a sqlite3.Row object.
+
+        Returns:
+            A single result, either as a sqlite3.Row object or a structured instance of the specified class, or None if no results are found.
+
+        Raises:
+            DatabaseError: If there is an error executing the query.
+        """
+        try:
+            with self.connection as conn:
+                query_str = str(query)
+                query_params = query.params
+                result = conn.execute(query_str, query_params).fetchone()
+                logger.debug("Query returned 1 row: %s", str(result))
+
+            if result is None:
+                return None
+
+            if cl is not None:
+                # If a class is provided
+                return self._converter.structure(result, cl)
+            else:
+                # Otherwise, return the raw sqlite3.Row object
+                return result
+        except DatabaseError as e:
+            raise DatabaseError("Failed to execute SELECT query") from e
+
+    def execute(self, stmt: Insert | Delete) -> int:
+        """Execute an INSERT or DELETE statement and return the number of affected rows.
+
+        Args:
+            stmt: The SQL statement to execute.
+
+        Returns:
+            The number of rows affected by the statement.
+
+        Raises:
+            DatabaseError: If there is an error executing the statement.
+        """
+        try:
+            with self.connection as conn:
+                stmt_str = str(stmt)
+                stmt_params = stmt.params
+                result = conn.execute(stmt_str, stmt_params)
+                affected_rows = result.rowcount
+                logger.debug("Statement affected %d rows", affected_rows)
+                return affected_rows
+        except DatabaseError as e:
+            raise DatabaseError("Failed to execute statement") from e
+
+    def executemany(self, stmt: Insert | Delete, params_list: Sequence[tuple]) -> int:
+        """Execute an INSERT or DELETE statement with multiple sets of parameters.
+
+        Args:
+            stmt: The SQL statement to execute.
+            params_list: A sequence of parameter tuples to execute the statement with.
+
+        Returns:
+            The total number of rows affected by all executions of the statement.
+
+        Raises:
+            DatabaseError: If there is an error executing the statement.
+        """
+        try:
+            with self.connection as conn:
+                stmt_str = str(stmt)
+                result = conn.executemany(stmt_str, params_list)
+                affected_rows = result.rowcount
+                logger.debug("Statement affected a total of %d rows", affected_rows)
+                return affected_rows
+        except DatabaseError as e:
+            raise DatabaseError("Failed to execute statement") from e
