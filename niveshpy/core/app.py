@@ -85,7 +85,7 @@ class Application:
         """Return the account repository."""
         from niveshpy.infrastructure.sqlite.repositories import SqliteAccountRepository
 
-        return SqliteAccountRepository(self.db.session_factory)
+        return SqliteAccountRepository(self.new_db)
 
     @functools.cached_property
     def transaction(self) -> TransactionService:
