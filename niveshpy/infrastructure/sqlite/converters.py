@@ -30,7 +30,12 @@ def _structure_datetime(value: str, cls: type[datetime]) -> datetime:
 
     Assumes the stored datetime is in UTC and returns a timezone-aware datetime.
     """
-    return datetime.fromisoformat(value).replace(tzinfo=UTC)
+    return (
+        datetime.fromisoformat(value)
+        .replace(tzinfo=UTC)
+        .astimezone()
+        .replace(tzinfo=None)
+    )
 
 
 @_db_converter.register_unstructure_hook
