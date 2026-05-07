@@ -71,6 +71,10 @@ class SqliteAccountRepository:
             .select(*ACCOUNT_COLUMNS)
             .order_by("id")
         )
+        if limit is not None:
+            query = query.limit(limit)
+        if offset > 0:
+            query = query.offset(offset)
         return self.database.select_many(query, cl=AccountPublic)
 
     def find_accounts_by_ids(
@@ -134,11 +138,13 @@ class SqliteAccountRepository:
         )
         with self.database.cursor() as cursor:
             result = cursor.execute(str(stmt), stmt.params)
-            inserted_account_id = result.fetchone()[0]
-        if inserted_account_id is not None:
+            inserted_account_row = result.fetchone()
+        if inserted_account_row is not None:
+            inserted_account_id = inserted_account_row[0]
             logger.debug("Inserted new account with ID: %d", inserted_account_id)
         else:
             logger.debug("Account already exists, skipping insert: %s", account)
+            inserted_account_id = None
         return inserted_account_id
 
     # # INSERT operations for multiple accounts
