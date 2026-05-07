@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Iterable, Sequence
 from enum import Enum
 from textwrap import dedent
-from typing import Any, Literal, NewType, Self
+from typing import Any, Literal, NewType, Self, overload
 
 from attrs import define, field, frozen
 
@@ -24,9 +25,46 @@ class _Condition:
         return cls(_Expr(arg))
 
 
-def or_(*conditions: str | tuple[str, Any] | tuple[str, Any, Any]) -> _Condition:
+ConditionType = str | tuple[str, Any] | tuple[str, Any, Any] | _Condition
+
+
+@overload
+def in_(column: str, *values: Any, not_: bool = False) -> _Condition: ...
+
+
+@overload
+def in_(
+    column: tuple[str, ...], *values: tuple[Any, ...], not_: bool = False
+) -> _Condition: ...
+
+
+def in_(column: str | tuple[str, ...], *values: Any, not_: bool = False) -> _Condition:
+    """Create an IN condition with the given values."""
+    if isinstance(column, tuple):
+        cols = len(column)
+        placeholders = ", ".join([f"({', '.join(['?'] * cols)})"] * len(values))
+        return _Condition(
+            _Expr(
+                f"({', '.join(column)}) {'NOT IN' if not_ else 'IN'} ({placeholders})"
+            ),
+            tuple(p for v in values for p in v),
+        )
+    else:
+        placeholders = ", ".join(["?"] * len(values))
+        return _Condition(
+            _Expr(f"{column} {'NOT IN' if not_ else 'IN'} ({placeholders})"), values
+        )
+
+
+not_in = functools.partial(in_, not_=True)
+
+
+def or_(*conditions: ConditionType) -> _Condition:
     """Combine conditions with OR, wrapped in parentheses."""
-    parsed = [_Condition.from_arg(c) for c in conditions]
+    parsed = [
+        _Condition.from_arg(c) if not isinstance(c, _Condition) else c
+        for c in conditions
+    ]
     expression = _Expr("(" + " OR ".join(str(c.expression) for c in parsed) + ")")
     params = tuple(p for c in parsed for p in c.params)
     return _Condition(expression, params)
@@ -126,7 +164,7 @@ class Query:
     def join(
         self,
         table: str | tuple[str, str],
-        *on: str | tuple[str, Any] | tuple[str, Any, Any] | _Condition,
+        *on: ConditionType,
         type: Literal["inner", "left", "outer", "cross"] = "inner",
     ) -> Self:
         """Add JOIN clause to the query."""
@@ -142,9 +180,7 @@ class Query:
         )
         return self
 
-    def where(
-        self, *conditions: str | tuple[str, Any] | tuple[str, Any, Any] | _Condition
-    ) -> Self:
+    def where(self, *conditions: ConditionType) -> Self:
         """Add WHERE clause to the query."""
         for condition in conditions:
             if isinstance(condition, _Condition):
@@ -158,9 +194,7 @@ class Query:
         self.group_by_expressions.extend(_Expr(column) for column in columns)
         return self
 
-    def having(
-        self, *conditions: str | tuple[str, Any] | tuple[str, Any, Any] | _Condition
-    ) -> Self:
+    def having(self, *conditions: ConditionType) -> Self:
         """Add HAVING clause to the query."""
         for condition in conditions:
             if isinstance(condition, _Condition):
@@ -349,10 +383,9 @@ class Insert:
             columns_str = ", ".join(self.columns)
             sql += f"({columns_str})\n"
 
-        if self.values:
             placeholders = ", ".join(["?"] * len(self.columns))
             sql += "VALUES\n"
-            sql += ",\n".join(f"({placeholders})" for _ in self.values)
+            sql += f"({placeholders})\n"
 
         if self.returning_columns:
             returning_str = ", ".join(str(col) for col in self.returning_columns)
@@ -421,3 +454,9 @@ class Delete:
         for condition in self.where_expressions:
             params.extend(condition.params)
         return tuple(params)
+
+
+# Select helper constants for mapping fields to columns in repositories
+
+ACCOUNT_COLUMNS = ("id", "name", "institution", ("created_at", "created"), "properties")
+"""Mapping of AccountPublic attributes to database column names for accounts."""
