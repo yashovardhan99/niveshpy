@@ -164,3 +164,10 @@ class AmbiguousResourceError(ResourceError):
             super().__str__()
             + f" (resource_type: {self.resource_type}, query: {self.query})"
         )
+
+
+# Database errors
+
+
+class IntegrityError(DatabaseError):
+    """Raised when a database integrity constraint is violated."""
