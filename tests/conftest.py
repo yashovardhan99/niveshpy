@@ -47,3 +47,13 @@ def session(db):
 def session_factory(db):
     """Expose the session factory from the test database."""
     return db.session_factory
+
+
+@pytest.fixture
+def new_db():
+    """Create an in-memory SqliteDatabase (sqlite3) for testing."""
+    from niveshpy.infrastructure.sqlite.sqlite_db_new import SqliteDatabase
+
+    database = SqliteDatabase(db_path=Path(":memory:"))
+    database.initialize()
+    return database
