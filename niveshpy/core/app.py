@@ -71,7 +71,7 @@ class Application:
         """Return the security repository."""
         from niveshpy.infrastructure.sqlite.repositories import SqliteSecurityRepository
 
-        return SqliteSecurityRepository(self.db.session_factory)
+        return SqliteSecurityRepository(self.new_db)
 
     @functools.cached_property
     def account(self) -> AccountService:

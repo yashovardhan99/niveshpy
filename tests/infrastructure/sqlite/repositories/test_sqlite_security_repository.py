@@ -9,9 +9,9 @@ from niveshpy.models.security import SecurityCategory, SecurityCreate, SecurityT
 
 
 @pytest.fixture(scope="function")
-def security_repository(session_factory):
+def security_repository(new_db):
     """Provide a fresh SqliteSecurityRepository for each test."""
-    return SqliteSecurityRepository(session_factory)
+    return SqliteSecurityRepository(new_db)
 
 
 def test_insert_security_returns_true_and_persists_row(

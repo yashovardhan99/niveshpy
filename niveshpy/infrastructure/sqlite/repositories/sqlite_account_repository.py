@@ -25,10 +25,12 @@ class SqliteAccountRepository:
     """Repository for performing database operations related to accounts.
 
     Attributes:
-        session_factory: The sessionmaker instance used for creating database sessions.
+        database: The SqliteDatabase instance used for executing queries.
+        account_table_name: The name of the accounts table in the database.
     """
 
     database: SqliteDatabase
+    account_table_name: str = "account"
 
     # SELECT operations for single account
 
@@ -37,7 +39,7 @@ class SqliteAccountRepository:
         query = (
             Query()
             .select(*ACCOUNT_COLUMNS)
-            .from_("account")
+            .from_(self.account_table_name)
             .where(("id = ?", account_id))
         )
         return self.database.select_one(query, cl=AccountPublic)
@@ -49,7 +51,7 @@ class SqliteAccountRepository:
         query = (
             Query()
             .select(*ACCOUNT_COLUMNS)
-            .from_("account")
+            .from_(self.account_table_name)
             .where(("name = ?", name), ("institution = ?", institution))
         )
         return self.database.select_one(query, cl=AccountPublic)
@@ -67,7 +69,7 @@ class SqliteAccountRepository:
                     Field.ACCOUNT: ["name", "institution"],
                 },
             )
-            .from_("account")
+            .from_(self.account_table_name)
             .select(*ACCOUNT_COLUMNS)
             .order_by("id")
         )
@@ -94,7 +96,7 @@ class SqliteAccountRepository:
         query = (
             Query()
             .select(*ACCOUNT_COLUMNS)
-            .from_("account")
+            .from_(self.account_table_name)
             .where(in_("id", *account_ids))
         )
         return self.database.select_many(query, cl=AccountPublic)
@@ -114,7 +116,7 @@ class SqliteAccountRepository:
         query = (
             Query()
             .select(*ACCOUNT_COLUMNS)
-            .from_("account")
+            .from_(self.account_table_name)
             .where(
                 in_(
                     ("name", "institution"),
@@ -130,7 +132,7 @@ class SqliteAccountRepository:
         """Insert a new account into the database."""
         c = get_converter()
         stmt = (
-            Insert("account")
+            Insert(self.account_table_name)
             .or_ignore()
             .columns_("name", "institution", "properties")
             .values_(*c.unstructure_attrs_astuple(account))
@@ -159,7 +161,9 @@ class SqliteAccountRepository:
             return 0
 
         stmt = (
-            Insert("account").or_ignore().columns_("name", "institution", "properties")
+            Insert(self.account_table_name)
+            .or_ignore()
+            .columns_("name", "institution", "properties")
         )
         result = self.database.executemany(stmt, account_tuples)
         logger.debug("Inserted %d new accounts.", result)
@@ -169,7 +173,7 @@ class SqliteAccountRepository:
 
     def delete_account_by_id(self, account_id: int) -> bool:
         """Delete an account by its ID."""
-        stmt = Delete("account").where(("id = ?", account_id))
+        stmt = Delete(self.account_table_name).where(("id = ?", account_id))
         result = self.database.execute(stmt)
         if result == 0:
             logger.debug("No account found with ID %d to delete.", account_id)

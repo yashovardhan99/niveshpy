@@ -1,40 +1,51 @@
 """Repository module for performing database operations related to security entities."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 from itertools import chain
-from typing import Any, cast
+from textwrap import dedent
+from typing import Any
 
-from sqlalchemy import CursorResult, delete, func, select, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.orm import Session, sessionmaker
+from attrs import frozen
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.exceptions import ResourceNotFoundError
-from niveshpy.infrastructure.sqlite.models import Security
-from niveshpy.infrastructure.sqlite.query_filters import get_sqlalchemy_filters
+from niveshpy.infrastructure.sqlite.converters import get_converter
+from niveshpy.infrastructure.sqlite.query import (
+    SECURITY_COLUMNS,
+    Delete,
+    Insert,
+    Query,
+    in_,
+)
+from niveshpy.infrastructure.sqlite.query_filters_new import generate_query_from_filters
+from niveshpy.infrastructure.sqlite.sqlite_db_new import SqliteDatabase
 from niveshpy.models.security import SecurityCreate, SecurityPublic
 
 
-@dataclass(slots=True, frozen=True)
+@frozen
 class SqliteSecurityRepository:
     """Repository for performing database operations related to securities.
 
     Attributes:
-        session_factory: The sessionmaker instance used for creating database sessions.
+        database: The SqliteDatabase instance used for executing queries.
+        security_table_name: The name of the securities table in the database.
     """
 
-    session_factory: sessionmaker[Session]
+    database: SqliteDatabase
+    security_table_name: str = "security"
 
     # SELECT operations for single security
 
     def get_security_by_key(self, key: str) -> SecurityPublic | None:
         """Fetch a security by its unique key."""
-        with self.session_factory() as session:
-            security = session.get(Security, key)
-            logger.debug("Fetched security by key '%s': %s", key, str(security))
-            return security.to_public() if security else None
+        query = (
+            Query()
+            .select(*SECURITY_COLUMNS)
+            .from_(self.security_table_name)
+            .where(("key = ?", key))
+        )
+        return self.database.select_one(query, cl=SecurityPublic)
 
     # SELECT operations for multiple securities
 
@@ -42,64 +53,52 @@ class SqliteSecurityRepository:
         self, filters: list[FilterNode], limit: int | None = None, offset: int = 0
     ) -> Sequence[SecurityPublic]:
         """Find securities matching the given filters with optional pagination."""
-        where_clause = get_sqlalchemy_filters(
-            filters,
-            {
-                Field.SECURITY: ["key", "name"],
-                Field.TYPE: ["type", "category"],
-            },
-        )
-        with self.session_factory() as session:
-            securities = session.scalars(
-                select(Security)
-                .where(*where_clause)
-                .offset(offset)
-                .limit(limit)
-                .order_by(Security.key)
-            ).all()
-            logger.debug(
-                "Fetched securities with filters %s, limit %s, offset %s: %d results",
+        query = (
+            generate_query_from_filters(
                 filters,
-                limit,
-                offset,
-                len(securities),
+                {
+                    Field.SECURITY: ["key", "name"],
+                    Field.TYPE: ["type", "category"],
+                },
             )
-            return [sec.to_public() for sec in securities]
+            .from_(self.security_table_name)
+            .select(*SECURITY_COLUMNS)
+            .order_by("key")
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        if offset > 0:
+            query = query.offset(offset)
+        return self.database.select_many(query, cl=SecurityPublic)
 
     def find_securities_by_keys(self, keys: Sequence[str]) -> Sequence[SecurityPublic]:
         """Find securities matching the given list of keys."""
         if not keys:
             return []
-        with self.session_factory() as session:
-            securities = session.scalars(
-                select(Security).where(Security.key.in_(keys))
-            ).all()
-            logger.debug(
-                "Fetched securities by %d keys: %d results", len(keys), len(securities)
-            )
-            return [sec.to_public() for sec in securities]
+
+        query = (
+            Query()
+            .select(*SECURITY_COLUMNS)
+            .from_(self.security_table_name)
+            .where(in_("key", *keys))
+        )
+        return self.database.select_many(query, cl=SecurityPublic)
 
     # INSERT operations for single security
 
     def insert_security(self, security: SecurityCreate) -> bool:
         """Insert a new security into the database."""
-        with self.session_factory() as session:
-            stmt = (
-                sqlite_insert(Security)
-                .values(
-                    key=security.key,
-                    name=security.name,
-                    type=security.type,
-                    category=security.category,
-                    properties=security.properties,
-                )
-                .on_conflict_do_nothing()
-            )
-            result = cast(CursorResult, session.execute(stmt)).rowcount
-            session.commit()
-            if result == 0:
-                logger.debug("Security already exists, skipping insert: %s", security)
-                return False
+        c = get_converter()
+        stmt = (
+            Insert(self.security_table_name)
+            .or_ignore()
+            .columns_("key", "name", "type", "category", "properties")
+        ).values_(*c.unstructure_attrs_astuple(security))
+        result = self.database.execute(stmt)
+        if result == 0:
+            logger.debug("Security already exists, skipping insert: %s", security)
+            return False
+        else:
             logger.debug("Inserted new security with key: %s", security.key)
             return True
 
@@ -107,45 +106,36 @@ class SqliteSecurityRepository:
 
     def insert_multiple_securities(self, securities: Sequence[SecurityCreate]) -> int:
         """Insert multiple securities into the database."""
-        security_dicts = [
-            {
-                "key": sec.key,
-                "name": sec.name,
-                "type": sec.type,
-                "category": sec.category,
-                "properties": sec.properties,
-            }
-            for sec in securities
-        ]
-        if not security_dicts:
+        if not securities:
             logger.debug("No securities provided for bulk insert.")
             return 0
 
-        with self.session_factory() as session:
-            stmt = (
-                sqlite_insert(Security).values(security_dicts).on_conflict_do_nothing()
-            )
-            result = cast(CursorResult, session.execute(stmt)).rowcount
+        stmt = (
+            Insert(self.security_table_name)
+            .or_ignore()
+            .columns_("key", "name", "type", "category", "properties")
+        )
+        c = get_converter()
+        security_tuples = [c.unstructure_attrs_astuple(sec) for sec in securities]
 
-            session.commit()
-            logger.debug(
-                "Inserted %d new securities out of %d provided.",
-                result,
-                len(securities),
-            )
-            return result
+        result = self.database.executemany(stmt, security_tuples)
+        logger.debug(
+            "Inserted %d new securities out of %d provided.",
+            result,
+            len(securities),
+        )
+        return result
 
     # DELETE operations
 
     def delete_security_by_key(self, key: str) -> bool:
         """Delete a security from the database by its key."""
-        stmt = delete(Security).where(Security.key == key)
-        with self.session_factory() as session:
-            result = cast(CursorResult, session.execute(stmt)).rowcount
-            if result == 0:
-                logger.debug("No security found with key %s to delete.", key)
-                return False
-            session.commit()
+        stmt = Delete(self.security_table_name).where(("key = ?", key))
+        result = self.database.execute(stmt)
+        if result == 0:
+            logger.debug("No security found with key %s to delete.", key)
+            return False
+        else:
             logger.debug("Deleted security with key %s.", key)
             return True
 
@@ -176,18 +166,22 @@ class SqliteSecurityRepository:
         # JSON_SET requires keys in the format of "$.propertyName" to update
         # specific properties within the JSON column
         # and flatten the list for JSON_SET arguments
-        args = chain.from_iterable((f"$.{name}", value) for name, value in properties)
+        args = tuple(
+            chain.from_iterable((f"$.{name}", value) for name, value in properties)
+        ) + (security_key,)
 
-        stmt = (
-            update(Security)
-            .where(Security.key == security_key)
-            .values(properties=func.json_set(Security.properties, *args))
+        placeholders = ", ".join(["?"] * (len(properties) * 2))
+
+        stmt = dedent(
+            f"""UPDATE {self.security_table_name}
+            SET properties = json_set(properties, {placeholders})
+            WHERE key = ?"""  # noqa: S608 - table name is not user input, and parameters are used for all values
         )
-        with self.session_factory() as session:
-            result = cast(CursorResult, session.execute(stmt)).rowcount
-            if result == 0:
+
+        with self.database.cursor() as cursor:
+            result = cursor.execute(stmt, args)
+            if result.rowcount == 0:
                 raise ResourceNotFoundError("Security", security_key)
-            session.commit()
             logger.debug(
                 "Updated properties %s for security with key %s.",
                 [name for name, _ in properties],

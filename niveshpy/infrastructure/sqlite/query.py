@@ -41,6 +41,10 @@ def in_(
 def in_(column: str | tuple[str, ...], *values: Any, not_: bool = False) -> _Condition:
     """Create an IN condition with the given values."""
     if isinstance(column, tuple):
+        if values and not isinstance(values[0], tuple):
+            raise TypeError(
+                "For multi-column IN conditions, values must be tuples matching the number of columns."
+            )
         cols = len(column)
         placeholders = ", ".join([f"({', '.join(['?'] * cols)})"] * len(values))
         return _Condition(
@@ -50,6 +54,10 @@ def in_(column: str | tuple[str, ...], *values: Any, not_: bool = False) -> _Con
             tuple(p for v in values for p in v),
         )
     else:
+        if values and isinstance(values[0], tuple):
+            raise TypeError(
+                "For single column IN conditions, values should not be tuples."
+            )
         placeholders = ", ".join(["?"] * len(values))
         return _Condition(
             _Expr(f"{column} {'NOT IN' if not_ else 'IN'} ({placeholders})"), values
@@ -460,3 +468,6 @@ class Delete:
 
 ACCOUNT_COLUMNS = ("id", "name", "institution", ("created_at", "created"), "properties")
 """Mapping of AccountPublic attributes to database column names for accounts."""
+
+SECURITY_COLUMNS = ("key", "name", "type", "category", "properties", "created")
+"""Mapping of SecurityPublic attributes to database column names for securities."""
