@@ -16,15 +16,15 @@ from niveshpy.models.security import SecurityCategory, SecurityCreate, SecurityT
 
 
 @pytest.fixture(scope="function")
-def price_repository(session_factory):
-    """Provide a fresh SqlitePriceRepository for each test."""
-    return SqlitePriceRepository(session_factory)
+def security_repository(new_db):
+    """Provide a fresh SqliteSecurityRepository for each test."""
+    return SqliteSecurityRepository(new_db)
 
 
 @pytest.fixture(scope="function")
-def security_repository(session_factory):
-    """Provide a fresh SqliteSecurityRepository for each test."""
-    return SqliteSecurityRepository(session_factory)
+def price_repository(new_db, security_repository):
+    """Provide a fresh SqlitePriceRepository for each test."""
+    return SqlitePriceRepository(new_db, security_repository)
 
 
 def test_overwrite_price_persists_row(
@@ -160,8 +160,8 @@ def test_find_prices_applies_filter_limit_and_offset(
         ]
     )
     assert len(filtered) == 2
-    assert filtered[0].date == datetime.date(2024, 1, 2)
-    assert filtered[1].date == datetime.date(2024, 1, 3)
+    assert filtered[0].date == datetime.date(2024, 1, 3)
+    assert filtered[1].date == datetime.date(2024, 1, 2)
 
     paged = price_repository.find_all_prices([], limit=1, offset=1)
     assert len(paged) == 1
@@ -169,7 +169,7 @@ def test_find_prices_applies_filter_limit_and_offset(
     assert paged[0].open == Decimal("151.00")
     assert paged[0].high == Decimal("156.00")
     assert paged[0].low == Decimal("150.00")
-    assert paged[0].close == Decimal("155.00")
+    assert paged[0].close == Decimal("155.00")  # second in DESC order: jan 2
 
 
 def test_find_latest_prices(

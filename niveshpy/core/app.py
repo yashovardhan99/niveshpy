@@ -130,7 +130,7 @@ class Application:
         """Return the price repository."""
         from niveshpy.infrastructure.sqlite.repositories import SqlitePriceRepository
 
-        return SqlitePriceRepository(self.db.session_factory)
+        return SqlitePriceRepository(self.new_db, self.security_repository)
 
     @functools.cached_property
     def price(self) -> PriceService:

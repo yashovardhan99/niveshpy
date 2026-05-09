@@ -3,6 +3,7 @@
 import json
 from collections.abc import Mapping
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 
 import cattrs
@@ -13,6 +14,18 @@ from cattrs.cols import (
 )
 
 _db_converter = cattrs.Converter()
+
+
+@_db_converter.register_unstructure_hook
+def _unstructure_date(value: date) -> str:
+    """Unstructure a date to an ISO format string."""
+    return date.isoformat(value)
+
+
+@_db_converter.register_structure_hook
+def _structure_date(value: str, cls: type[date]) -> date:
+    """Structure an ISO format string back to a date."""
+    return date.fromisoformat(value)
 
 
 @_db_converter.register_unstructure_hook
@@ -39,15 +52,15 @@ def _structure_datetime(value: str, cls: type[datetime]) -> datetime:
 
 
 @_db_converter.register_unstructure_hook
-def _unstructure_date(value: date) -> str:
-    """Unstructure a date to an ISO format string."""
-    return value.isoformat()
+def _unstructure_decimal(value: Decimal) -> str:
+    """Unstructure a Decimal to a string."""
+    return str(value)
 
 
 @_db_converter.register_structure_hook
-def _structure_date(value: str, cls: type[date]) -> date:
-    """Structure an ISO format string back to a date."""
-    return date.fromisoformat(value)
+def _structure_decimal(value: str | float | int, cls: type[Decimal]) -> Decimal:
+    """Structure a string back to a Decimal."""
+    return Decimal(str(value))
 
 
 @_db_converter.register_structure_hook_factory(is_mapping)

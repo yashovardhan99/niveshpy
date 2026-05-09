@@ -89,7 +89,7 @@ class SqliteDatabase:
                     )
                 """)
                 )
-        except DatabaseError as e:
+        except sqlite3.Error as e:
             raise DatabaseError("Failed to create migration table") from e
 
         # Check for pending migration files and apply them
@@ -98,7 +98,7 @@ class SqliteDatabase:
             with self.cursor() as cursor:
                 cursor.execute("SELECT file FROM migration")
                 applied_migrations = {row[0] for row in cursor.fetchall()}
-        except DatabaseError as e:
+        except sqlite3.Error as e:
             raise DatabaseError("Failed to read applied migrations") from e
 
         # Sort migration files to ensure they are applied in the correct order
@@ -114,7 +114,7 @@ class SqliteDatabase:
                             "INSERT INTO migration (file) VALUES (?)",
                             (migration_file.name,),
                         )
-                except DatabaseError as e:
+                except sqlite3.Error as e:
                     raise DatabaseError(
                         f"Failed to apply migration: {migration_file.name}"
                     ) from e
@@ -153,7 +153,7 @@ class SqliteDatabase:
             else:
                 # Otherwise, return the raw sqlite3.Row objects
                 return results
-        except DatabaseError as e:
+        except sqlite3.Error as e:
             raise DatabaseError("Failed to execute SELECT query") from e
 
     @overload
@@ -193,7 +193,7 @@ class SqliteDatabase:
             else:
                 # Otherwise, return the raw sqlite3.Row object
                 return result
-        except DatabaseError as e:
+        except sqlite3.Error as e:
             raise DatabaseError("Failed to execute SELECT query") from e
 
     def execute(self, stmt: Insert | Delete) -> int:
@@ -216,7 +216,9 @@ class SqliteDatabase:
                 affected_rows = result.rowcount
                 logger.debug("Statement affected %d rows", affected_rows)
                 return affected_rows
-        except DatabaseError as e:
+        except sqlite3.IntegrityError as e:
+            raise IntegrityError() from e
+        except sqlite3.Error as e:
             raise DatabaseError("Failed to execute statement") from e
 
     def executemany(self, stmt: Insert | Delete, params_list: Sequence[tuple]) -> int:
@@ -239,5 +241,7 @@ class SqliteDatabase:
                 affected_rows = result.rowcount
                 logger.debug("Statement affected a total of %d rows", affected_rows)
                 return affected_rows
-        except DatabaseError as e:
+        except sqlite3.IntegrityError as e:
+            raise IntegrityError() from e
+        except sqlite3.Error as e:
             raise DatabaseError("Failed to execute statement") from e

@@ -10,6 +10,8 @@ from typing import Any, Literal, NewType, Self, overload
 
 from attrs import define, field, frozen
 
+from niveshpy.infrastructure.sqlite.converters import get_converter
+
 _Expr = NewType("_Expr", str)
 
 
@@ -150,15 +152,40 @@ class Query:
         return self
 
     def select(
-        self, *columns: str | tuple[str, str], distinct: bool = False, all: bool = False
+        self,
+        *columns: str | tuple[str, str],
+        distinct: bool = False,
+        all: bool = False,
+        prefix_table: str | None = None,
     ) -> Self:
-        """Build a SELECT query."""
+        """Build a SELECT query.
+
+        Args:
+            columns: Columns to select, specified as strings or (expression, alias) tuples.
+            distinct: If True, add DISTINCT to the SELECT clause.
+            all: If True, add ALL to the SELECT clause.
+            prefix_table: Optional table name to prefix column names with for disambiguation.
+
+        Returns:
+            Self: The Query object with the SELECT clause added.
+
+        Raises:
+            ValueError: If both distinct and all are True, which is not allowed in SQL.
+        """
         if distinct and all:
             raise ValueError("Cannot use both DISTINCT and ALL in a SELECT query.")
         if distinct:
             self.select_flag = self._SelectFlag.DISTINCT
         if all:
             self.select_flag = self._SelectFlag.ALL
+
+        if prefix_table:
+            columns = tuple(
+                (f"{prefix_table}.{col}", col)
+                if isinstance(col, str)
+                else (f"{prefix_table}.{col[0]}", col[1])
+                for col in columns
+            )
         self.select_expressions.extend(
             _AliasedExpr.from_arg(column) for column in columns
         )
@@ -234,6 +261,7 @@ class Query:
     def params(self) -> tuple[Any, ...]:
         """Build the list of parameters for the query."""
         params = []
+        converter = get_converter()
         for cte in self.cte_expressions:
             params.extend(cte.query.params)
         for join in self.join_expressions:
@@ -245,7 +273,7 @@ class Query:
             params.append(self.limit_expression)
         if self.offset_expression is not None:
             params.append(self.offset_expression)
-        return tuple(params)
+        return tuple(converter.unstructure(params))
 
     def _build_sql(self, indent="") -> Iterable[str]:
         if self.cte_expressions:
@@ -404,7 +432,10 @@ class Insert:
     @property
     def params(self) -> tuple[Any, ...]:
         """Get the parameters for the insert statement."""
-        return tuple(value for row in self.values for value in row)
+        converter = get_converter()
+        return tuple(
+            converter.unstructure(value) for row in self.values for value in row
+        )
 
 
 @define
@@ -458,9 +489,10 @@ class Delete:
     @property
     def params(self) -> tuple[Any, ...]:
         """Get the parameters for the delete statement."""
+        converter = get_converter()
         params = []
         for condition in self.where_expressions:
-            params.extend(condition.params)
+            params.extend(converter.unstructure(value) for value in condition.params)
         return tuple(params)
 
 
@@ -471,3 +503,26 @@ ACCOUNT_COLUMNS = ("id", "name", "institution", ("created_at", "created"), "prop
 
 SECURITY_COLUMNS = ("key", "name", "type", "category", "properties", "created")
 """Mapping of SecurityPublic attributes to database column names for securities."""
+
+PRICE_COLUMNS = (
+    "security_key",
+    "date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "properties",
+    "created",
+)
+"""Mapping of PricePublic attributes to database column names for prices."""
+
+PRICE_CREATE_COLUMNS = (
+    "security_key",
+    "date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "properties",
+)
+"""Mapping of PriceCreate attributes to database column names for price creation."""
