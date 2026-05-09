@@ -15,6 +15,16 @@ from niveshpy.infrastructure.sqlite.converters import get_converter
 _Expr = NewType("_Expr", str)
 
 
+def q(column_or_table: str) -> str:
+    """Quote an identifier (column or table name) for use in SQL queries."""
+    if column_or_table.startswith('"') and column_or_table.endswith('"'):
+        return column_or_table  # Already quoted
+    if "." in column_or_table:
+        parts = column_or_table.split(".")
+        return ".".join(f'"{part}"' for part in parts)
+    return f'"{column_or_table}"'
+
+
 @frozen
 class _Condition:
     expression: _Expr
@@ -180,10 +190,11 @@ class Query:
             self.select_flag = self._SelectFlag.ALL
 
         if prefix_table:
+            quoted_prefix = q(prefix_table)
             columns = tuple(
-                (f"{prefix_table}.{col}", col)
+                (f"{quoted_prefix}.{col}", col)
                 if isinstance(col, str)
-                else (f"{prefix_table}.{col[0]}", col[1])
+                else (f"{quoted_prefix}.{col[0]}", col[1])
                 for col in columns
             )
         self.select_expressions.extend(
@@ -193,7 +204,12 @@ class Query:
 
     def from_(self, *tables: str | tuple[str, str]) -> Self:
         """Add FROM clause to the query."""
-        self.from_expressions.extend(_AliasedExpr.from_arg(table) for table in tables)
+        for table in tables:
+            if isinstance(table, tuple):
+                name, alias = table
+                self.from_expressions.append(_AliasedExpr.from_arg((q(name), alias)))
+            else:
+                self.from_expressions.append(_AliasedExpr.from_arg(q(table)))
         return self
 
     def join(
@@ -379,12 +395,12 @@ class Insert:
 
     def into(self, table: str) -> Self:
         """Specify the table to insert into."""
-        self.table = table
+        self.table = q(table)
         return self
 
     def columns_(self, *columns: str) -> Self:
         """Specify the columns to insert values into."""
-        self.columns.extend(columns)
+        self.columns.extend(q(column) for column in columns)
         return self
 
     def values_(self, *values: Any) -> Self:
@@ -448,7 +464,7 @@ class Delete:
 
     def from_(self, table: str) -> Self:
         """Specify the table to delete from."""
-        self.table = table
+        self.table = q(table)
         return self
 
     def where(
@@ -526,3 +542,29 @@ PRICE_CREATE_COLUMNS = (
     "properties",
 )
 """Mapping of PriceCreate attributes to database column names for price creation."""
+
+TRANSACTION_COLUMNS = (
+    "id",
+    "transaction_date",
+    "type",
+    "description",
+    "amount",
+    "units",
+    "security_key",
+    "account_id",
+    "properties",
+    "created",
+)
+"""Mapping of TransactionPublic attributes to database column names for transactions."""
+
+TRANSACTION_CREATE_COLUMNS = (
+    "transaction_date",
+    "type",
+    "description",
+    "amount",
+    "units",
+    "security_key",
+    "account_id",
+    "properties",
+)
+"""Mapping of TransactionCreate attributes to database column names for transaction creation."""

@@ -149,7 +149,9 @@ class SqliteDatabase:
 
             if cl is not None:
                 # If a class is provided, structure the results into instances of that class
-                return [self._converter.structure(result, cl) for result in results]
+                return [
+                    self._converter.structure(dict(result), cl) for result in results
+                ]
             else:
                 # Otherwise, return the raw sqlite3.Row objects
                 return results
@@ -189,7 +191,7 @@ class SqliteDatabase:
 
             if cl is not None:
                 # If a class is provided
-                return self._converter.structure(result, cl)
+                return self._converter.structure(dict(result), cl)
             else:
                 # Otherwise, return the raw sqlite3.Row object
                 return result

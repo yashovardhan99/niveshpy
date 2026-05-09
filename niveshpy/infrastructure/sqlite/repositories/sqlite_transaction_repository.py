@@ -2,79 +2,57 @@
 
 import datetime
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
-from decimal import Decimal
-from typing import ClassVar, Literal, cast
+from typing import Literal
 
-from sqlalchemy import CursorResult, Select, delete, func, insert, literal, select
-from sqlalchemy.orm import (
-    Session,
-    aliased,
-    contains_eager,
-    joinedload,
-    raiseload,
-    selectinload,
-    sessionmaker,
-)
+from attrs import evolve, frozen
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_fields_from_filters
+from niveshpy.domain.repositories import AccountRepository, SecurityRepository
 from niveshpy.domain.repositories.transaction_repository import (
     TransactionFetchProfile,
     TransactionSortOrder,
 )
-from niveshpy.exceptions import DatabaseError, OperationError
-from niveshpy.infrastructure.sqlite.models import Account, Price, Security, Transaction
-from niveshpy.infrastructure.sqlite.query_filters import get_sqlalchemy_filters
+from niveshpy.exceptions import DatabaseError, IntegrityError
+from niveshpy.infrastructure.sqlite.converters import get_converter
+from niveshpy.infrastructure.sqlite.query import (
+    PRICE_COLUMNS,
+    TRANSACTION_COLUMNS,
+    TRANSACTION_CREATE_COLUMNS,
+    Delete,
+    Insert,
+    Query,
+    in_,
+    q,
+)
+from niveshpy.infrastructure.sqlite.query_filters_new import generate_query_from_filters
+from niveshpy.infrastructure.sqlite.sqlite_db_new import SqliteDatabase
 from niveshpy.models.report import Allocation, HoldingUnitRow
 from niveshpy.models.transaction import TransactionCreate, TransactionPublic
 
 
-@dataclass(slots=True, frozen=True)
+@frozen
 class SqliteTransactionRepository:
     """Repository for performing CRUD operations on transactions in a SQLite database.
 
     Attributes:
-       session_factory: The sessionmaker instance used for creating database sessions.
+        database: An instance of SqliteDatabase for executing queries.
+        account_repository: An instance of AccountRepository for fetching related account data.
+        security_repository: An instance of SecurityRepository for fetching related security data.
+        account_table_name: The name of the account table in the database.
+        security_table_name: The name of the security table in the database.
+        transaction_table_name: The name of the transaction table in the database.
+        price_table_name: The name of the price table in the database.
     """
 
-    session_factory: sessionmaker[Session]
-
-    _column_mapping: ClassVar[dict[Field, list]] = {
-        Field.ACCOUNT: [Account.name, Account.institution],
-        Field.AMOUNT: ["amount"],
-        Field.DATE: ["transaction_date"],
-        Field.DESCRIPTION: ["description"],
-        Field.SECURITY: [
-            Security.key,
-            Security.name,
-            Security.type,
-            Security.category,
-        ],
-        Field.TYPE: [Transaction.type],
-    }
-
-    def _get_ordered_stmt(
-        self, stmt: Select[tuple[Transaction]], sort_order: TransactionSortOrder
-    ) -> Select[tuple[Transaction]]:
-        if sort_order == TransactionSortOrder.DATE_DESC_ID_ASC:
-            return stmt.order_by(
-                Transaction.transaction_date.desc(), Transaction.id.asc()
-            )
-        elif sort_order == TransactionSortOrder.DATE_ASC_ID_ASC:
-            return stmt.order_by(
-                Transaction.transaction_date.asc(), Transaction.id.asc()
-            )
-        elif sort_order == TransactionSortOrder.ID_ASC:
-            return stmt.order_by(Transaction.id.asc())
-        elif sort_order == TransactionSortOrder.ID_DESC:
-            return stmt.order_by(Transaction.id.desc())
-        else:
-            # This should never happen since TransactionSortOrder is an enum,
-            # but we check just in case to avoid returning an unordered statement
-            # if an invalid sort order is somehow passed in
-            raise OperationError(f"Unexpected sort order value: {sort_order}")
+    database: SqliteDatabase
+    account_repository: AccountRepository
+    security_repository: SecurityRepository
+    account_table_name = "account"
+    security_table_name = "security"
+    transaction_table_name = "transaction"
+    price_table_name = "price"
 
     def get_transaction_by_id(
         self,
@@ -90,28 +68,91 @@ class SqliteTransactionRepository:
         Returns:
             The TransactionPublic object if found, otherwise None.
         """
-        with self.session_factory() as session:
-            stmt = select(Transaction).where(Transaction.id == transaction_id)
-            if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
-                stmt = stmt.options(
-                    joinedload(Transaction.account),
-                    joinedload(Transaction.security),
-                )
-            else:
-                stmt = stmt.options(
-                    raiseload("*")
-                )  # Prevent loading any relationships for a more lightweight query
+        query = (
+            Query()
+            .select(*TRANSACTION_COLUMNS)
+            .from_(self.transaction_table_name)
+            .where(("id = ?", transaction_id))
+        )
+        result = self.database.select_one(query, cl=TransactionPublic)
 
-            transaction = session.scalar(stmt)
-            logger.debug(f"Fetched transaction with ID {transaction_id}: {transaction}")
-            if transaction:
-                return transaction.to_public(
-                    include_relations=(
-                        fetch_profile == TransactionFetchProfile.WITH_RELATIONS
-                    ),
-                )
-            else:
-                return None
+        if result is None:
+            logger.debug(f"No transaction found with ID {transaction_id}.")
+            return None
+
+        if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
+            # We fetch the related account and security data in a separate query
+            account = self.account_repository.get_account_by_id(result.account_id)
+            security = self.security_repository.get_security_by_key(result.security_key)
+            result = evolve(result, account=account, security=security)
+
+        logger.debug(f"Fetched transaction with ID {transaction_id}: {result}")
+        return result
+
+    def _update_transactions_with_relations(
+        self, transactions: Sequence[TransactionPublic]
+    ) -> Sequence[TransactionPublic]:
+        """Helper method to update a list of TransactionPublic objects with their related account and security data.
+
+        This is used to fetch related data when the fetch profile requires it.
+
+        Args:
+            transactions: A sequence of TransactionPublic objects that may have missing related data.
+
+        Returns:
+            A sequence of TransactionPublic objects with related account and security data populated.
+        """
+        if not transactions:
+            return []
+
+        # Fetch all unique account IDs and security keys from the transactions
+        account_ids = {txn.account_id for txn in transactions}
+        security_keys = {txn.security_key for txn in transactions}
+
+        # Fetch related accounts and securities in bulk to minimize database queries
+        accounts = {
+            account.id: account
+            for account in self.account_repository.find_accounts_by_ids(
+                tuple(account_ids)
+            )
+        }
+        securities = {
+            security.key: security
+            for security in self.security_repository.find_securities_by_keys(
+                tuple(security_keys)
+            )
+        }
+
+        # Update each transaction with its related account and security
+        updated_transactions = []
+        for txn in transactions:
+            account = accounts.get(txn.account_id)
+            security = securities.get(txn.security_key)
+            updated_txn = evolve(txn, account=account, security=security)
+            updated_transactions.append(updated_txn)
+
+        logger.debug(
+            "Updated %d transactions with related data.", len(updated_transactions)
+        )
+        return updated_transactions
+
+    def _update_query_with_sort_order(
+        self, query: Query, sort_order: TransactionSortOrder
+    ) -> Query:
+        if sort_order == TransactionSortOrder.DATE_DESC_ID_ASC:
+            return query.order_by(
+                "transaction_date DESC",
+                "id ASC",
+            )
+        elif sort_order == TransactionSortOrder.DATE_ASC_ID_ASC:
+            return query.order_by(
+                "transaction_date ASC",
+                "id ASC",
+            )
+        elif sort_order == TransactionSortOrder.ID_ASC:
+            return query.order_by("id ASC")
+        elif sort_order == TransactionSortOrder.ID_DESC:
+            return query.order_by("id DESC")
 
     def find_transactions(
         self,
@@ -133,57 +174,65 @@ class SqliteTransactionRepository:
         Returns:
             A sequence of TransactionPublic objects matching the filters and pagination criteria.
         """
-        filters = list(filters)
-        where_clauses = get_sqlalchemy_filters(
-            filters, SqliteTransactionRepository._column_mapping
+        filters = list(filters)  # Ensure we can iterate multiple times
+        query = (
+            generate_query_from_filters(
+                filters,
+                {
+                    Field.AMOUNT: [f"{q(self.transaction_table_name)}.amount"],
+                    Field.DATE: [f"{q(self.transaction_table_name)}.transaction_date"],
+                    Field.DESCRIPTION: [
+                        f"{q(self.transaction_table_name)}.description"
+                    ],
+                    Field.TYPE: [f"{q(self.transaction_table_name)}.type"],
+                    Field.ACCOUNT: [
+                        f"{q(self.account_table_name)}.name",
+                        f"{q(self.account_table_name)}.institution",
+                    ],
+                    Field.SECURITY: [
+                        f"{q(self.security_table_name)}.key",
+                        f"{q(self.security_table_name)}.name",
+                        f"{q(self.security_table_name)}.type",
+                        f"{q(self.security_table_name)}.category",
+                    ],
+                },
+            )
+            .from_(self.transaction_table_name)
+            .select(*TRANSACTION_COLUMNS, prefix_table=self.transaction_table_name)
         )
         fields = get_fields_from_filters(filters)
-        stmt = select(Transaction)
 
         if Field.ACCOUNT in fields:
-            # Only join the Account table if account-related filters are present to avoid unnecessary joins for better performance
-            stmt = stmt.join(Account)
-
-            if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
-                # Use contains_eager to load the account relationship in the same query
-                stmt = stmt.options(contains_eager(Transaction.account))
-
-        elif fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
-            # If account is not part of the filters but we want relations, we can still load it with a separate query
-            stmt = stmt.options(selectinload(Transaction.account))
+            # Only join the Account table if account-related filters are present
+            query.join(
+                self.account_table_name,
+                f"{q(self.transaction_table_name)}.account_id = {q(self.account_table_name)}.id",
+            )
 
         if Field.SECURITY in fields:
-            # Only join the Security table if security-related filters are present to avoid unnecessary joins for better performance
-            stmt = stmt.join(Security)
+            # Only join the Security table if security-related filters are present
+            query.join(
+                self.security_table_name,
+                f"{q(self.transaction_table_name)}.security_key = {q(self.security_table_name)}.key",
+            )
 
-            if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
-                # Use contains_eager to load the security relationship in the same query
-                stmt = stmt.options(contains_eager(Transaction.security))
+        query = self._update_query_with_sort_order(query, sort_order)
 
-        elif fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
-            # If security is not part of the filters but we want relations, we can still load it with a separate query
-            stmt = stmt.options(selectinload(Transaction.security))
+        if limit is not None:
+            query.limit(limit)
 
-        if fetch_profile == TransactionFetchProfile.MINIMAL:
-            stmt = stmt.options(
-                raiseload("*")
-            )  # Prevent loading any relationships for a more lightweight query
+        if offset:
+            query.offset(offset)
 
-        stmt = stmt.where(*where_clauses)
-        stmt = self._get_ordered_stmt(stmt, sort_order)
-        stmt = stmt.offset(offset).limit(limit)
+        result = self.database.select_many(query, cl=TransactionPublic)
+        if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
+            result = self._update_transactions_with_relations(result)
 
-        with self.session_factory() as session:
-            transactions = session.scalars(stmt).all()
-            logger.debug(f"Found {len(transactions)} transactions matching filters")
-            return [
-                transaction.to_public(
-                    include_relations=(
-                        fetch_profile == TransactionFetchProfile.WITH_RELATIONS
-                    ),
-                )
-                for transaction in transactions
-            ]
+        logger.debug(
+            "Found %d transactions matching filters with pagination.", len(result)
+        )
+
+        return result
 
     def find_transactions_by_ids(
         self,
@@ -204,31 +253,22 @@ class SqliteTransactionRepository:
         if not ids:
             return []
 
-        stmt = select(Transaction).where(Transaction.id.in_(ids))
+        query = (
+            Query()
+            .select(*TRANSACTION_COLUMNS)
+            .from_(self.transaction_table_name)
+            .where(in_(q(f"{self.transaction_table_name}.id"), *ids))
+        )
+
+        query = self._update_query_with_sort_order(query, sort_order)
+
+        transactions = self.database.select_many(query, cl=TransactionPublic)
 
         if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
-            stmt = stmt.options(
-                selectinload(Transaction.account),
-                selectinload(Transaction.security),
-            )
-        else:
-            stmt = stmt.options(
-                raiseload("*")
-            )  # Prevent loading any relationships for a more lightweight query
+            transactions = self._update_transactions_with_relations(transactions)
 
-        stmt = self._get_ordered_stmt(stmt, sort_order)
-
-        with self.session_factory() as session:
-            transactions = session.scalars(stmt).all()
-            logger.debug(f"Found {len(transactions)} transactions matching IDs")
-            return [
-                transaction.to_public(
-                    include_relations=(
-                        fetch_profile == TransactionFetchProfile.WITH_RELATIONS
-                    ),
-                )
-                for transaction in transactions
-            ]
+        logger.debug(f"Found {len(transactions)} transactions matching IDs")
+        return transactions
 
     def insert_transaction(self, transaction: TransactionCreate) -> int:
         """Insert a new transaction.
@@ -239,29 +279,39 @@ class SqliteTransactionRepository:
         Returns:
             The unique ID of the newly inserted transaction.
         """
+        c = get_converter()
         stmt = (
-            insert(Transaction)
-            .values(
-                transaction_date=transaction.transaction_date,
-                type=transaction.type,
-                description=transaction.description,
-                amount=transaction.amount,
-                units=transaction.units,
-                security_key=transaction.security_key,
-                account_id=transaction.account_id,
-                properties=transaction.properties,
-            )
-            .returning(Transaction.id)
+            Insert()
+            .into(self.transaction_table_name)
+            .columns_(*TRANSACTION_CREATE_COLUMNS)
+            .values_(*c.unstructure_attrs_astuple(transaction))
         )
-
-        with self.session_factory() as session:
-            transaction_id = session.scalar(stmt)
-            session.commit()
-            logger.debug(f"Inserted transaction with ID {transaction_id}")
-            if transaction_id is None:
-                # This should never happen since the ID is auto-generated by the database, but we check just in case to avoid returning None as an int
-                raise DatabaseError("Failed to insert transaction and retrieve its ID.")
-            return transaction_id
+        try:
+            with self.database.cursor() as cursor:
+                cursor.execute(str(stmt), stmt.params)
+                transaction_id = cursor.lastrowid
+                cursor.connection.commit()
+                logger.debug(f"Inserted transaction with ID {transaction_id}")
+                if transaction_id is None:
+                    # This should never happen since the ID is auto-generated by the database, but we check just in case to avoid returning None as an int
+                    raise DatabaseError(
+                        "Failed to insert transaction and retrieve its ID."
+                    )
+                return transaction_id
+        except IntegrityError as e:
+            logger.info(f"Failed to insert transaction due to integrity error: {e}")
+            if "FOREIGN KEY constraint failed" in str(e):
+                raise DatabaseError(
+                    "Failed to insert transaction due to foreign key constraint. "
+                    "Please ensure the referenced account_id and security_key exist."
+                ) from e
+            else:
+                raise DatabaseError(
+                    "Failed to insert transaction due to database integrity error."
+                ) from e
+        except DatabaseError as e:
+            logger.info("Failed to insert transaction due to database error: %s", e)
+            raise DatabaseError("Failed to insert transaction") from e
 
     def insert_multiple_transactions(
         self, transactions: Sequence[TransactionCreate]
@@ -277,25 +327,29 @@ class SqliteTransactionRepository:
         if not transactions:
             logger.debug("No transactions provided for bulk insert.")
             return 0
-        transaction_dicts = [
-            {
-                "transaction_date": transaction.transaction_date,
-                "type": transaction.type,
-                "description": transaction.description,
-                "amount": transaction.amount,
-                "units": transaction.units,
-                "security_key": transaction.security_key,
-                "account_id": transaction.account_id,
-                "properties": transaction.properties,
-            }
-            for transaction in transactions
-        ]
-        stmt = insert(Transaction).values(transaction_dicts)
-        with self.session_factory() as session:
-            result = cast(CursorResult, session.execute(stmt)).rowcount
-            session.commit()
-            logger.debug(f"Inserted {result} transactions.")
-            return result
+        stmt = (
+            Insert()
+            .into(self.transaction_table_name)
+            .columns_(*TRANSACTION_CREATE_COLUMNS)
+        )
+        c = get_converter()
+        transaction_tuples = [c.unstructure_attrs_astuple(txn) for txn in transactions]
+        try:
+            result = self.database.executemany(stmt, transaction_tuples)
+        except IntegrityError as e:
+            logger.info(f"Failed to insert transactions due to integrity error: {e}")
+            if "FOREIGN KEY constraint failed" in str(e):
+                raise DatabaseError(
+                    "Failed to insert transactions due to foreign key constraint. "
+                    "Please ensure the referenced account_id and security_key values exist."
+                ) from e
+            else:
+                raise DatabaseError(
+                    "Failed to insert transactions due to database integrity error."
+                ) from e
+
+        logger.debug(f"Inserted {result} transactions in bulk.")
+        return result
 
     def delete_transaction_by_id(self, transaction_id: int) -> bool:
         """Delete a transaction by its ID.
@@ -306,17 +360,17 @@ class SqliteTransactionRepository:
         Returns:
             True if the transaction was deleted successfully, False if no transaction with the given ID was found.
         """
-        stmt = delete(Transaction).where(Transaction.id == transaction_id)
-        with self.session_factory() as session:
-            result = cast(CursorResult, session.execute(stmt))
-            if result.rowcount == 0:
-                logger.debug(
-                    f"No transaction found with ID {transaction_id} to delete."
-                )
-                return False
-            session.commit()
-            logger.debug(f"Deleted transaction with ID {transaction_id}.")
-            return True
+        stmt = (
+            Delete()
+            .from_(self.transaction_table_name)
+            .where(("id = ?", transaction_id))
+        )
+        result = self.database.execute(stmt)
+        if result == 0:
+            logger.debug(f"No transaction found with ID {transaction_id} to delete.")
+            return False
+        logger.debug(f"Deleted transaction with ID {transaction_id}.")
+        return True
 
     def overwrite_transactions_in_date_range_for_accounts(
         self,
@@ -336,38 +390,31 @@ class SqliteTransactionRepository:
         Returns:
             The number of transactions successfully inserted.
         """
-        transaction_dicts = [
-            {
-                "transaction_date": transaction.transaction_date,
-                "type": transaction.type,
-                "description": transaction.description,
-                "amount": transaction.amount,
-                "units": transaction.units,
-                "security_key": transaction.security_key,
-                "account_id": transaction.account_id,
-                "properties": transaction.properties,
-            }
-            for transaction in transactions
-        ]
-        with self.session_factory() as session:
-            session.execute(
-                delete(Transaction).where(
-                    Transaction.transaction_date >= date_range[0],
-                    Transaction.transaction_date <= date_range[1],
-                    Transaction.account_id.in_(account_ids),
-                )
+        c = get_converter()
+        transaction_tuples = [c.unstructure_attrs_astuple(txn) for txn in transactions]
+        delete_stmt = (
+            Delete()
+            .from_(self.transaction_table_name)
+            .where(
+                ("transaction_date BETWEEN ? AND ?", *date_range),
+                in_(q(self.transaction_table_name + ".account_id"), *account_ids),
             )
-            result = (
-                cast(
-                    CursorResult,
-                    session.execute(insert(Transaction).values(transaction_dicts)),
-                ).rowcount
-                if transaction_dicts
-                else 0
-            )
-            session.commit()
+        )
+        insert_stmt = (
+            Insert()
+            .into(self.transaction_table_name)
+            .columns_(*TRANSACTION_CREATE_COLUMNS)
+        )
+        with self.database.cursor() as cursor:
+            cursor.execute(str(delete_stmt), delete_stmt.params)
+            deleted_count = cursor.rowcount
             logger.debug(
-                f"Overwrote transactions in date range {date_range} for accounts {account_ids}. Inserted {result} transactions."
+                f"Deleted {deleted_count} existing transactions in date range {date_range} for accounts {account_ids}."
+            )
+            result = cursor.executemany(str(insert_stmt), transaction_tuples).rowcount
+            cursor.connection.commit()
+            logger.debug(
+                f"Inserted {result} transactions after overwriting in date range {date_range} for accounts {account_ids}."
             )
             return result
 
@@ -383,46 +430,52 @@ class SqliteTransactionRepository:
             A sequence of HoldingUnitRow objects matching the given filters.
         """
         filters = list(filters)
-        where_clauses = get_sqlalchemy_filters(
+        query = generate_query_from_filters(
             filters,
             {
-                Field.ACCOUNT: [Account.name, Account.institution],
+                Field.ACCOUNT: [
+                    q(f"{self.account_table_name}.name"),
+                    q(f"{self.account_table_name}.institution"),
+                ],
                 Field.SECURITY: [
-                    Security.key,
-                    Security.name,
-                    Security.type,
-                    Security.category,
+                    q(f"{self.security_table_name}.key"),
+                    q(f"{self.security_table_name}.name"),
+                    q(f"{self.security_table_name}.type"),
+                    q(f"{self.security_table_name}.category"),
                 ],
             },
         )
         filter_fields = get_fields_from_filters(filters)
 
-        holding_units_stmt = select(
-            Transaction.security_key,
-            Transaction.account_id,
-            func.sum(Transaction.units).label("total_units"),
-            func.max(Transaction.transaction_date).label("last_transaction_date"),
+        query = (
+            query.from_(self.transaction_table_name)
+            .select(
+                q(f"{self.transaction_table_name}.security_key"),
+                q(f"{self.transaction_table_name}.account_id"),
+                f"SUM({q(self.transaction_table_name) + '.units'}) AS total_units",
+                f"MAX({q(self.transaction_table_name) + '.transaction_date'}) AS last_transaction_date",
+            )
+            .group_by(
+                q(f"{self.transaction_table_name}.account_id"),
+                q(f"{self.transaction_table_name}.security_key"),
+            )
+            .having(f"SUM({q(self.transaction_table_name) + '.units'}) >= 0.001")
         )
+
         if Field.SECURITY in filter_fields:
-            holding_units_stmt = holding_units_stmt.join(
-                Security, Security.key == Transaction.security_key
+            query = query.join(
+                q(self.security_table_name),
+                f"{q(self.security_table_name)}.key = {q(self.transaction_table_name)}.security_key",
             )
         if Field.ACCOUNT in filter_fields:
-            holding_units_stmt = holding_units_stmt.join(
-                Account, Account.id == Transaction.account_id
+            query = query.join(
+                q(self.account_table_name),
+                f"{q(self.account_table_name)}.id = {q(self.transaction_table_name)}.account_id",
             )
-        holding_units_stmt = (
-            holding_units_stmt.where(*where_clauses)
-            .group_by(Transaction.account_id, Transaction.security_key)
-            .having(func.sum(Transaction.units) >= Decimal("0.001"))
-        )
-        with self.session_factory() as session:
-            results = session.execute(holding_units_stmt).all()
-            holding_unit_rows = [HoldingUnitRow(*result) for result in results]
-            logger.debug(
-                f"Found {len(holding_unit_rows)} holding unit rows matching filters."
-            )
-            return holding_unit_rows
+
+        results = self.database.select_many(query, cl=HoldingUnitRow)
+        logger.debug("Found %d holding unit rows matching filters.", len(results))
+        return results
 
     def find_allocation(
         self,
@@ -440,125 +493,158 @@ class SqliteTransactionRepository:
         """
         filters = list(filters)
 
-        # Transaction filters: security + account only (no date — FIFO needs full history)
-        txn_where = get_sqlalchemy_filters(
-            filters,
-            {
-                Field.SECURITY: [
-                    Security.key,
-                    Security.name,
-                    Security.type,
-                    Security.category,
-                ],
-                Field.ACCOUNT: [Account.name, Account.institution],
-            },
-            include_fields={Field.SECURITY, Field.ACCOUNT},
-        )
-        # Price filters: security + date (supports "as of date" price lookups)
-        price_where = get_sqlalchemy_filters(
-            filters,
-            {
-                Field.SECURITY: [
-                    Security.key,
-                    Security.name,
-                    Security.type,
-                    Security.category,
-                ],
-                Field.DATE: [Price.date],
-            },
-            include_fields={Field.SECURITY, Field.DATE},
-        )
-
-        filter_fields = get_fields_from_filters(filters)
-
         # CTE 1: total units held per security (grouped by security only, not account)
-        holding_units_stmt = select(
-            Transaction.security_key,
-            func.max(Transaction.transaction_date).label("last_transaction_date"),
-            func.sum(Transaction.units).label("total_units"),
-        )
-        if Field.SECURITY in filter_fields:
-            holding_units_stmt = holding_units_stmt.join(
-                Security, Security.key == Transaction.security_key
+        holding_units_cte = (
+            # Transaction filters: security + account only (no date — FIFO needs full history)
+            generate_query_from_filters(
+                filters,
+                {
+                    Field.SECURITY: [
+                        q(f"{self.security_table_name}.key"),
+                        q(f"{self.security_table_name}.name"),
+                        q(f"{self.security_table_name}.type"),
+                        q(f"{self.security_table_name}.category"),
+                    ],
+                    Field.ACCOUNT: [
+                        q(f"{self.account_table_name}.name"),
+                        q(f"{self.account_table_name}.institution"),
+                    ],
+                },
+                include_fields={Field.SECURITY, Field.ACCOUNT},
             )
-        if Field.ACCOUNT in filter_fields:
-            holding_units_stmt = holding_units_stmt.join(
-                Account, Account.id == Transaction.account_id
+            .from_(self.transaction_table_name)
+            .select(
+                q(f"{self.transaction_table_name}.security_key"),
+                (f"SUM({q(self.transaction_table_name)}.units)", "total_units"),
+                (
+                    f"MAX({q(self.transaction_table_name)}.transaction_date)",
+                    "last_transaction_date",
+                ),
             )
-        holding_units = (
-            holding_units_stmt.where(*txn_where)
-            .group_by(Transaction.security_key)
-            .having(func.sum(Transaction.units) >= Decimal("0.001"))
-            .cte("holding_units")
+            .group_by(q(f"{self.transaction_table_name}.security_key"))
+            .having(f"SUM({q(self.transaction_table_name)}.units) >= 0.001")
         )
 
         # CTE 2: latest price per security (with optional date filter)
-        prices_stmt = select(
-            Price,
-            func.row_number()
-            .over(partition_by=Price.security_key, order_by=(Price.date).desc())
-            .label("row_num"),
+        price_cte = (
+            generate_query_from_filters(
+                # Price filters: security + date (supports "as of date" price lookups)
+                filters,
+                {
+                    Field.SECURITY: [
+                        q(f"{self.security_table_name}.key"),
+                        q(f"{self.security_table_name}.name"),
+                        q(f"{self.security_table_name}.type"),
+                        q(f"{self.security_table_name}.category"),
+                    ],
+                    Field.DATE: [q(f"{self.price_table_name}.date")],
+                },
+                include_fields={Field.SECURITY, Field.DATE},
+            )
+            .select(*PRICE_COLUMNS, prefix_table=self.price_table_name)
+            .select(
+                (
+                    f"ROW_NUMBER() OVER (PARTITION BY {q(self.price_table_name)}.security_key ORDER BY {q(self.price_table_name)}.date DESC)",
+                    "row_num",
+                )
+            )
+            .from_(self.price_table_name)
         )
+
+        filter_fields = get_fields_from_filters(filters)
         if Field.SECURITY in filter_fields:
-            prices_stmt = prices_stmt.join(Security, Security.key == Price.security_key)
-        prices_stmt = prices_stmt.where(*price_where)
-        cte_prices = prices_stmt.cte("cte_prices")
-        aliased_price = aliased(Price, cte_prices)
-        latest_prices = (
-            select(aliased_price).where(cte_prices.c.row_num == 1).cte("latest_prices")
+            holding_units_cte = holding_units_cte.join(
+                q(self.security_table_name),
+                f"{q(self.security_table_name)}.key = {q(self.transaction_table_name)}.security_key",
+            )
+            price_cte = price_cte.join(
+                q(self.security_table_name),
+                f"{q(self.security_table_name)}.key = {q(self.price_table_name)}.security_key",
+            )
+
+        if Field.ACCOUNT in filter_fields:
+            holding_units_cte = holding_units_cte.join(
+                q(self.account_table_name),
+                f"{q(self.account_table_name)}.id = {q(self.transaction_table_name)}.account_id",
+            )
+
+        latest_prices_cte = (
+            Query()
+            .select(*PRICE_COLUMNS, prefix_table="cte_prices")
+            .from_("cte_prices")
+            .where("row_num = 1")
         )
 
         # CTE 3: holding values joined with security metadata for grouping
-        cte_holdings = (
-            select(
-                Security.category
-                if group_by in ("both", "category")
-                else literal(None).label("category"),
-                Security.type
-                if group_by in ("both", "type")
-                else literal(None).label("type"),
-                (holding_units.c.total_units * latest_prices.c.close).label(
-                    "holding_value"
-                ),
-                func.max(
-                    holding_units.c.last_transaction_date, latest_prices.c.date
-                ).label("date"),
+        holdings_cte = (
+            Query()
+            .from_(q(self.security_table_name))
+            .join(
+                q("holding_units"),
+                f"{q(self.security_table_name)}.key = {q('holding_units')}.security_key",
             )
-            .join(holding_units, Security.key == holding_units.c.security_key)
-            .join(latest_prices, Security.key == latest_prices.c.security_key)
-            .cte("cte_holdings")
+            .join(
+                q("latest_prices"),
+                f"{q(self.security_table_name)}.key = {q('latest_prices')}.security_key",
+            )
+            .select(
+                (
+                    q(f"{self.security_table_name}.category")
+                    if group_by in ("both", "category")
+                    else "null",
+                    "category",
+                ),
+                (
+                    q(f"{self.security_table_name}.type")
+                    if group_by in ("both", "type")
+                    else "null",
+                    "type",
+                ),
+                (
+                    "holding_units.total_units * latest_prices.close",
+                    "holding_value",
+                ),
+                (
+                    "MAX(holding_units.last_transaction_date, latest_prices.date)",
+                    "date",
+                ),
+            )
         )
 
         # CTE 4: total portfolio value for proportion calculation
-        cte_total = select(
-            func.sum(cte_holdings.c.holding_value).label("total_value")
-        ).cte("cte_total")
-
-        # Final: group by category/type and compute proportions
-        stmt = (
-            select(
-                cte_holdings.c.category,
-                cte_holdings.c.type,
-                func.min(cte_holdings.c.date).label("date"),
-                func.sum(cte_holdings.c.holding_value).label("total_amount"),
-                (
-                    func.sum(cte_holdings.c.holding_value) / cte_total.c.total_value
-                ).label("proportion"),
+        totals_cte = (
+            Query()
+            .select(
+                ("SUM(holding_units.total_units * latest_prices.close)", "total_value")
             )
-            .join(cte_total, literal(True))
-            .group_by(cte_holdings.c.category, cte_holdings.c.type)
-            .order_by(func.sum(cte_holdings.c.holding_value).desc())
+            .from_(q("holding_units"))
+            .join(
+                q("latest_prices"),
+                f"{q('holding_units')}.security_key = {q('latest_prices')}.security_key",
+            )
         )
 
-        with self.session_factory() as session:
-            results = session.execute(stmt).all()
-            return [
-                Allocation(
-                    security_category=row[0],
-                    security_type=row[1],
-                    date=row[2],
-                    amount=Decimal(str(row[3])).quantize(Decimal("0.01")),
-                    allocation=Decimal(str(row[4])).quantize(Decimal("0.0001")),
-                )
-                for row in results
-            ]
+        # Final: group by category/type and compute proportions
+        query = (
+            Query()
+            .with_cte("holding_units", holding_units_cte)
+            .with_cte("cte_prices", price_cte)
+            .with_cte("latest_prices", latest_prices_cte)
+            .with_cte("holdings", holdings_cte)
+            .with_cte("totals", totals_cte)
+            .from_("holdings")
+            .group_by("holdings.category", "holdings.type")
+            .join(q("totals"))
+            .select(
+                ("MIN(holdings.date)", "date"),
+                ("SUM(holdings.holding_value)", "amount"),
+                ("(SUM(holdings.holding_value) / totals.total_value)", "allocation"),
+                ("holdings.type", "security_type"),
+                ("holdings.category", "security_category"),
+            )
+            .order_by("amount DESC")
+        )
+
+        results = self.database.select_many(query, cl=Allocation)
+        logger.debug("Found %d allocations matching filters.", len(results))
+        return results

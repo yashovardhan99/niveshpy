@@ -107,7 +107,11 @@ class Application:
             SqliteTransactionRepository,
         )
 
-        return SqliteTransactionRepository(self.db.session_factory)
+        return SqliteTransactionRepository(
+            self.new_db,
+            account_repository=self.account_repository,
+            security_repository=self.security_repository,
+        )
 
     def get_parsing_service(
         self,

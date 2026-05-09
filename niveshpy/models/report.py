@@ -2,11 +2,12 @@
 
 import datetime
 import decimal
+import functools
 from collections.abc import Sequence
-from dataclasses import dataclass
 
 from attrs import field, frozen
 
+from niveshpy.models._helper import quantize_decimal
 from niveshpy.models.account import AccountPublic
 from niveshpy.models.security import (
     SecurityCategory,
@@ -15,6 +16,24 @@ from niveshpy.models.security import (
 )
 
 # Holdings
+
+_quantize_units = functools.partial(quantize_decimal, places=3)
+_quantize_amount = functools.partial(quantize_decimal, places=2)
+_quantize_percentage = functools.partial(quantize_decimal, places=4)
+
+
+def _optional_quantize_amount(
+    value: decimal.Decimal | None,
+) -> decimal.Decimal | None:
+    """Quantize an amount value if it's not None."""
+    return _quantize_amount(value) if value is not None else None
+
+
+def _optional_quantize_percentage(
+    value: decimal.Decimal | None,
+) -> decimal.Decimal | None:
+    """Quantize a percentage value if it's not None."""
+    return _quantize_percentage(value) if value is not None else None
 
 
 @frozen
@@ -35,9 +54,9 @@ class Holding:
     account: AccountPublic
     security: SecurityPublic
     date: datetime.date
-    units: decimal.Decimal
-    invested: decimal.Decimal
-    amount: decimal.Decimal
+    units: decimal.Decimal = field(converter=_quantize_units)
+    invested: decimal.Decimal = field(converter=_quantize_amount)
+    amount: decimal.Decimal = field(converter=_quantize_amount)
     account_id: int = field(init=False)
     security_key: str = field(init=False)
 
@@ -47,13 +66,13 @@ class Holding:
         object.__setattr__(self, "security_key", self.security.key)
 
 
-@dataclass(slots=True, frozen=True)
+@frozen
 class HoldingUnitRow:
     """Data class for a single row of holding units used in report computations."""
 
     security_key: str
     account_id: int
-    total_units: decimal.Decimal
+    total_units: decimal.Decimal = field(converter=_quantize_units)
     last_transaction_date: datetime.date
 
 
@@ -64,11 +83,15 @@ class HoldingUnitRow:
 class PortfolioTotals:
     """Portfolio-level aggregate totals."""
 
-    total_current_value: decimal.Decimal
-    total_invested: decimal.Decimal | None
-    total_gains: decimal.Decimal | None
-    gains_percentage: decimal.Decimal | None
-    xirr: decimal.Decimal | None = None
+    total_current_value: decimal.Decimal = field(converter=_quantize_amount)
+    total_invested: decimal.Decimal | None = field(converter=_optional_quantize_amount)
+    total_gains: decimal.Decimal | None = field(converter=_optional_quantize_amount)
+    gains_percentage: decimal.Decimal | None = field(
+        converter=_optional_quantize_percentage
+    )
+    xirr: decimal.Decimal | None = field(
+        converter=_optional_quantize_percentage, default=None
+    )
     last_updated: datetime.date | None = None
 
 
@@ -88,8 +111,8 @@ class Allocation:
     """
 
     date: datetime.date
-    amount: decimal.Decimal
-    allocation: decimal.Decimal
+    amount: decimal.Decimal = field(converter=_quantize_amount)
+    allocation: decimal.Decimal = field(converter=_quantize_percentage)
     security_type: SecurityType | None = None
     security_category: SecurityCategory | None = None
 
@@ -113,11 +136,15 @@ class PerformanceHolding:
     security: SecurityPublic
     security_key: str = field(init=False)
     date: datetime.date
-    current_value: decimal.Decimal
-    invested: decimal.Decimal | None
-    gains: decimal.Decimal | None = field(init=False)
-    gains_pct: decimal.Decimal | None = field(init=False)
-    xirr: decimal.Decimal | None
+    current_value: decimal.Decimal = field(converter=_quantize_amount)
+    invested: decimal.Decimal | None = field(converter=_optional_quantize_amount)
+    gains: decimal.Decimal | None = field(
+        init=False, converter=_optional_quantize_amount
+    )
+    gains_pct: decimal.Decimal | None = field(
+        init=False, converter=_optional_quantize_percentage
+    )
+    xirr: decimal.Decimal | None = field(converter=_optional_quantize_percentage)
 
     def __attrs_post_init__(self) -> None:
         """Set account ID, security key, and compute gains and gains percentage after initialization."""
@@ -131,7 +158,7 @@ class PerformanceHolding:
         object.__setattr__(
             self,
             "gains_pct",
-            (self.gains / self.invested).quantize(decimal.Decimal("0.0001"))
+            _quantize_percentage(self.gains / self.invested)
             if self.gains is not None
             and self.invested is not None
             and self.invested != 0
@@ -153,7 +180,7 @@ class PerformanceHolding:
         )
 
 
-@dataclass(slots=True, frozen=True)
+@frozen
 class PerformanceResult:
     """Result of portfolio performance computation."""
 
@@ -161,7 +188,7 @@ class PerformanceResult:
     totals: PortfolioTotals
 
 
-@dataclass(slots=True, frozen=True)
+@frozen
 class SummaryResult:
     """Portfolio summary combining metrics, top holdings, and allocation."""
 

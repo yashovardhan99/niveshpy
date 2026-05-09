@@ -17,21 +17,21 @@ from niveshpy.models.transaction import TransactionCreate, TransactionType
 
 
 @pytest.fixture(scope="function")
-def transaction_repository(session_factory):
-    """Provide a fresh SqliteTransactionRepository for each test."""
-    return SqliteTransactionRepository(session_factory)
-
-
-@pytest.fixture(scope="function")
-def account_repository(session_factory):
+def account_repository(new_db):
     """Provide a fresh SqliteAccountRepository for each test."""
-    return SqliteAccountRepository(session_factory)
+    return SqliteAccountRepository(new_db)
 
 
 @pytest.fixture(scope="function")
-def security_repository(session_factory):
+def security_repository(new_db):
     """Provide a fresh SqliteSecurityRepository for each test."""
-    return SqliteSecurityRepository(session_factory)
+    return SqliteSecurityRepository(new_db)
+
+
+@pytest.fixture(scope="function")
+def transaction_repository(new_db, account_repository, security_repository):
+    """Provide a fresh SqliteTransactionRepository for each test."""
+    return SqliteTransactionRepository(new_db, account_repository, security_repository)
 
 
 def test_insert_transaction_returns_id_and_persists_row(

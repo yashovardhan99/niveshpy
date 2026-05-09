@@ -1,13 +1,17 @@
 """Price data models."""
 
 import datetime
+import functools
 from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
 from attrs import field, frozen
 
+from niveshpy.models._helper import quantize_decimal
 from niveshpy.models.security import SecurityPublic
+
+_quantize_price = functools.partial(quantize_decimal, places=4)
 
 
 @frozen
@@ -26,10 +30,10 @@ class PriceCreate:
 
     security_key: str
     date: datetime.date
-    open: Decimal
-    high: Decimal
-    low: Decimal
-    close: Decimal
+    open: Decimal = field(converter=_quantize_price)
+    high: Decimal = field(converter=_quantize_price)
+    low: Decimal = field(converter=_quantize_price)
+    close: Decimal = field(converter=_quantize_price)
     properties: Mapping[str, Any] = field(factory=dict)
 
 
@@ -52,10 +56,10 @@ class PricePublic:
 
     security_key: str
     date: datetime.date
-    open: Decimal
-    high: Decimal
-    low: Decimal
-    close: Decimal
+    open: Decimal = field(converter=_quantize_price)
+    high: Decimal = field(converter=_quantize_price)
+    low: Decimal = field(converter=_quantize_price)
+    close: Decimal = field(converter=_quantize_price)
     properties: Mapping[str, Any]
     created: datetime.datetime
     security: SecurityPublic | None = field(default=None, repr=False)
