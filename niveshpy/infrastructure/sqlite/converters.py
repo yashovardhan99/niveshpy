@@ -41,7 +41,7 @@ def _unstructure_datetime(value: datetime) -> str:
 def _structure_datetime(value: str, cls: type[datetime]) -> datetime:
     """Structure an ISO format string back to a datetime.
 
-    Assumes the stored datetime is in UTC and returns a timezone-aware datetime.
+    Assumes the stored datetime is in UTC and returns a timezone-naive datetime.
     """
     return (
         datetime.fromisoformat(value)
