@@ -369,8 +369,6 @@ class SqlitePriceRepository:
                     cursor.executemany(str(stmt), tuples)
                 except IntegrityError as e:
                     if "FOREIGN KEY constraint failed" in str(e.__cause__):
-                        raise ResourceNotFoundError(
-                            "Security", price.security_key
-                        ) from e
+                        raise ResourceNotFoundError("Security", security_key) from e
                     else:
                         raise
