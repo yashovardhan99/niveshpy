@@ -223,7 +223,7 @@ class SqliteDatabase:
                 logger.debug("Statement affected %d rows", affected_rows)
                 return affected_rows
         except sqlite3.IntegrityError as e:
-            raise IntegrityError() from e
+            raise IntegrityError(*e.args) from e
         except sqlite3.Error as e:
             raise DatabaseError("Failed to execute statement") from e
 
@@ -248,6 +248,6 @@ class SqliteDatabase:
                 logger.debug("Statement affected a total of %d rows", affected_rows)
                 return affected_rows
         except sqlite3.IntegrityError as e:
-            raise IntegrityError() from e
+            raise IntegrityError(*e.args) from e
         except sqlite3.Error as e:
             raise DatabaseError("Failed to execute statement") from e
