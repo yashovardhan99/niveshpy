@@ -6,14 +6,19 @@ import functools
 from collections.abc import Iterable, Sequence
 from enum import Enum
 from textwrap import dedent
-from typing import Any, Literal, NewType, Self
+from typing import Any, Literal, Self
 
 from attrs import define, field, frozen
 
 from niveshpy.infrastructure.sqlite.converters import get_converter
 
-Expr = NewType("Expr", str)
-"""NewType for SQL expressions to distinguish them from regular strings."""
+
+class Expr(str):
+    """NewType for SQL expressions to distinguish them from regular strings."""
+
+    def alias(self, alias: str | None) -> AliasedExpr:
+        """Create an aliased expression for this SQL expression."""
+        return AliasedExpr(self, alias)
 
 
 @frozen
@@ -127,13 +132,27 @@ class SqlExpr:
         """Convert this expression to a Condition (for boolean function expressions)."""
         return Condition(Expr(str(self)), self._params)
 
+    # OPERATOR OVERLOADS
+
+    def __mul__(self, other: Any) -> SqlExpr:
+        """Support multiplication operator for expressions, useful for things like calculating total value."""
+        if isinstance(other, SqlExpr):
+            return SqlExpr(f"{self} * {other}", (*self._params, *other._params))
+        return SqlExpr(f"{self} * ?", (*self._params, other))
+
+    def __truediv__(self, other: Any) -> SqlExpr:
+        """Support division operator for expressions, useful for things like calculating allocation."""
+        if isinstance(other, SqlExpr):
+            return SqlExpr(f"{self} / {other}", (*self._params, *other._params))
+        return SqlExpr(f"{self} / ?", (*self._params, other))
+
     def alias(self, alias: str | None) -> AliasedExpr:
         """Create an aliased expression for this SQL expression."""
         if self._params:
             raise ValueError(
                 "Cannot alias an expression with parameters. Use an aliased column or function instead."
             )
-        return AliasedExpr(Expr(str(self)), alias)
+        return Expr(self._sql).alias(alias)
 
 
 @frozen(init=False)
@@ -396,9 +415,9 @@ class Query:
         self.where_expressions.extend(conditions)
         return self
 
-    def group_by(self, *columns: str) -> Self:
+    def group_by(self, *columns: str | Col) -> Self:
         """Add GROUP BY clause to the query."""
-        self.group_by_expressions.extend(Expr(column) for column in columns)
+        self.group_by_expressions.extend(Expr(str(column)) for column in columns)
         return self
 
     def having(self, *conditions: Condition) -> Self:

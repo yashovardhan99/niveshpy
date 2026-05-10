@@ -25,7 +25,6 @@ from niveshpy.infrastructure.sqlite.query import (
     Fn,
     Insert,
     Query,
-    in_,
     q,
 )
 from niveshpy.infrastructure.sqlite.query_filters import generate_query_from_filters
@@ -279,7 +278,7 @@ class SqliteTransactionRepository:
             Query()
             .select(*TRANSACTION_COLUMNS)
             .from_(self.transaction_table_name)
-            .where(in_(q(f"{self.transaction_table_name}.id"), *ids))
+            .where(Col("id", self.transaction_table_name).in_(ids))
         )
 
         query = self._update_query_with_sort_order(query, sort_order)
@@ -472,28 +471,32 @@ class SqliteTransactionRepository:
         query = (
             query.from_(self.transaction_table_name)
             .select(
-                q(f"{self.transaction_table_name}.security_key"),
-                q(f"{self.transaction_table_name}.account_id"),
-                f"SUM({q(self.transaction_table_name) + '.units'}) AS total_units",
-                f"MAX({q(self.transaction_table_name) + '.transaction_date'}) AS last_transaction_date",
+                Col("security_key", self.transaction_table_name),
+                Col("account_id", self.transaction_table_name),
+                Fn("SUM", Col("units", self.transaction_table_name)).alias(
+                    "total_units"
+                ),
+                Fn("MAX", Col("transaction_date", self.transaction_table_name)).alias(
+                    "last_transaction_date"
+                ),
             )
             .group_by(
-                q(f"{self.transaction_table_name}.account_id"),
-                q(f"{self.transaction_table_name}.security_key"),
+                Col("account_id", self.transaction_table_name),
+                Col("security_key", self.transaction_table_name),
             )
             .having(Fn("SUM", Col("units", self.transaction_table_name)).ge(0.001))
         )
 
         if Field.SECURITY in filter_fields:
             query = query.join(
-                q(self.security_table_name),
+                self.security_table_name,
                 Col("key", self.security_table_name).eq(
                     Col("security_key", self.transaction_table_name)
                 ),
             )
         if Field.ACCOUNT in filter_fields:
             query = query.join(
-                q(self.account_table_name),
+                self.account_table_name,
                 Col("id", self.account_table_name).eq(
                     Col("account_id", self.transaction_table_name)
                 ),
@@ -540,14 +543,15 @@ class SqliteTransactionRepository:
             )
             .from_(self.transaction_table_name)
             .select(
-                q(f"{self.transaction_table_name}.security_key"),
-                (f"SUM({q(self.transaction_table_name)}.units)", "total_units"),
-                (
-                    f"MAX({q(self.transaction_table_name)}.transaction_date)",
-                    "last_transaction_date",
+                Col("security_key", self.transaction_table_name),
+                Fn("SUM", Col("units", self.transaction_table_name)).alias(
+                    "total_units"
+                ),
+                Fn("MAX", Col("transaction_date", self.transaction_table_name)).alias(
+                    "last_transaction_date"
                 ),
             )
-            .group_by(q(f"{self.transaction_table_name}.security_key"))
+            .group_by(Col("security_key", self.transaction_table_name))
             .having(Fn("SUM", Col("units", self.transaction_table_name)).ge(0.001))
         )
 
@@ -580,13 +584,13 @@ class SqliteTransactionRepository:
         filter_fields = get_fields_from_filters(filters)
         if Field.SECURITY in filter_fields:
             holding_units_cte = holding_units_cte.join(
-                q(self.security_table_name),
+                self.security_table_name,
                 Col("key", self.security_table_name).eq(
                     Col("security_key", self.transaction_table_name)
                 ),
             )
             price_cte = price_cte.join(
-                q(self.security_table_name),
+                self.security_table_name,
                 Col("key", self.security_table_name).eq(
                     Col("security_key", self.price_table_name)
                 ),
@@ -594,7 +598,7 @@ class SqliteTransactionRepository:
 
         if Field.ACCOUNT in filter_fields:
             holding_units_cte = holding_units_cte.join(
-                q(self.account_table_name),
+                self.account_table_name,
                 Col("id", self.account_table_name).eq(
                     Col("account_id", self.transaction_table_name)
                 ),
@@ -610,38 +614,38 @@ class SqliteTransactionRepository:
         # CTE 3: holding values joined with security metadata for grouping
         holdings_cte = (
             Query()
-            .from_(q(self.security_table_name))
+            .from_(self.security_table_name)
             .join(
-                q("holding_units"),
+                "holding_units",
                 Col("key", self.security_table_name).eq(
                     Col("security_key", "holding_units")
                 ),
             )
             .join(
-                q("latest_prices"),
+                "latest_prices",
                 Col("key", self.security_table_name).eq(
                     Col("security_key", "latest_prices")
                 ),
             )
             .select(
                 (
-                    q(f"{self.security_table_name}.category")
+                    Col("category", self.security_table_name).alias("category")
                     if group_by in ("both", "category")
-                    else "null",
-                    "category",
+                    else ("null", "category")
                 ),
                 (
-                    q(f"{self.security_table_name}.type")
+                    Col("type", self.security_table_name).alias("type")
                     if group_by in ("both", "type")
-                    else "null",
-                    "type",
+                    else ("null", "type")
                 ),
                 (
-                    "holding_units.total_units * latest_prices.close",
-                    "holding_value",
-                ),
-                (
-                    "MAX(holding_units.last_transaction_date, latest_prices.date)",
+                    Col("total_units", "holding_units") * Col("close", "latest_prices")
+                ).alias("holding_value"),
+                Fn(
+                    "MAX",
+                    Col("last_transaction_date", "holding_units"),
+                    Col("date", "latest_prices"),
+                ).alias(
                     "date",
                 ),
             )
@@ -651,11 +655,14 @@ class SqliteTransactionRepository:
         totals_cte = (
             Query()
             .select(
-                ("SUM(holding_units.total_units * latest_prices.close)", "total_value")
+                Fn(
+                    "SUM",
+                    Col("total_units", "holding_units") * Col("close", "latest_prices"),
+                ).alias("total_value")
             )
-            .from_(q("holding_units"))
+            .from_("holding_units")
             .join(
-                q("latest_prices"),
+                "latest_prices",
                 Col("security_key", "holding_units").eq(
                     Col("security_key", "latest_prices")
                 ),
@@ -672,13 +679,16 @@ class SqliteTransactionRepository:
             .with_cte("totals", totals_cte)
             .from_("holdings")
             .group_by("holdings.category", "holdings.type")
-            .join(q("totals"))
+            .join("totals")
             .select(
-                ("MIN(holdings.date)", "date"),
-                ("SUM(holdings.holding_value)", "amount"),
-                ("(SUM(holdings.holding_value) / totals.total_value)", "allocation"),
-                ("holdings.type", "security_type"),
-                ("holdings.category", "security_category"),
+                Fn("MIN", Col("date", "holdings")).alias("date"),
+                Fn("SUM", Col("holding_value", "holdings")).alias("amount"),
+                (
+                    Fn("SUM", Col("holding_value", "holdings"))
+                    / Col("total_value", "totals")
+                ).alias("allocation"),
+                Col("type", "holdings").alias("security_type"),
+                Col("category", "holdings").alias("security_category"),
             )
             .order_by("amount DESC")
         )
