@@ -67,7 +67,10 @@ class SqliteAccountRepository:
             generate_query_from_filters(
                 filters,
                 {
-                    Field.ACCOUNT: ["name", "institution"],
+                    Field.ACCOUNT: [
+                        Col("name", self.account_table_name),
+                        Col("institution", self.account_table_name),
+                    ],
                 },
             )
             .from_(self.account_table_name)

@@ -58,8 +58,8 @@ class SqliteSecurityRepository:
             generate_query_from_filters(
                 filters,
                 {
-                    Field.SECURITY: ["key", "name"],
-                    Field.TYPE: ["type", "category"],
+                    Field.SECURITY: [Col("key"), Col("name")],
+                    Field.TYPE: [Col("type"), Col("category")],
                 },
             )
             .from_(self.security_table_name)

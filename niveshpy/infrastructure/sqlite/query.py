@@ -27,13 +27,6 @@ class Condition:
     expression: Expr
     params: tuple[Any, ...] = ()
 
-    @classmethod
-    def from_arg(cls, arg: str | tuple[str, Any] | tuple[str, Any, Any]) -> Self:
-        """Create a Condition from a string or a tuple argument."""
-        if isinstance(arg, tuple):
-            return cls(Expr(arg[0]), tuple(arg[1:]))
-        return cls(Expr(arg))
-
 
 def q(column_or_table: str) -> str:
     """Quote an identifier (column or table name) for use in SQL queries."""
@@ -54,7 +47,7 @@ class SqlExpr:
     """
 
     _sql: str
-    _params: tuple[Any, ...] = ()
+    _params: tuple[Any, ...]
 
     def __str__(self) -> str:
         """Render the SQL expression as a string, with parameters represented as placeholders."""
@@ -134,21 +127,54 @@ class SqlExpr:
         """Convert this expression to a Condition (for boolean function expressions)."""
         return Condition(Expr(str(self)), self._params)
 
+    def alias(self, alias: str | None) -> AliasedExpr:
+        """Create an aliased expression for this SQL expression."""
+        if self._params:
+            raise ValueError(
+                "Cannot alias an expression with parameters. Use an aliased column or function instead."
+            )
+        return AliasedExpr(Expr(str(self)), alias)
 
-def Col(name: str, table: str | None = None) -> SqlExpr:
-    """Create a column reference expression.
 
-    Args:
-        name: Column name. Can include table prefix as "table.column".
-        table: Optional table name for disambiguation.
+@frozen(init=False)
+class Col(SqlExpr):
+    """A column reference expression that can be used in conditions and comparisons.
+
+    Attributes:
+        name: The column name, which can include a table prefix (e.g., "table.column").
+        table: Optional table name for disambiguation. If the name includes a dot, it will be split into table and column parts.
     """
-    if "." in name and table is None:
-        table, name = name.split(".", 1)
-    if name == "*":
-        sql = f"{q(table)}.*" if table else "*"
-    else:
-        sql = f"{q(table)}.{q(name)}" if table else q(name)
-    return SqlExpr(sql)
+
+    name: str
+    table: str | None = None
+
+    def __init__(self, name: str, table: str | None = None) -> None:
+        """Create a column reference expression.
+
+        Args:
+            name: Column name. Can include table prefix as "table.column".
+            table: Optional table name for disambiguation.
+        """
+        if "." in name and table is None:
+            table, name = name.split(".", 1)
+
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "table", table)
+        object.__setattr__(self, "_params", ())
+        object.__setattr__(self, "_sql", self._get_sql())
+        super().__init__(self._sql, self._params)
+
+    def _get_sql(self) -> str:
+        if self.name == "*":
+            if self.table:
+                _sql = f"{q(self.table)}.*"
+            else:
+                _sql = "*"
+        elif self.table:
+            _sql = f"{q(self.table)}.{q(self.name)}"
+        else:
+            _sql = q(self.name)
+        return _sql
 
 
 def in_(column: str | tuple[str, ...], *values: Any, not_: bool = False) -> Condition:
@@ -211,17 +237,21 @@ def or_(*conditions: Condition) -> Condition:
 
 
 @frozen
-class _AliasedExpr:
+class AliasedExpr:
+    """A SQL expression with an optional alias for use in SELECT clauses."""
+
     expression: Expr
     alias: str | None = None
 
     @classmethod
     def from_arg(cls, arg: str | tuple[str, str]) -> Self:
+        """Create an AliasedExpr from a string or a (expression, alias) tuple."""
         if isinstance(arg, tuple):
             return cls(Expr(arg[0]), arg[1])
         return cls(Expr(arg))
 
     def __str__(self) -> str:
+        """Render the aliased expression as a string, including the alias if present."""
         if self.alias:
             return f"{self.expression} AS {self.alias}"
         return str(self.expression)
@@ -237,7 +267,7 @@ class _JoinType(Enum):
 @frozen
 class _Join:
     type: _JoinType
-    table: _AliasedExpr
+    table: AliasedExpr
     on: Sequence[Condition]
 
 
@@ -266,8 +296,8 @@ class Query:
 
     cte_expressions: list[_CTE] = field(factory=list)
     select_flag: _SelectFlag = _SelectFlag.DEFAULT
-    select_expressions: list[_AliasedExpr] = field(factory=list)
-    from_expressions: list[_AliasedExpr] = field(factory=list)
+    select_expressions: list[AliasedExpr] = field(factory=list)
+    from_expressions: list[AliasedExpr] = field(factory=list)
     join_expressions: list[_Join] = field(factory=list)
     where_expressions: list[Condition] = field(factory=list)
     group_by_expressions: list[Expr] = field(factory=list)
@@ -283,7 +313,7 @@ class Query:
 
     def select(
         self,
-        *columns: str | tuple[str, str],
+        *columns: str | tuple[str, str] | Col | AliasedExpr,
         distinct: bool = False,
         all: bool = False,
         prefix_table: str | None = None,
@@ -291,10 +321,11 @@ class Query:
         """Build a SELECT query.
 
         Args:
-            columns: Columns to select, specified as strings or (expression, alias) tuples.
+            columns: Columns to select, specified as strings, (expression, alias) tuples, or _AliasedExpr instances.
             distinct: If True, add DISTINCT to the SELECT clause.
             all: If True, add ALL to the SELECT clause.
             prefix_table: Optional table name to prefix column names with for disambiguation.
+                This will only apply to columns specified as strings or (expression, alias) tuples.
 
         Returns:
             Self: The Query object with the SELECT clause added.
@@ -310,16 +341,29 @@ class Query:
             self.select_flag = self._SelectFlag.ALL
 
         if prefix_table:
-            quoted_prefix = q(prefix_table)
-            columns = tuple(
-                (f"{quoted_prefix}.{col}", col)
-                if isinstance(col, str)
-                else (f"{quoted_prefix}.{col[0]}", col[1])
-                for col in columns
-            )
-        self.select_expressions.extend(
-            _AliasedExpr.from_arg(column) for column in columns
-        )
+            prefix_table = q(prefix_table)
+
+        parsed_columns: list[AliasedExpr] = []
+        for column in columns:
+            name: str
+            alias: str | None = None
+            if isinstance(column, AliasedExpr):
+                parsed_columns.append(column)
+                continue
+            elif isinstance(column, Col):
+                parsed_columns.append(column.alias(None))
+                continue
+            elif isinstance(column, tuple):
+                name, alias = column
+            else:
+                name = column
+
+            if prefix_table:
+                name = f"{prefix_table}.{name}"
+
+            parsed_columns.append(AliasedExpr(Expr(name), alias))
+
+        self.select_expressions.extend(parsed_columns)
         return self
 
     def from_(self, *tables: str | tuple[str, str]) -> Self:
@@ -327,9 +371,9 @@ class Query:
         for table in tables:
             if isinstance(table, tuple):
                 name, alias = table
-                self.from_expressions.append(_AliasedExpr.from_arg((q(name), alias)))
+                self.from_expressions.append(AliasedExpr.from_arg((q(name), alias)))
             else:
-                self.from_expressions.append(_AliasedExpr.from_arg(q(table)))
+                self.from_expressions.append(AliasedExpr.from_arg(q(table)))
         return self
 
     def join(
@@ -341,9 +385,9 @@ class Query:
         """Add JOIN clause to the query."""
         if isinstance(table, tuple):
             name, alias = table
-            table_expr = _AliasedExpr.from_arg((q(name), alias))
+            table_expr = AliasedExpr.from_arg((q(name), alias))
         else:
-            table_expr = _AliasedExpr.from_arg(q(table))
+            table_expr = AliasedExpr.from_arg(q(table))
         self.join_expressions.append(_Join(_JoinType[type.upper()], table_expr, on_))
         return self
 
@@ -455,7 +499,7 @@ class Query:
 
     def _build_expressions(
         self,
-        expressions: Sequence[_AliasedExpr]
+        expressions: Sequence[AliasedExpr]
         | Sequence[str]
         | Sequence[Expr]
         | Sequence[Condition],
@@ -489,7 +533,7 @@ class Insert:
     flag: _InsertFlag = _InsertFlag.DEFAULT
     columns: list[str] = field(factory=list)
     values: list[tuple[Any, ...]] = field(factory=list)
-    returning_columns: list[_AliasedExpr] = field(factory=list)
+    returning_columns: list[AliasedExpr] = field(factory=list)
 
     def or_ignore(self) -> Self:
         """Set the insert flag to OR IGNORE."""
@@ -525,7 +569,7 @@ class Insert:
     def returning(self, *columns: str | tuple[str, str]) -> Self:
         """Add a RETURNING clause to the insert statement."""
         self.returning_columns.extend(
-            _AliasedExpr.from_arg(column) for column in columns
+            AliasedExpr.from_arg(column) for column in columns
         )
         return self
 
@@ -568,7 +612,7 @@ class Delete:
 
     table: str = ""
     where_expressions: list[Condition] = field(factory=list)
-    returning_columns: list[_AliasedExpr] = field(factory=list)
+    returning_columns: list[AliasedExpr] = field(factory=list)
 
     def from_(self, table: str) -> Self:
         """Specify the table to delete from."""
@@ -583,7 +627,7 @@ class Delete:
     def returning(self, *columns: str | tuple[str, str]) -> Self:
         """Add a RETURNING clause to the delete statement."""
         self.returning_columns.extend(
-            _AliasedExpr.from_arg(column) for column in columns
+            AliasedExpr.from_arg(column) for column in columns
         )
         return self
 

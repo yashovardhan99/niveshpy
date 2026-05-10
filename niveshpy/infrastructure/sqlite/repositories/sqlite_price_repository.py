@@ -19,6 +19,7 @@ from niveshpy.infrastructure.sqlite.query import (
     PRICE_CREATE_COLUMNS,
     Col,
     Delete,
+    Fn,
     Insert,
     Query,
 )
@@ -140,12 +141,12 @@ class SqlitePriceRepository:
             generate_query_from_filters(
                 filters,
                 {
-                    Field.DATE: [f"{self.price_table_name}.date"],
+                    Field.DATE: [Col("date", self.price_table_name)],
                     Field.SECURITY: [
-                        f"{self.price_table_name}.security_key",
-                        f"{self.security_table_name}.name",
-                        f"{self.security_table_name}.type",
-                        f"{self.security_table_name}.category",
+                        Col("security_key", self.price_table_name),
+                        Col("name", self.security_table_name),
+                        Col("type", self.security_table_name),
+                        Col("category", self.security_table_name),
                     ],
                 },
             )
@@ -203,10 +204,10 @@ class SqlitePriceRepository:
             filters,
             {
                 Field.SECURITY: [
-                    f"{self.price_table_name}.security_key",
-                    f"{self.security_table_name}.name",
-                    f"{self.security_table_name}.type",
-                    f"{self.security_table_name}.category",
+                    Col("security_key", self.price_table_name),
+                    Col("name", self.security_table_name),
+                    Col("type", self.security_table_name),
+                    Col("category", self.security_table_name),
                 ]
             },
         )
@@ -214,8 +215,8 @@ class SqlitePriceRepository:
         cte = (
             filter_query.from_(self.price_table_name)
             .select(
-                f"{self.price_table_name}.security_key",
-                (f"MAX({self.price_table_name}.date)", "max_date"),
+                Col("security_key", self.price_table_name),
+                Fn("MAX", Col("date", self.price_table_name)).alias("max_date"),
             )
             .group_by(f"{self.price_table_name}.security_key")
         )

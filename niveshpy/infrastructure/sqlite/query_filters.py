@@ -7,12 +7,12 @@ from niveshpy.exceptions import OperationError, QuerySyntaxError
 from niveshpy.infrastructure.sqlite.query import Col, Condition, Fn, Query, or_
 
 
-def prepare_expression(filter: FilterNode, column: str) -> Condition:
+def prepare_expression(filter: FilterNode, column: Col) -> Condition:
     """Prepare a condition expression for a given filter and column.
 
     Args:
         filter (FilterNode): The filter node to prepare.
-        column (str): The database column name.
+        column (Col): The database column as a Col object.
 
     Returns:
         Condition: The prepared condition expression.
@@ -20,33 +20,33 @@ def prepare_expression(filter: FilterNode, column: str) -> Condition:
     op = filter.operator
     match op:
         case Operator.REGEX_MATCH if isinstance(filter.value, str):
-            return Fn("IREGEXP", filter.value, Col(column)).to_condition()
+            return Fn("IREGEXP", filter.value, column).to_condition()
         case Operator.NOT_REGEX_MATCH if isinstance(filter.value, str):
-            return Fn("NOT IREGEXP", filter.value, Col(column)).to_condition()
+            return Fn("NOT IREGEXP", filter.value, column).to_condition()
         case Operator.EQUALS:
-            return Col(column).eq(filter.value)
+            return column.eq(filter.value)
         case Operator.NOT_EQUALS:
-            return Col(column).ne(filter.value)
+            return column.ne(filter.value)
         case Operator.GREATER_THAN:
-            return Col(column).gt(filter.value)
+            return column.gt(filter.value)
         case Operator.GREATER_THAN_EQ:
-            return Col(column).ge(filter.value)
+            return column.ge(filter.value)
         case Operator.LESS_THAN:
-            return Col(column).lt(filter.value)
+            return column.lt(filter.value)
         case Operator.LESS_THAN_EQ:
-            return Col(column).le(filter.value)
+            return column.le(filter.value)
         case Operator.BETWEEN if (
             isinstance(filter.value, tuple) and len(filter.value) == 2
         ):
-            return Col(column).between(filter.value[0], filter.value[1])
+            return column.between(filter.value[0], filter.value[1])
         case Operator.NOT_BETWEEN if (
             isinstance(filter.value, tuple) and len(filter.value) == 2
         ):
-            return Col(column).not_between(filter.value[0], filter.value[1])
+            return column.not_between(filter.value[0], filter.value[1])
         case Operator.IN if isinstance(filter.value, tuple):
-            return Col(column).in_(filter.value)
+            return column.in_(filter.value)
         case Operator.NOT_IN if isinstance(filter.value, tuple):
-            return Col(column).not_in(filter.value)
+            return column.not_in(filter.value)
         case _:
             raise OperationError(
                 f"Unsupported operator / value for WHERE clause: {op} / {filter.value}"
@@ -55,15 +55,15 @@ def prepare_expression(filter: FilterNode, column: str) -> Condition:
 
 def generate_query_from_filters(
     filters: Iterable[FilterNode],
-    column_mappings: Mapping[Field, Sequence[str]],
+    column_mappings: Mapping[Field, Sequence[Col]],
     include_fields: Container[Field] | None = None,
 ) -> Query:
     """Convert prepared filter nodes into sql filter expressions.
 
     Args:
         filters (Iterable[FilterNode]): The prepared filter nodes to convert.
-        column_mappings (Mapping[Field, Sequence[str]]): A mapping of Field enums to
-            column names.
+        column_mappings (Mapping[Field, Sequence[Col]]): A mapping of Field enums to
+            Col objects.
         include_fields (Container[Field], optional): An optional set of fields to include
             in the output. If provided, only filters for these fields will be processed.
 
@@ -73,7 +73,7 @@ def generate_query_from_filters(
     query = Query()
     expression_by_fields: dict[Field, Condition] = {}
     for filter in filters:
-        cols = column_mappings.get(filter.field, [])
+        cols = column_mappings.get(filter.field)
 
         if include_fields is not None and filter.field not in include_fields:
             # Skip this filter as its field is not in the included fields

@@ -195,21 +195,21 @@ class SqliteTransactionRepository:
             generate_query_from_filters(
                 filters,
                 {
-                    Field.AMOUNT: [f"{q(self.transaction_table_name)}.amount"],
-                    Field.DATE: [f"{q(self.transaction_table_name)}.transaction_date"],
+                    Field.AMOUNT: [Col("amount", self.transaction_table_name)],
+                    Field.DATE: [Col("transaction_date", self.transaction_table_name)],
                     Field.DESCRIPTION: [
-                        f"{q(self.transaction_table_name)}.description"
+                        Col("description", self.transaction_table_name)
                     ],
-                    Field.TYPE: [f"{q(self.transaction_table_name)}.type"],
+                    Field.TYPE: [Col("type", self.transaction_table_name)],
                     Field.ACCOUNT: [
-                        f"{q(self.account_table_name)}.name",
-                        f"{q(self.account_table_name)}.institution",
+                        Col("name", self.account_table_name),
+                        Col("institution", self.account_table_name),
                     ],
                     Field.SECURITY: [
-                        f"{q(self.security_table_name)}.key",
-                        f"{q(self.security_table_name)}.name",
-                        f"{q(self.security_table_name)}.type",
-                        f"{q(self.security_table_name)}.category",
+                        Col("key", self.security_table_name),
+                        Col("name", self.security_table_name),
+                        Col("type", self.security_table_name),
+                        Col("category", self.security_table_name),
                     ],
                 },
             )
@@ -456,14 +456,14 @@ class SqliteTransactionRepository:
             filters,
             {
                 Field.ACCOUNT: [
-                    q(f"{self.account_table_name}.name"),
-                    q(f"{self.account_table_name}.institution"),
+                    Col("name", self.account_table_name),
+                    Col("institution", self.account_table_name),
                 ],
                 Field.SECURITY: [
-                    q(f"{self.security_table_name}.key"),
-                    q(f"{self.security_table_name}.name"),
-                    q(f"{self.security_table_name}.type"),
-                    q(f"{self.security_table_name}.category"),
+                    Col("key", self.security_table_name),
+                    Col("name", self.security_table_name),
+                    Col("type", self.security_table_name),
+                    Col("category", self.security_table_name),
                 ],
             },
         )
@@ -526,14 +526,14 @@ class SqliteTransactionRepository:
                 filters,
                 {
                     Field.SECURITY: [
-                        q(f"{self.security_table_name}.key"),
-                        q(f"{self.security_table_name}.name"),
-                        q(f"{self.security_table_name}.type"),
-                        q(f"{self.security_table_name}.category"),
+                        Col("key", self.security_table_name),
+                        Col("name", self.security_table_name),
+                        Col("type", self.security_table_name),
+                        Col("category", self.security_table_name),
                     ],
                     Field.ACCOUNT: [
-                        q(f"{self.account_table_name}.name"),
-                        q(f"{self.account_table_name}.institution"),
+                        Col("name", self.account_table_name),
+                        Col("institution", self.account_table_name),
                     ],
                 },
                 include_fields={Field.SECURITY, Field.ACCOUNT},
@@ -558,12 +558,12 @@ class SqliteTransactionRepository:
                 filters,
                 {
                     Field.SECURITY: [
-                        q(f"{self.security_table_name}.key"),
-                        q(f"{self.security_table_name}.name"),
-                        q(f"{self.security_table_name}.type"),
-                        q(f"{self.security_table_name}.category"),
+                        Col("key", self.security_table_name),
+                        Col("name", self.security_table_name),
+                        Col("type", self.security_table_name),
+                        Col("category", self.security_table_name),
                     ],
-                    Field.DATE: [q(f"{self.price_table_name}.date")],
+                    Field.DATE: [Col("date", self.price_table_name)],
                 },
                 include_fields={Field.SECURITY, Field.DATE},
             )
