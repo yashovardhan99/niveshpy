@@ -30,6 +30,10 @@ if TYPE_CHECKING:
 class Application:
     """Main application container."""
 
+    def __init__(self, debug: bool = False) -> None:
+        """Initialize the application container."""
+        self._debug = debug
+
     @functools.cached_property
     def db(self) -> SqliteDatabase:
         """Return the database instance."""
@@ -37,7 +41,7 @@ class Application:
 
         logger.debug("Initializing new database connection")
 
-        db = SqliteDatabase()
+        db = SqliteDatabase(self._debug)
         db.initialize()
         return db
 
@@ -151,4 +155,4 @@ class AppState:
     @functools.cached_property[Application]
     def app(self) -> Application:
         """The main application instance."""
-        return Application()
+        return Application(self.debug)

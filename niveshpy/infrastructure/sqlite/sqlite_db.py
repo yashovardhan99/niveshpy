@@ -34,6 +34,7 @@ T = TypeVar("T")
 class SqliteDatabase:
     """SQLite database session management and migrations."""
 
+    _debug: bool = field(default=False, repr=False)
     db_path: Path = field(
         factory=lambda: platformdirs.user_data_path("niveshpy") / "niveshpy.db"
     )
@@ -46,7 +47,8 @@ class SqliteDatabase:
         try:
             conn = sqlite3.connect(self.db_path, check_same_thread=False)
             logger.debug("SQLite connection established to %s", self.db_path)
-            conn.set_trace_callback(logger.debug)
+            if self._debug:
+                conn.set_trace_callback(logger.debug)
             conn.create_function("iregexp", 2, _iregexp)
             conn.execute("PRAGMA foreign_keys=ON")
             conn.row_factory = sqlite3.Row
