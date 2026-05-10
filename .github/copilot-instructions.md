@@ -35,17 +35,17 @@ Pre-commit hooks run `ruff check`, `ruff format`, and `ty check` automatically.
 NiveshPy is a financial CLI for managing mutual fund portfolios, targeted at Indian markets. It follows a layered architecture:
 
 ```
-CLI (Click commands) → Services (business logic) → Database (SQLAlchemy/SQLite)
+CLI (Click commands) → Services (business logic) → Database (SQLite)
                                                   → Providers (external data)
                                                   → Parsers (file parsing)
 ```
 
 - **CLI layer** (`niveshpy/cli/`): Click command groups (`accounts`, `securities`, `transactions`, `parse`, `prices`, `reports`). Uses a `LazyGroup`/`LazyCommand` pattern in `cli/utils/essentials.py` for on-demand loading.
 - **Services layer** (`niveshpy/services/`): One service per domain entity. Services accept query strings, translate them into SQL filters via the query language, and use `database.session()` for DB access.
-- **Models** (`niveshpy/models/`): SQLAlchemy models with a layered pattern — `FooBase` (shared fields) → `FooCreate` (input without ID) → `Foo(table=True)` (DB model) → `FooPublic` (output with ID). Domain models: `Account`, `Security`, `Transaction`, `Price`.
+- **Models** (`niveshpy/models/`): SQLite models with a layered pattern — `FooBase` (shared fields) → `FooCreate` (input without ID) → `Foo(table=True)` (DB model) → `FooPublic` (output with ID). Domain models: `Account`, `Security`, `Transaction`, `Price`.
 - **Parsers/Providers** (`niveshpy/parsers/`, `niveshpy/providers/`): Plugin system using Python entry points (`importlib.metadata`). Each plugin has a `Factory` class implementing a `Protocol` from `niveshpy/models/`. Discovered at runtime via `core/parsers.py` and `core/providers.py`.
 - **Query language** (`niveshpy/core/query/`): Custom tokenizer → parser → AST for CLI filtering (e.g., `name:foo`).
-- **Database** (`niveshpy/database.py`): SQLite via SQLAlchemy. Stored in `platformdirs.user_data_path("niveshpy")`. Registers a custom `iregexp` SQLite function and enables foreign keys on every connection.
+- **Database** (`niveshpy/database.py`): SQLite. Stored in `platformdirs.user_data_path("niveshpy")`. Registers a custom `iregexp` SQLite function and enables foreign keys on every connection.
 
 ## Key Conventions
 

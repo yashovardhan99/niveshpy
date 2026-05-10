@@ -7,10 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- (Internal) New light-weight query-builder for better performance.
+
 ### Changed
 
 - Update how migrations are applied for a more consistent database build.
 - XIRR performance improvement.
+- (Internal) Refactored project to use sqlite directly.
+
+### Removed
+
+- (Internal) Removed sqlalchemy.
 
 ## [1.0.0a7] - 2026-05-03
 

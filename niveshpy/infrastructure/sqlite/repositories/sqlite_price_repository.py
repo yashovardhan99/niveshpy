@@ -3,27 +3,26 @@
 import datetime
 import sys
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
 from itertools import islice
 
-from sqlalchemy import delete, func, insert, select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import (
-    Session,
-    contains_eager,
-    raiseload,
-    selectinload,
-    sessionmaker,
-)
+from attrs import evolve, frozen
 
 from niveshpy.core.logging import logger
 from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_fields_from_filters
+from niveshpy.domain.repositories import SecurityRepository
 from niveshpy.domain.repositories.price_repository import PriceFetchProfile
-from niveshpy.exceptions import DatabaseError, InvalidInputError, ResourceNotFoundError
-from niveshpy.infrastructure.sqlite.models import Price, Security
-from niveshpy.infrastructure.sqlite.query_filters import get_sqlalchemy_filters
+from niveshpy.exceptions import IntegrityError, InvalidInputError, ResourceNotFoundError
+from niveshpy.infrastructure.sqlite.converters import get_converter
+from niveshpy.infrastructure.sqlite.query import (
+    PRICE_COLUMNS,
+    PRICE_CREATE_COLUMNS,
+    Delete,
+    Insert,
+    Query,
+)
+from niveshpy.infrastructure.sqlite.query_filters import generate_query_from_filters
+from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
 from niveshpy.models.price import PriceCreate, PricePublic
 
 if sys.version_info >= (3, 12):
@@ -39,15 +38,49 @@ else:
             yield batch
 
 
-@dataclass(slots=True, frozen=True)
+@frozen
 class SqlitePriceRepository:
     """SQLite-based repository implementation for managing price data.
 
     Attributes:
-        session_factory: The sessionmaker instance used for creating database sessions.
+        database: The SqliteDatabase instance used for database operations.
+        security_repository: The SecurityRepository instance used to fetch associated security data.
+        price_table_name: The name of the table in the database where price data is stored.
+        security_table_name: The name of the table in the database where security data is stored.
     """
 
-    session_factory: sessionmaker[Session]
+    database: SqliteDatabase
+    security_repository: SecurityRepository
+    price_table_name: str = "price"
+    security_table_name: str = "security"
+
+    def _update_prices_with_security(
+        self, prices: Sequence[PricePublic]
+    ) -> Sequence[PricePublic]:
+        """Helper method to update a sequence of PricePublic objects with their associated Security objects.
+
+        Args:
+            prices: A sequence of PricePublic objects to update with their associated Security objects.
+
+        Returns:
+            A sequence of PricePublic objects with their associated Security objects included.
+        """
+        price_security_map = {price.security_key: price for price in prices}
+        security_keys = tuple(price_security_map.keys())
+        securities = self.security_repository.find_securities_by_keys(security_keys)
+        security_map = {security.key: security for security in securities}
+        updated_prices = []
+        for price in prices:
+            security = security_map.get(price.security_key)
+            if security is None:
+                raise ResourceNotFoundError(
+                    "Security",
+                    price.security_key,
+                    "associated with price not found",
+                )
+            price = evolve(price, security=security)
+            updated_prices.append(price)
+        return updated_prices
 
     def get_price_by_key_and_date(
         self,
@@ -65,23 +98,24 @@ class SqlitePriceRepository:
         Returns:
             The PricePublic object if found, otherwise None.
         """
-        stmt = select(Price).where(
-            Price.security_key == security_key,
-            Price.date == date,
+        query = (
+            Query()
+            .select(*PRICE_COLUMNS, prefix_table=self.price_table_name)
+            .from_(self.price_table_name)
+            .where(("security_key = ?", security_key), ("date = ?", date))
         )
-        if fetch_profile == PriceFetchProfile.WITH_SECURITY:
-            stmt = stmt.options(selectinload(Price.security))
-        else:
-            stmt = stmt.options(raiseload("*"))
+        price = self.database.select_one(query, cl=PricePublic)
 
-        with self.session_factory() as session:
-            result = session.scalar(stmt)
-            if result:
-                return result.to_public(
-                    include_security=fetch_profile == PriceFetchProfile.WITH_SECURITY,
-                )
-            else:
-                return None
+        if price is None:
+            return None
+
+        if fetch_profile == PriceFetchProfile.WITH_SECURITY:
+            security = self.security_repository.get_security_by_key(security_key)
+            if security is None:
+                raise ResourceNotFoundError("Security", security_key)
+            price = evolve(price, security=security)
+
+        return price
 
     def find_all_prices(
         self,
@@ -101,48 +135,44 @@ class SqlitePriceRepository:
         Returns:
             A sequence of PricePublic objects matching the filters and pagination criteria.
         """
-        filters = list(filters)
-        where_clauses = get_sqlalchemy_filters(
-            filters,
-            {
-                Field.DATE: [Price.date],
-                Field.SECURITY: [
-                    Security.key,
-                    Security.name,
-                    Security.type,
-                    Security.category,
-                ],
-            },
+        query = (
+            generate_query_from_filters(
+                filters,
+                {
+                    Field.DATE: [f"{self.price_table_name}.date"],
+                    Field.SECURITY: [
+                        f"{self.price_table_name}.security_key",
+                        f"{self.security_table_name}.name",
+                        f"{self.security_table_name}.type",
+                        f"{self.security_table_name}.category",
+                    ],
+                },
+            )
+            .from_(self.price_table_name)
+            .select(*PRICE_COLUMNS, prefix_table=self.price_table_name)
+            .order_by(
+                f"{self.price_table_name}.security_key",
+                f"{self.price_table_name}.date DESC",
+            )
         )
-        stmt = select(Price)
 
         if Field.SECURITY in get_fields_from_filters(filters):
-            stmt = stmt.join(Security)
-            # If the filters include security fields, we need to eager load the security relationship to avoid N+1 queries
-            if fetch_profile == PriceFetchProfile.WITH_SECURITY:
-                stmt = stmt.options(contains_eager(Price.security))
-        # If the filters don't include security fields but the fetch profile requires security,
-        # we can use selectinload to load the related securities in a separate query, which is more efficient than a join in this case
-        elif fetch_profile == PriceFetchProfile.WITH_SECURITY:
-            stmt = stmt.options(selectinload(Price.security))
+            query = query.join(
+                self.security_table_name,
+                f"{self.price_table_name}.security_key = {self.security_table_name}.key",
+            )
 
-        # If the fetch profile is minimal, we can use raiseload to prevent loading any relationships,
-        # which can improve performance if we don't need the related data
-        if fetch_profile == PriceFetchProfile.MINIMAL:
-            stmt = stmt.options(raiseload("*"))
-
-        stmt = stmt.where(*where_clauses).offset(offset)
         if limit is not None:
-            stmt = stmt.limit(limit)
+            query = query.limit(limit)
+        if offset > 0:
+            query = query.offset(offset)
 
-        with self.session_factory() as session:
-            results = session.scalars(stmt).all()
-            return [
-                result.to_public(
-                    include_security=fetch_profile == PriceFetchProfile.WITH_SECURITY,
-                )
-                for result in results
-            ]
+        prices = self.database.select_many(query, cl=PricePublic)
+
+        if fetch_profile == PriceFetchProfile.WITH_SECURITY:
+            prices = self._update_prices_with_security(prices)
+
+        return prices
 
     def find_latest_prices(
         self,
@@ -162,49 +192,62 @@ class SqlitePriceRepository:
         Returns:
             A sequence of the latest PricePublic objects for securities matching the filters and pagination criteria.
         """
-        where_clauses = get_sqlalchemy_filters(
+        filters = list(
+            filters
+        )  # Convert filters to a list to allow multiple iterations
+
+        filter_query: Query = generate_query_from_filters(
             filters,
             {
                 Field.SECURITY: [
-                    Security.key,
-                    Security.name,
-                    Security.type,
-                    Security.category,
+                    f"{self.price_table_name}.security_key",
+                    f"{self.security_table_name}.name",
+                    f"{self.security_table_name}.type",
+                    f"{self.security_table_name}.category",
                 ]
             },
         )
 
-        subquery = select(Price.security_key, func.max(Price.date).label("max_date"))
+        cte = (
+            filter_query.from_(self.price_table_name)
+            .select(
+                f"{self.price_table_name}.security_key",
+                (f"MAX({self.price_table_name}.date)", "max_date"),
+            )
+            .group_by(f"{self.price_table_name}.security_key")
+        )
 
         if filters:
-            subquery = subquery.join(Security).where(*where_clauses)
-        subquery = subquery.group_by(Price.security_key).subquery("latest_prices")
-
-        stmt = (
-            select(Price)
-            .join(
-                subquery,
-                (Price.security_key == subquery.c.security_key)
-                & (Price.date == subquery.c.max_date),
+            # Since the only possible filters at this point are on security fields
+            cte = cte.join(
+                self.security_table_name,
+                f"{self.price_table_name}.security_key = {self.security_table_name}.key",
             )
-            .offset(offset)
+
+        main_query = (
+            Query()
+            .with_cte("latest_prices", cte)
+            .select(*PRICE_COLUMNS, prefix_table=self.price_table_name)
+            .from_(self.price_table_name)
+            .join(
+                "latest_prices",
+                f"{self.price_table_name}.security_key = latest_prices.security_key ",
+                f"{self.price_table_name}.date = latest_prices.max_date",
+            )
+            .order_by(f"{self.price_table_name}.security_key")
         )
+
         if limit is not None:
-            stmt = stmt.limit(limit)
+            main_query = main_query.limit(limit)
+        if offset > 0:
+            main_query = main_query.offset(offset)
+
+        prices = self.database.select_many(main_query, cl=PricePublic)
 
         if fetch_profile == PriceFetchProfile.WITH_SECURITY:
-            stmt = stmt.options(selectinload(Price.security))
-        else:
-            stmt = stmt.options(raiseload("*"))
+            prices = self._update_prices_with_security(prices)
 
-        with self.session_factory() as session:
-            results = session.scalars(stmt).all()
-            return [
-                result.to_public(
-                    include_security=fetch_profile == PriceFetchProfile.WITH_SECURITY,
-                )
-                for result in results
-            ]
+        return prices
 
     def overwrite_price(self, price: PriceCreate) -> None:
         """Overwrite an existing price or insert a new one if it doesn't exist.
@@ -215,38 +258,22 @@ class SqlitePriceRepository:
         Raises:
             ResourceNotFoundError: If the associated security for the price does not exist in the database.
         """
+        c = get_converter()
+        values = c.unstructure_attrs_astuple(price)
+
         stmt = (
-            sqlite_insert(Price)
-            .values(
-                security_key=price.security_key,
-                date=price.date,
-                open=price.open,
-                high=price.high,
-                low=price.low,
-                close=price.close,
-                properties=price.properties,
-            )
-            .on_conflict_do_update(
-                set_={
-                    "open": price.open,
-                    "high": price.high,
-                    "low": price.low,
-                    "close": price.close,
-                    "properties": price.properties,
-                    "created": datetime.datetime.now(tz=datetime.UTC),
-                },
-            )
+            Insert(self.price_table_name)
+            .or_replace()
+            .columns_(*PRICE_CREATE_COLUMNS)
+            .values_(*values)
         )
-        with self.session_factory() as session:
-            try:
-                session.execute(stmt)
-                session.commit()
-            except IntegrityError as e:
-                session.rollback()
-                if "FOREIGN KEY constraint failed" in str(e):
-                    raise ResourceNotFoundError("Security", price.security_key) from e
-                else:
-                    raise DatabaseError("Failed to overwrite price") from e
+        try:
+            self.database.execute(stmt)
+        except IntegrityError as e:
+            if "FOREIGN KEY constraint failed" in str(e.__cause__):
+                raise ResourceNotFoundError("Security", price.security_key) from e
+            else:
+                raise
 
     def replace_prices_in_range(
         self,
@@ -316,48 +343,32 @@ class SqlitePriceRepository:
                     "High price must be greater than or equal to low, open, and close prices, and low price must be less than or equal to high, open, and close prices",
                 )
 
-        with self.session_factory() as session:
-            with session.begin():
-                # First, delete existing prices in the specified date range for the given security key
-                delete_stmt = delete(Price).where(
-                    Price.security_key == security_key,
-                    Price.date.between(start_date, end_date),
+        with self.database.cursor() as cursor:
+            delete_stmt = Delete(self.price_table_name).where(
+                ("security_key = ?", security_key),
+                ("date BETWEEN ? AND ?", start_date, end_date),
+            )
+            cursor.execute(str(delete_stmt), delete_stmt.params)
+
+            if len(new_prices) == 0:
+                # If there are no new prices to insert, we can return early after deleting the existing prices
+                logger.debug(
+                    "No new prices to insert for security %s in range %s to %s, so only deleted existing prices",
+                    security_key,
+                    start_date.isoformat(),
+                    end_date.isoformat(),
                 )
-                session.execute(delete_stmt)
+                return
 
-                if len(new_prices) == 0:
-                    # If there are no new prices to insert, we can return early after deleting the existing prices
-                    logger.debug(
-                        "No new prices to insert for security %s in range %s to %s, so only deleted existing prices",
-                        security_key,
-                        start_date.isoformat(),
-                        end_date.isoformat(),
-                    )
-                    return
-
-                # Then, insert new prices in batches, validating each batch before insertion to ensure data integrity
-                for batch in batches:
-                    # If validation passes, proceed with inserting new prices
-                    price_dicts = [
-                        {
-                            "security_key": security_key,
-                            "date": price.date,
-                            "open": price.open,
-                            "high": price.high,
-                            "low": price.low,
-                            "close": price.close,
-                            "properties": price.properties,
-                        }
-                        for price in batch
-                    ]
-                    stmt = insert(Price).values(price_dicts)
-                    try:
-                        session.execute(stmt)
-                    except IntegrityError as e:
-                        session.rollback()
-                        if "FOREIGN KEY constraint failed" in str(e):
-                            raise ResourceNotFoundError("Security", security_key) from e
-                        else:
-                            raise DatabaseError(
-                                "Failed to replace prices in range"
-                            ) from e
+            # Insert new prices in batches, validating each batch before insertion to ensure data integrity
+            c = get_converter()
+            for batch in batches:
+                tuples = [c.unstructure_attrs_astuple(price) for price in batch]
+                stmt = Insert(self.price_table_name).columns_(*PRICE_CREATE_COLUMNS)
+                try:
+                    cursor.executemany(str(stmt), tuples)
+                except IntegrityError as e:
+                    if "FOREIGN KEY constraint failed" in str(e.__cause__):
+                        raise ResourceNotFoundError("Security", security_key) from e
+                    else:
+                        raise

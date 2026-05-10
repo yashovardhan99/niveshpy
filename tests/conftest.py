@@ -27,23 +27,3 @@ def db():
     database = SqliteDatabase(db_path=Path(":memory:"))
     database.initialize()
     return database
-
-
-@pytest.fixture
-def engine(db):
-    """Expose the SQLAlchemy engine from the test database."""
-    return db._engine
-
-
-@pytest.fixture
-def session(db):
-    """Create a new database session for a test."""
-    with db.session_factory() as session:
-        yield session
-        session.rollback()
-
-
-@pytest.fixture
-def session_factory(db):
-    """Expose the session factory from the test database."""
-    return db.session_factory

@@ -39,9 +39,9 @@ class Application:
         """Return the database instance."""
         from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
 
-        logger.debug("Initializing database connection")
+        logger.debug("Initializing new database connection")
 
-        db = SqliteDatabase(debug=self._debug)
+        db = SqliteDatabase(self._debug)
         db.initialize()
         return db
 
@@ -57,7 +57,7 @@ class Application:
         """Return the security repository."""
         from niveshpy.infrastructure.sqlite.repositories import SqliteSecurityRepository
 
-        return SqliteSecurityRepository(self.db.session_factory)
+        return SqliteSecurityRepository(self.db)
 
     @functools.cached_property
     def account(self) -> AccountService:
@@ -71,7 +71,7 @@ class Application:
         """Return the account repository."""
         from niveshpy.infrastructure.sqlite.repositories import SqliteAccountRepository
 
-        return SqliteAccountRepository(self.db.session_factory)
+        return SqliteAccountRepository(self.db)
 
     @functools.cached_property
     def transaction(self) -> TransactionService:
@@ -93,7 +93,11 @@ class Application:
             SqliteTransactionRepository,
         )
 
-        return SqliteTransactionRepository(self.db.session_factory)
+        return SqliteTransactionRepository(
+            self.db,
+            account_repository=self.account_repository,
+            security_repository=self.security_repository,
+        )
 
     def get_parsing_service(
         self,
@@ -116,7 +120,7 @@ class Application:
         """Return the price repository."""
         from niveshpy.infrastructure.sqlite.repositories import SqlitePriceRepository
 
-        return SqlitePriceRepository(self.db.session_factory)
+        return SqlitePriceRepository(self.db, self.security_repository)
 
     @functools.cached_property
     def price(self) -> PriceService:

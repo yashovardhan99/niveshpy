@@ -1,5 +1,6 @@
 """Models for financial transactions."""
 
+import functools
 from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal
@@ -8,6 +9,7 @@ from typing import Any
 
 from attrs import field, frozen
 
+from niveshpy.models._helper import quantize_decimal
 from niveshpy.models.account import AccountPublic
 from niveshpy.models.security import SecurityPublic
 
@@ -29,6 +31,10 @@ class TransactionType(StrEnum):
     """
 
 
+_quantize_units = functools.partial(quantize_decimal, places=3)
+_quantize_amount = functools.partial(quantize_decimal, places=2)
+
+
 @frozen
 class TransactionCreate:
     """Model for creating transactions.
@@ -48,8 +54,8 @@ class TransactionCreate:
     transaction_date: date
     type: TransactionType
     description: str
-    amount: Decimal
-    units: Decimal
+    amount: Decimal = field(converter=_quantize_amount)
+    units: Decimal = field(converter=_quantize_units)
     security_key: str
     account_id: int
     properties: Mapping[str, Any] = field(factory=dict)
@@ -80,8 +86,8 @@ class TransactionPublic:
     transaction_date: date
     type: TransactionType
     description: str
-    amount: Decimal
-    units: Decimal
+    amount: Decimal = field(converter=_quantize_amount)
+    units: Decimal = field(converter=_quantize_units)
     security_key: str
     account_id: int
     properties: Mapping[str, Any]
