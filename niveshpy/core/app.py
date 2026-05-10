@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -33,6 +34,8 @@ class Application:
     def __init__(self, debug: bool = False) -> None:
         """Initialize the application container."""
         self._debug = debug
+        if self._debug:
+            warnings.simplefilter("default")
 
     @functools.cached_property
     def db(self) -> SqliteDatabase:

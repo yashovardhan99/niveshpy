@@ -13,6 +13,7 @@ from niveshpy.exceptions import ResourceNotFoundError
 from niveshpy.infrastructure.sqlite.converters import get_converter
 from niveshpy.infrastructure.sqlite.query import (
     SECURITY_COLUMNS,
+    Col,
     Delete,
     Insert,
     Query,
@@ -43,7 +44,7 @@ class SqliteSecurityRepository:
             Query()
             .select(*SECURITY_COLUMNS)
             .from_(self.security_table_name)
-            .where(("key = ?", key))
+            .where(Col("key").eq(key))
         )
         return self.database.select_one(query, cl=SecurityPublic)
 
@@ -130,7 +131,7 @@ class SqliteSecurityRepository:
 
     def delete_security_by_key(self, key: str) -> bool:
         """Delete a security from the database by its key."""
-        stmt = Delete(self.security_table_name).where(("key = ?", key))
+        stmt = Delete(self.security_table_name).where(Col("key").eq(key))
         result = self.database.execute(stmt)
         if result == 0:
             logger.debug("No security found with key %s to delete.", key)

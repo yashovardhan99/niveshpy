@@ -17,6 +17,7 @@ from niveshpy.infrastructure.sqlite.converters import get_converter
 from niveshpy.infrastructure.sqlite.query import (
     PRICE_COLUMNS,
     PRICE_CREATE_COLUMNS,
+    Col,
     Delete,
     Insert,
     Query,
@@ -102,7 +103,7 @@ class SqlitePriceRepository:
             Query()
             .select(*PRICE_COLUMNS, prefix_table=self.price_table_name)
             .from_(self.price_table_name)
-            .where(("security_key = ?", security_key), ("date = ?", date))
+            .where(Col("security_key").eq(security_key), Col("date").eq(date))
         )
         price = self.database.select_one(query, cl=PricePublic)
 
@@ -159,7 +160,9 @@ class SqlitePriceRepository:
         if Field.SECURITY in get_fields_from_filters(filters):
             query = query.join(
                 self.security_table_name,
-                f"{self.price_table_name}.security_key = {self.security_table_name}.key",
+                Col("security_key", self.price_table_name).eq(
+                    Col("key", self.security_table_name)
+                ),
             )
 
         if limit is not None:
@@ -221,7 +224,9 @@ class SqlitePriceRepository:
             # Since the only possible filters at this point are on security fields
             cte = cte.join(
                 self.security_table_name,
-                f"{self.price_table_name}.security_key = {self.security_table_name}.key",
+                Col("security_key", self.price_table_name).eq(
+                    Col("key", self.security_table_name)
+                ),
             )
 
         main_query = (
@@ -231,8 +236,10 @@ class SqlitePriceRepository:
             .from_(self.price_table_name)
             .join(
                 "latest_prices",
-                f"{self.price_table_name}.security_key = latest_prices.security_key ",
-                f"{self.price_table_name}.date = latest_prices.max_date",
+                Col("security_key", self.price_table_name).eq(
+                    Col("security_key", "latest_prices")
+                ),
+                Col("date", self.price_table_name).eq(Col("max_date", "latest_prices")),
             )
             .order_by(f"{self.price_table_name}.security_key")
         )
@@ -345,8 +352,8 @@ class SqlitePriceRepository:
 
         with self.database.cursor() as cursor:
             delete_stmt = Delete(self.price_table_name).where(
-                ("security_key = ?", security_key),
-                ("date BETWEEN ? AND ?", start_date, end_date),
+                Col("security_key").eq(security_key),
+                Col("date").between(start_date, end_date),
             )
             cursor.execute(str(delete_stmt), delete_stmt.params)
 

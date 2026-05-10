@@ -40,11 +40,14 @@ import logging.config
 import logging.handlers
 
 logger = logging.getLogger("niveshpy")
+warnings_logger = logging.getLogger("py.warnings")
 
 
 def setup(*handlers: logging.Handler) -> None:
     """Set up logging configuration."""
     logger.setLevel(logging.DEBUG)
+    logging.captureWarnings(True)
     for handler in handlers:
         logger.addHandler(handler)
+        warnings_logger.addHandler(handler)
     logger.debug("Logging initialized with handlers: %s.", handlers)

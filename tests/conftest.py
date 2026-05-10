@@ -24,6 +24,6 @@ def mock_platformdirs(tmp_path_factory):
 @pytest.fixture
 def db():
     """Create an in-memory SqliteDatabase for testing."""
-    database = SqliteDatabase(db_path=Path(":memory:"))
+    database = SqliteDatabase(debug=True, db_path=Path(":memory:"))
     database.initialize()
     return database

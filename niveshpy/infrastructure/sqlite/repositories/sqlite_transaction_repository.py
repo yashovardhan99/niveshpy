@@ -20,7 +20,9 @@ from niveshpy.infrastructure.sqlite.query import (
     PRICE_COLUMNS,
     TRANSACTION_COLUMNS,
     TRANSACTION_CREATE_COLUMNS,
+    Col,
     Delete,
+    Fn,
     Insert,
     Query,
     in_,
@@ -72,7 +74,7 @@ class SqliteTransactionRepository:
             Query()
             .select(*TRANSACTION_COLUMNS)
             .from_(self.transaction_table_name)
-            .where(("id = ?", transaction_id))
+            .where(Col("id").eq(transaction_id))
         )
         result = self.database.select_one(query, cl=TransactionPublic)
 
@@ -220,14 +222,18 @@ class SqliteTransactionRepository:
             # Only join the Account table if account-related filters are present
             query = query.join(
                 self.account_table_name,
-                f"{q(self.transaction_table_name)}.account_id = {q(self.account_table_name)}.id",
+                Col("account_id", self.transaction_table_name).eq(
+                    Col("id", self.account_table_name)
+                ),
             )
 
         if Field.SECURITY in fields:
             # Only join the Security table if security-related filters are present
             query = query.join(
                 self.security_table_name,
-                f"{q(self.transaction_table_name)}.security_key = {q(self.security_table_name)}.key",
+                Col("security_key", self.transaction_table_name).eq(
+                    Col("key", self.security_table_name)
+                ),
             )
 
         query = self._update_query_with_sort_order(query, sort_order)
@@ -238,7 +244,9 @@ class SqliteTransactionRepository:
         if offset:
             query = query.offset(offset)
 
-        result = self.database.select_many(query, cl=TransactionPublic)
+        result: Sequence[TransactionPublic] = self.database.select_many(
+            query, cl=TransactionPublic
+        )
         if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
             result = self._update_transactions_with_relations(result)
 
@@ -377,7 +385,7 @@ class SqliteTransactionRepository:
         stmt = (
             Delete()
             .from_(self.transaction_table_name)
-            .where(("id = ?", transaction_id))
+            .where(Col("id").eq(transaction_id))
         )
         result = self.database.execute(stmt)
         if result == 0:
@@ -410,8 +418,8 @@ class SqliteTransactionRepository:
             Delete()
             .from_(self.transaction_table_name)
             .where(
-                ("transaction_date BETWEEN ? AND ?", *date_range),
-                in_(q(self.transaction_table_name + ".account_id"), *account_ids),
+                Col("transaction_date").between(*date_range),
+                Col("account_id").in_(account_ids),
             )
         )
         insert_stmt = (
@@ -473,18 +481,22 @@ class SqliteTransactionRepository:
                 q(f"{self.transaction_table_name}.account_id"),
                 q(f"{self.transaction_table_name}.security_key"),
             )
-            .having(f"SUM({q(self.transaction_table_name) + '.units'}) >= 0.001")
+            .having(Fn("SUM", Col("units", self.transaction_table_name)).ge(0.001))
         )
 
         if Field.SECURITY in filter_fields:
             query = query.join(
                 q(self.security_table_name),
-                f"{q(self.security_table_name)}.key = {q(self.transaction_table_name)}.security_key",
+                Col("key", self.security_table_name).eq(
+                    Col("security_key", self.transaction_table_name)
+                ),
             )
         if Field.ACCOUNT in filter_fields:
             query = query.join(
                 q(self.account_table_name),
-                f"{q(self.account_table_name)}.id = {q(self.transaction_table_name)}.account_id",
+                Col("id", self.account_table_name).eq(
+                    Col("account_id", self.transaction_table_name)
+                ),
             )
 
         results = self.database.select_many(query, cl=HoldingUnitRow)
@@ -536,7 +548,7 @@ class SqliteTransactionRepository:
                 ),
             )
             .group_by(q(f"{self.transaction_table_name}.security_key"))
-            .having(f"SUM({q(self.transaction_table_name)}.units) >= 0.001")
+            .having(Fn("SUM", Col("units", self.transaction_table_name)).ge(0.001))
         )
 
         # CTE 2: latest price per security (with optional date filter)
@@ -569,24 +581,30 @@ class SqliteTransactionRepository:
         if Field.SECURITY in filter_fields:
             holding_units_cte = holding_units_cte.join(
                 q(self.security_table_name),
-                f"{q(self.security_table_name)}.key = {q(self.transaction_table_name)}.security_key",
+                Col("key", self.security_table_name).eq(
+                    Col("security_key", self.transaction_table_name)
+                ),
             )
             price_cte = price_cte.join(
                 q(self.security_table_name),
-                f"{q(self.security_table_name)}.key = {q(self.price_table_name)}.security_key",
+                Col("key", self.security_table_name).eq(
+                    Col("security_key", self.price_table_name)
+                ),
             )
 
         if Field.ACCOUNT in filter_fields:
             holding_units_cte = holding_units_cte.join(
                 q(self.account_table_name),
-                f"{q(self.account_table_name)}.id = {q(self.transaction_table_name)}.account_id",
+                Col("id", self.account_table_name).eq(
+                    Col("account_id", self.transaction_table_name)
+                ),
             )
 
         latest_prices_cte = (
             Query()
             .select(*PRICE_COLUMNS, prefix_table="cte_prices")
             .from_("cte_prices")
-            .where("row_num = 1")
+            .where(Col("row_num").eq(1))
         )
 
         # CTE 3: holding values joined with security metadata for grouping
@@ -595,11 +613,15 @@ class SqliteTransactionRepository:
             .from_(q(self.security_table_name))
             .join(
                 q("holding_units"),
-                f"{q(self.security_table_name)}.key = {q('holding_units')}.security_key",
+                Col("key", self.security_table_name).eq(
+                    Col("security_key", "holding_units")
+                ),
             )
             .join(
                 q("latest_prices"),
-                f"{q(self.security_table_name)}.key = {q('latest_prices')}.security_key",
+                Col("key", self.security_table_name).eq(
+                    Col("security_key", "latest_prices")
+                ),
             )
             .select(
                 (
@@ -634,7 +656,9 @@ class SqliteTransactionRepository:
             .from_(q("holding_units"))
             .join(
                 q("latest_prices"),
-                f"{q('holding_units')}.security_key = {q('latest_prices')}.security_key",
+                Col("security_key", "holding_units").eq(
+                    Col("security_key", "latest_prices")
+                ),
             )
         )
 

@@ -6,13 +6,33 @@ import functools
 from collections.abc import Iterable, Sequence
 from enum import Enum
 from textwrap import dedent
-from typing import Any, Literal, NewType, Self, overload
+from typing import Any, Literal, NewType, Self
 
 from attrs import define, field, frozen
 
 from niveshpy.infrastructure.sqlite.converters import get_converter
 
-_Expr = NewType("_Expr", str)
+Expr = NewType("Expr", str)
+"""NewType for SQL expressions to distinguish them from regular strings."""
+
+
+@frozen
+class Condition:
+    """Class to represent a SQL condition with its expression and parameters.
+
+    This class should not be created directly outside of the query builder.
+    Instead, use helper functions like `Col().eq()`, `Fn()`, `in_()`, etc. to create conditions.
+    """
+
+    expression: Expr
+    params: tuple[Any, ...] = ()
+
+    @classmethod
+    def from_arg(cls, arg: str | tuple[str, Any] | tuple[str, Any, Any]) -> Self:
+        """Create a Condition from a string or a tuple argument."""
+        if isinstance(arg, tuple):
+            return cls(Expr(arg[0]), tuple(arg[1:]))
+        return cls(Expr(arg))
 
 
 def q(column_or_table: str) -> str:
@@ -26,31 +46,112 @@ def q(column_or_table: str) -> str:
 
 
 @frozen
-class _Condition:
-    expression: _Expr
-    params: tuple[Any, ...] = ()
+class SqlExpr:
+    """A SQL expression that can participate in conditions and comparisons.
 
-    @classmethod
-    def from_arg(cls, arg: str | tuple[str, Any] | tuple[str, Any, Any]) -> Self:
-        if isinstance(arg, tuple):
-            return cls(_Expr(arg[0]), tuple(arg[1:]))
-        return cls(_Expr(arg))
+    This is the base expression type used by both `Col()` and `Fn()`.
+    Supports comparison operators, NULL checks, BETWEEN, and IN conditions.
+    """
+
+    _sql: str
+    _params: tuple[Any, ...] = ()
+
+    def __str__(self) -> str:
+        """Render the SQL expression as a string, with parameters represented as placeholders."""
+        return self._sql
+
+    def _create_simple_condition(self, operator: str, value: Any) -> Condition:
+        """Create a simple binary condition expression."""
+        if isinstance(value, SqlExpr):
+            return Condition(
+                Expr(f"{self} {operator} {value}"),
+                (*self._params, *value._params),
+            )
+        return Condition(Expr(f"{self} {operator} ?"), (*self._params, value))
+
+    eq = functools.partialmethod(_create_simple_condition, "=")
+    """Create an equality condition."""
+    ne = functools.partialmethod(_create_simple_condition, "!=")
+    """Create a not-equal condition."""
+    gt = functools.partialmethod(_create_simple_condition, ">")
+    """Create a greater-than condition."""
+    ge = functools.partialmethod(_create_simple_condition, ">=")
+    """Create a greater-than-or-equal condition."""
+    lt = functools.partialmethod(_create_simple_condition, "<")
+    """Create a less-than condition."""
+    le = functools.partialmethod(_create_simple_condition, "<=")
+    """Create a less-than-or-equal condition."""
+
+    def is_null(self) -> Condition:
+        """Create an IS NULL condition."""
+        return Condition(Expr(f"{self} IS NULL"), self._params)
+
+    def is_not_null(self) -> Condition:
+        """Create an IS NOT NULL condition."""
+        return Condition(Expr(f"{self} IS NOT NULL"), self._params)
+
+    def between(self, low: Any, high: Any) -> Condition:
+        """Create a BETWEEN condition."""
+        left_sql, left_params = (
+            (str(low), (*self._params, *low._params))
+            if isinstance(low, SqlExpr)
+            else ("?", (*self._params, low))
+        )
+        right_sql, right_params = (
+            (str(high), (*left_params, *high._params))
+            if isinstance(high, SqlExpr)
+            else ("?", (*left_params, high))
+        )
+        return Condition(
+            Expr(f"{self} BETWEEN {left_sql} AND {right_sql}"), right_params
+        )
+
+    def not_between(self, low: Any, high: Any) -> Condition:
+        """Create a NOT BETWEEN condition."""
+        left_sql, left_params = (
+            (str(low), (*self._params, *low._params))
+            if isinstance(low, SqlExpr)
+            else ("?", (*self._params, low))
+        )
+        right_sql, right_params = (
+            (str(high), (*left_params, *high._params))
+            if isinstance(high, SqlExpr)
+            else ("?", (*left_params, high))
+        )
+        return Condition(
+            Expr(f"{self} NOT BETWEEN {left_sql} AND {right_sql}"), right_params
+        )
+
+    def in_(self, values: Sequence[Any]) -> Condition:
+        """Create an IN condition."""
+        return in_(str(self), *values)
+
+    def not_in(self, values: Sequence[Any]) -> Condition:
+        """Create a NOT IN condition."""
+        return not_in(str(self), *values)
+
+    def to_condition(self) -> Condition:
+        """Convert this expression to a Condition (for boolean function expressions)."""
+        return Condition(Expr(str(self)), self._params)
 
 
-ConditionType = str | tuple[str, Any] | tuple[str, Any, Any] | _Condition
+def Col(name: str, table: str | None = None) -> SqlExpr:
+    """Create a column reference expression.
+
+    Args:
+        name: Column name. Can include table prefix as "table.column".
+        table: Optional table name for disambiguation.
+    """
+    if "." in name and table is None:
+        table, name = name.split(".", 1)
+    if name == "*":
+        sql = f"{q(table)}.*" if table else "*"
+    else:
+        sql = f"{q(table)}.{q(name)}" if table else q(name)
+    return SqlExpr(sql)
 
 
-@overload
-def in_(column: str, *values: Any, not_: bool = False) -> _Condition: ...
-
-
-@overload
-def in_(
-    column: tuple[str, ...], *values: tuple[Any, ...], not_: bool = False
-) -> _Condition: ...
-
-
-def in_(column: str | tuple[str, ...], *values: Any, not_: bool = False) -> _Condition:
+def in_(column: str | tuple[str, ...], *values: Any, not_: bool = False) -> Condition:
     """Create an IN condition with the given values."""
     if isinstance(column, tuple):
         if values and not isinstance(values[0], tuple):
@@ -59,8 +160,8 @@ def in_(column: str | tuple[str, ...], *values: Any, not_: bool = False) -> _Con
             )
         cols = len(column)
         placeholders = ", ".join([f"({', '.join(['?'] * cols)})"] * len(values))
-        return _Condition(
-            _Expr(
+        return Condition(
+            Expr(
                 f"({', '.join(column)}) {'NOT IN' if not_ else 'IN'} ({placeholders})"
             ),
             tuple(p for v in values for p in v),
@@ -71,35 +172,54 @@ def in_(column: str | tuple[str, ...], *values: Any, not_: bool = False) -> _Con
                 "For single column IN conditions, values should not be tuples."
             )
         placeholders = ", ".join(["?"] * len(values))
-        return _Condition(
-            _Expr(f"{column} {'NOT IN' if not_ else 'IN'} ({placeholders})"), values
+        return Condition(
+            Expr(f"{column} {'NOT IN' if not_ else 'IN'} ({placeholders})"), values
         )
 
 
 not_in = functools.partial(in_, not_=True)
 
 
-def or_(*conditions: ConditionType) -> _Condition:
+def Fn(function_name: str, *args: SqlExpr | Any) -> SqlExpr:
+    """Create a SQL function expression.
+
+    Args:
+        function_name: The SQL function name (e.g., "SUM", "COUNT", "IREGEXP").
+        args: Arguments to the function. SqlExpr args are rendered as-is,
+              other values become bind parameters (?).
+
+    Returns:
+        A SqlExpr that can be used in comparisons or directly as a boolean condition.
+    """
+    fn_args = []
+    params: list[Any] = []
+    for arg in args:
+        if isinstance(arg, SqlExpr):
+            fn_args.append(str(arg))
+            params.extend(arg._params)
+        else:
+            fn_args.append("?")
+            params.append(arg)
+    return SqlExpr(f"{function_name}({', '.join(fn_args)})", tuple(params))
+
+
+def or_(*conditions: Condition) -> Condition:
     """Combine conditions with OR, wrapped in parentheses."""
-    parsed = [
-        _Condition.from_arg(c) if not isinstance(c, _Condition) else c
-        for c in conditions
-    ]
-    expression = _Expr("(" + " OR ".join(str(c.expression) for c in parsed) + ")")
-    params = tuple(p for c in parsed for p in c.params)
-    return _Condition(expression, params)
+    expression = Expr("(" + " OR ".join(str(c.expression) for c in conditions) + ")")
+    params = tuple(p for c in conditions for p in c.params)
+    return Condition(expression, params)
 
 
 @frozen
 class _AliasedExpr:
-    expression: _Expr
+    expression: Expr
     alias: str | None = None
 
     @classmethod
     def from_arg(cls, arg: str | tuple[str, str]) -> Self:
         if isinstance(arg, tuple):
-            return cls(_Expr(arg[0]), arg[1])
-        return cls(_Expr(arg))
+            return cls(Expr(arg[0]), arg[1])
+        return cls(Expr(arg))
 
     def __str__(self) -> str:
         if self.alias:
@@ -118,7 +238,7 @@ class _JoinType(Enum):
 class _Join:
     type: _JoinType
     table: _AliasedExpr
-    on: Sequence[_Condition]
+    on: Sequence[Condition]
 
 
 @frozen
@@ -149,10 +269,10 @@ class Query:
     select_expressions: list[_AliasedExpr] = field(factory=list)
     from_expressions: list[_AliasedExpr] = field(factory=list)
     join_expressions: list[_Join] = field(factory=list)
-    where_expressions: list[_Condition] = field(factory=list)
-    group_by_expressions: list[_Expr] = field(factory=list)
-    having_expressions: list[_Condition] = field(factory=list)
-    order_by_expressions: list[_Expr] = field(factory=list)
+    where_expressions: list[Condition] = field(factory=list)
+    group_by_expressions: list[Expr] = field(factory=list)
+    having_expressions: list[Condition] = field(factory=list)
+    order_by_expressions: list[Expr] = field(factory=list)
     limit_expression: int | None = None
     offset_expression: int | None = None
 
@@ -215,48 +335,36 @@ class Query:
     def join(
         self,
         table: str | tuple[str, str],
-        *on: ConditionType,
+        *on_: Condition,
         type: Literal["inner", "left", "outer", "cross"] = "inner",
     ) -> Self:
         """Add JOIN clause to the query."""
-        self.join_expressions.append(
-            _Join(
-                _JoinType[type.upper()],
-                _AliasedExpr.from_arg(table),
-                [
-                    cond if isinstance(cond, _Condition) else _Condition.from_arg(cond)
-                    for cond in on
-                ],
-            )
-        )
+        if isinstance(table, tuple):
+            name, alias = table
+            table_expr = _AliasedExpr.from_arg((q(name), alias))
+        else:
+            table_expr = _AliasedExpr.from_arg(q(table))
+        self.join_expressions.append(_Join(_JoinType[type.upper()], table_expr, on_))
         return self
 
-    def where(self, *conditions: ConditionType) -> Self:
+    def where(self, *conditions: Condition) -> Self:
         """Add WHERE clause to the query."""
-        for condition in conditions:
-            if isinstance(condition, _Condition):
-                self.where_expressions.append(condition)
-            else:
-                self.where_expressions.append(_Condition.from_arg(condition))
+        self.where_expressions.extend(conditions)
         return self
 
     def group_by(self, *columns: str) -> Self:
         """Add GROUP BY clause to the query."""
-        self.group_by_expressions.extend(_Expr(column) for column in columns)
+        self.group_by_expressions.extend(Expr(column) for column in columns)
         return self
 
-    def having(self, *conditions: ConditionType) -> Self:
+    def having(self, *conditions: Condition) -> Self:
         """Add HAVING clause to the query."""
-        for condition in conditions:
-            if isinstance(condition, _Condition):
-                self.having_expressions.append(condition)
-            else:
-                self.having_expressions.append(_Condition.from_arg(condition))
+        self.having_expressions.extend(conditions)
         return self
 
     def order_by(self, *columns: str) -> Self:
         """Add ORDER BY clause to the query."""
-        self.order_by_expressions.extend(_Expr(column) for column in columns)
+        self.order_by_expressions.extend(Expr(column) for column in columns)
         return self
 
     def limit(self, limit: int) -> Self:
@@ -349,8 +457,8 @@ class Query:
         self,
         expressions: Sequence[_AliasedExpr]
         | Sequence[str]
-        | Sequence[_Expr]
-        | Sequence[_Condition],
+        | Sequence[Expr]
+        | Sequence[Condition],
         sep: str = ",",
         indent: str = "  ",
     ) -> Iterable[str]:
@@ -358,7 +466,7 @@ class Query:
             yield indent
             if i > 0 and sep != ",":
                 yield sep.lstrip()
-            if isinstance(expr, _Condition):
+            if isinstance(expr, Condition):
                 yield str(expr.expression)
             else:
                 yield str(expr)
@@ -459,7 +567,7 @@ class Delete:
     """Delete Builder for SQLite."""
 
     table: str = ""
-    where_expressions: list[_Condition] = field(factory=list)
+    where_expressions: list[Condition] = field(factory=list)
     returning_columns: list[_AliasedExpr] = field(factory=list)
 
     def from_(self, table: str) -> Self:
@@ -467,15 +575,9 @@ class Delete:
         self.table = q(table)
         return self
 
-    def where(
-        self, *conditions: str | tuple[str, Any] | tuple[str, Any, Any] | _Condition
-    ) -> Self:
+    def where(self, *conditions: Condition) -> Self:
         """Add WHERE clause to the delete statement."""
-        for condition in conditions:
-            if isinstance(condition, _Condition):
-                self.where_expressions.append(condition)
-            else:
-                self.where_expressions.append(_Condition.from_arg(condition))
+        self.where_expressions.extend(conditions)
         return self
 
     def returning(self, *columns: str | tuple[str, str]) -> Self:
