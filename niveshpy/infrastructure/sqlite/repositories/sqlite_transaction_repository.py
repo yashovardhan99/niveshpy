@@ -204,14 +204,14 @@ class SqliteTransactionRepository:
 
         if Field.ACCOUNT in fields:
             # Only join the Account table if account-related filters are present
-            query.join(
+            query = query.join(
                 self.account_table_name,
                 f"{q(self.transaction_table_name)}.account_id = {q(self.account_table_name)}.id",
             )
 
         if Field.SECURITY in fields:
             # Only join the Security table if security-related filters are present
-            query.join(
+            query = query.join(
                 self.security_table_name,
                 f"{q(self.transaction_table_name)}.security_key = {q(self.security_table_name)}.key",
             )
@@ -219,10 +219,10 @@ class SqliteTransactionRepository:
         query = self._update_query_with_sort_order(query, sort_order)
 
         if limit is not None:
-            query.limit(limit)
+            query = query.limit(limit)
 
         if offset:
-            query.offset(offset)
+            query = query.offset(offset)
 
         result = self.database.select_many(query, cl=TransactionPublic)
         if fetch_profile == TransactionFetchProfile.WITH_RELATIONS:
