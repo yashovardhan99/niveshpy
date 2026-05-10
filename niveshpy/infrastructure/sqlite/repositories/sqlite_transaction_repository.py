@@ -14,7 +14,7 @@ from niveshpy.domain.repositories.transaction_repository import (
     TransactionFetchProfile,
     TransactionSortOrder,
 )
-from niveshpy.exceptions import DatabaseError, IntegrityError
+from niveshpy.exceptions import DatabaseError, IntegrityError, ResourceNotFoundError
 from niveshpy.infrastructure.sqlite.converters import get_converter
 from niveshpy.infrastructure.sqlite.query import (
     PRICE_COLUMNS,
@@ -128,6 +128,20 @@ class SqliteTransactionRepository:
         for txn in transactions:
             account = accounts.get(txn.account_id)
             security = securities.get(txn.security_key)
+            if account is None:
+                raise ResourceNotFoundError(
+                    "Account",
+                    identifier=txn.account_id,
+                    message=f"Account with ID {txn.account_id} not found for transaction ID {txn.id}.",
+                )
+
+            if security is None:
+                raise ResourceNotFoundError(
+                    "Security",
+                    identifier=txn.security_key,
+                    message=f"Security with key '{txn.security_key}' not found for transaction ID {txn.id}.",
+                )
+
             updated_txn = evolve(txn, account=account, security=security)
             updated_transactions.append(updated_txn)
 
