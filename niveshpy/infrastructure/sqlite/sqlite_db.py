@@ -61,6 +61,7 @@ class SqliteDatabase:
     def cursor(self) -> Generator[sqlite3.Cursor, None, None]:
         """Get a new database cursor."""
         with self.connection as conn:
+            cursor = None
             try:
                 cursor = conn.cursor()
                 yield cursor
@@ -69,7 +70,8 @@ class SqliteDatabase:
             except sqlite3.Error as e:
                 raise DatabaseError(*e.args) from e
             finally:
-                cursor.close()
+                if cursor:
+                    cursor.close()
 
     def initialize(self) -> None:
         """Initialize the database and run migrations."""
