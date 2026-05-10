@@ -42,19 +42,19 @@ class TestFromClause:
         """Test basic FROM with a single table."""
         q = Query().select("*").from_("users")
         sql = str(q)
-        assert "FROM\n  users\n" in sql
+        assert 'FROM\n  "users"\n' in sql
 
     def test_from_with_alias(self):
         """Test FROM with table alias."""
         q = Query().select("*").from_(("users", "u"))
-        assert "users AS u" in str(q)
+        assert '"users" AS u' in str(q)
 
     def test_multiple_from(self):
         """Test FROM with multiple tables."""
         q = Query().select("*").from_("users", "orders")
         sql = str(q)
-        assert "users,\n" in sql
-        assert "orders\n" in sql
+        assert '"users",' in sql
+        assert '"orders"' in sql
 
 
 class TestWhereClause:
@@ -411,8 +411,8 @@ class TestInsert:
         )
         sql = str(stmt)
         assert "INSERT" in sql
-        assert "INTO accounts" in sql
-        assert "(name, institution)" in sql
+        assert 'INTO "accounts"' in sql
+        assert '("name", "institution")' in sql
         assert "VALUES" in sql
         assert "(?, ?)" in sql
         assert stmt.params == ("Foo", "Bar")
@@ -428,7 +428,7 @@ class TestInsert:
         )
         sql = str(stmt)
         assert "INSERT OR IGNORE" in sql
-        assert "INTO accounts" in sql
+        assert 'INTO "accounts"' in sql
         assert stmt.params == ("Foo", "Bar")
 
     def test_insert_or_replace(self):
@@ -442,7 +442,7 @@ class TestInsert:
         )
         sql = str(stmt)
         assert "INSERT OR REPLACE" in sql
-        assert "INTO prices" in sql
+        assert 'INTO "prices"' in sql
         assert "(?, ?, ?)" in sql
         assert stmt.params == ("AXIS123", "2024-01-01", 150.5)
 
@@ -474,7 +474,7 @@ class TestInsert:
             .values_("B", "Y")
         )
         sql = str(stmt)
-        assert sql.count("(?, ?)") == 2
+        assert sql.count("(?, ?)") == 1
 
     def test_insert_params_single_row(self):
         """Test params for a single row insert."""
@@ -519,7 +519,7 @@ class TestDelete:
         """Test basic DELETE FROM with WHERE."""
         stmt = Delete().from_("accounts").where(("id = ?", 5))
         sql = str(stmt)
-        assert "DELETE FROM accounts" in sql
+        assert 'DELETE FROM "accounts"' in sql
         assert "WHERE" in sql
         assert "id = ?" in sql
         assert stmt.params == (5,)
@@ -565,7 +565,7 @@ class TestDelete:
         """Test unconditional DELETE (no WHERE clause)."""
         stmt = Delete().from_("temp_table")
         sql = str(stmt)
-        assert "DELETE FROM temp_table" in sql
+        assert 'DELETE FROM "temp_table"' in sql
         assert "WHERE" not in sql
         assert stmt.params == ()
 

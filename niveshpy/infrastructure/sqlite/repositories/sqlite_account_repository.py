@@ -15,8 +15,8 @@ from niveshpy.infrastructure.sqlite.query import (
     Query,
     in_,
 )
-from niveshpy.infrastructure.sqlite.query_filters_new import generate_query_from_filters
-from niveshpy.infrastructure.sqlite.sqlite_db_new import SqliteDatabase
+from niveshpy.infrastructure.sqlite.query_filters import generate_query_from_filters
+from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
 from niveshpy.models.account import AccountCreate, AccountPublic
 
 

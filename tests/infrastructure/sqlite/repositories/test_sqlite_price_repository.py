@@ -16,15 +16,15 @@ from niveshpy.models.security import SecurityCategory, SecurityCreate, SecurityT
 
 
 @pytest.fixture(scope="function")
-def security_repository(new_db):
+def security_repository(db):
     """Provide a fresh SqliteSecurityRepository for each test."""
-    return SqliteSecurityRepository(new_db)
+    return SqliteSecurityRepository(db)
 
 
 @pytest.fixture(scope="function")
-def price_repository(new_db, security_repository):
+def price_repository(db, security_repository):
     """Provide a fresh SqlitePriceRepository for each test."""
-    return SqlitePriceRepository(new_db, security_repository)
+    return SqlitePriceRepository(db, security_repository)
 
 
 def test_overwrite_price_persists_row(

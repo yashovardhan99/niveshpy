@@ -263,7 +263,7 @@ class TestPricePublicJson:
     def test_decimals_as_strings(self):
         """Decimal fields are serialised as strings."""
         result = get_json_converter().unstructure(_make_price())
-        assert result["close"] == "102.50"
+        assert result["close"] == "102.5000"
 
     def test_date_is_isoformat(self):
         """Date field is serialised to ISO string."""
@@ -411,7 +411,7 @@ class TestHoldingJson:
         result = get_json_converter().unstructure(_make_holding())
         assert "current" in result
         assert "amount" not in result
-        assert result["current"] == "1100"
+        assert result["current"] == "1100.00"
 
     def test_nested_account_present(self):
         """Nested account is fully unstructured."""
@@ -439,8 +439,8 @@ class TestHoldingJson:
     def test_decimals_as_strings(self):
         """Decimal fields are serialised as strings."""
         result = get_json_converter().unstructure(_make_holding())
-        assert result["units"] == "10"
-        assert result["invested"] == "1000"
+        assert result["units"] == "10.000"
+        assert result["invested"] == "1000.00"
 
 
 class TestHoldingCsv:
@@ -513,8 +513,8 @@ class TestAllocationJson:
     def test_decimals_as_strings(self):
         """Decimal fields are serialised as strings."""
         result = get_json_converter().unstructure(_make_allocation())
-        assert result["amount"] == "1100"
-        assert result["allocation"] == "0.75"
+        assert result["amount"] == "1100.00"
+        assert result["allocation"] == "0.7500"
 
     def test_date_is_isoformat(self):
         """Date field is serialised to ISO string."""
@@ -579,13 +579,13 @@ class TestPerformanceHoldingJson:
     def test_gains_and_gains_pct_present(self):
         """Gains and gains_pct (init=False) are included."""
         result = get_json_converter().unstructure(_make_perf_holding())
-        assert result["gains"] == "100"
+        assert result["gains"] == "100.00"
         assert result["gains_pct"] == "0.1000"
 
     def test_xirr_as_string(self):
         """Xirr Decimal is serialised as string."""
         result = get_json_converter().unstructure(_make_perf_holding())
-        assert result["xirr"] == "0.12"
+        assert result["xirr"] == "0.1200"
 
     def test_xirr_none(self):
         """xirr=None serialises to None."""
@@ -683,8 +683,8 @@ class TestSummaryResultJson:
         """Metrics is a dict with all PortfolioTotals fields."""
         result = get_json_converter().unstructure(self._make_summary())
         assert isinstance(result["metrics"], dict)
-        assert result["metrics"]["total_current_value"] == "1100"
-        assert result["metrics"]["xirr"] == "0.12"
+        assert result["metrics"]["total_current_value"] == "1100.00"
+        assert result["metrics"]["xirr"] == "0.1200"
         assert result["metrics"]["last_updated"] == "2024-06-01"
 
     def test_top_holdings_is_list_of_dicts(self):

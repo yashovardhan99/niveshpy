@@ -13,7 +13,6 @@ from click.testing import CliRunner, Result
 
 from niveshpy.cli.main import cli
 from niveshpy.core.app import Application
-from niveshpy.infrastructure.sqlite.models import Base
 from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
 
 
@@ -30,14 +29,6 @@ def cli_in_memory_db(monkeypatch: pytest.MonkeyPatch):
     db.initialize()
     monkeypatch.setattr(Application, "db", property(lambda self: db))
     yield db
-    db._engine.dispose()
-
-
-@pytest.fixture(autouse=True)
-def reset_cli_database(cli_in_memory_db) -> None:
-    """Reset the in-memory database between CLI integration tests."""
-    Base.metadata.drop_all(cli_in_memory_db._engine)
-    Base.metadata.create_all(cli_in_memory_db._engine)
 
 
 def parse_json_output(result_output: str) -> Any:

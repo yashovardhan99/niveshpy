@@ -18,9 +18,6 @@ if TYPE_CHECKING:
         TransactionRepository,
     )
     from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
-    from niveshpy.infrastructure.sqlite.sqlite_db_new import (
-        SqliteDatabase as NewSqliteDatabase,
-    )
     from niveshpy.models.parser import Parser
     from niveshpy.services.account import AccountService
     from niveshpy.services.parsing import ParsingService
@@ -42,17 +39,6 @@ class Application:
         """Return the database instance."""
         from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
 
-        logger.debug("Initializing database connection")
-
-        db = SqliteDatabase(debug=self._debug)
-        db.initialize()
-        return db
-
-    @functools.cached_property
-    def new_db(self) -> NewSqliteDatabase:
-        """Return the new database instance."""
-        from niveshpy.infrastructure.sqlite.sqlite_db_new import SqliteDatabase
-
         logger.debug("Initializing new database connection")
 
         db = SqliteDatabase()
@@ -71,7 +57,7 @@ class Application:
         """Return the security repository."""
         from niveshpy.infrastructure.sqlite.repositories import SqliteSecurityRepository
 
-        return SqliteSecurityRepository(self.new_db)
+        return SqliteSecurityRepository(self.db)
 
     @functools.cached_property
     def account(self) -> AccountService:
@@ -85,7 +71,7 @@ class Application:
         """Return the account repository."""
         from niveshpy.infrastructure.sqlite.repositories import SqliteAccountRepository
 
-        return SqliteAccountRepository(self.new_db)
+        return SqliteAccountRepository(self.db)
 
     @functools.cached_property
     def transaction(self) -> TransactionService:
@@ -108,7 +94,7 @@ class Application:
         )
 
         return SqliteTransactionRepository(
-            self.new_db,
+            self.db,
             account_repository=self.account_repository,
             security_repository=self.security_repository,
         )
@@ -134,7 +120,7 @@ class Application:
         """Return the price repository."""
         from niveshpy.infrastructure.sqlite.repositories import SqlitePriceRepository
 
-        return SqlitePriceRepository(self.new_db, self.security_repository)
+        return SqlitePriceRepository(self.db, self.security_repository)
 
     @functools.cached_property
     def price(self) -> PriceService:

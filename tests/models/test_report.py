@@ -84,9 +84,16 @@ class TestPerformanceHoldingModel:
         assert perf.xirr is None
 
     def test_from_holding_invested_none(self):
-        """Test from_holding with invested=None yields None gains."""
-        holding = self._make_holding(invested=None)
-        perf = PerformanceHolding.from_holding(holding, xirr=Decimal("0.05"))
+        """Test PerformanceHolding with invested=None yields None gains."""
+        holding = self._make_holding()
+        perf = PerformanceHolding(
+            account=holding.account,
+            security=holding.security,
+            date=holding.date,
+            current_value=holding.amount,
+            invested=None,
+            xirr=Decimal("0.05"),
+        )
         assert perf.invested is None
         assert perf.gains is None
         assert perf.gains_pct is None

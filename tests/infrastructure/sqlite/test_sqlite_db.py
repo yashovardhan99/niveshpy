@@ -1,15 +1,13 @@
 """Tests for SqliteDatabase setup and connection management."""
 
 import re
+import sqlite3
 from pathlib import Path
 
 import pytest
-from sqlalchemy import inspect, select, text
-from sqlalchemy.orm import Session
 
-from niveshpy.infrastructure.sqlite.models import Account, Price, Security
+from niveshpy.exceptions import DatabaseError, IntegrityError
 from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase, _iregexp
-from niveshpy.models.security import SecurityCategory, SecurityType
 
 # ---------------------------------------------------------------------------
 # _iregexp function
@@ -123,59 +121,54 @@ class TestIregexpInSQL:
 
     def test_iregexp_function_callable(self, sql_db):
         """Test that iregexp function is directly callable in SQL."""
-        with sql_db.session_factory() as session:
-            result = session.execute(
-                text("SELECT iregexp(:pattern, :value)"),
-                params={"pattern": "test", "value": "TEST"},
-            ).first()
-            assert result[0] == 1
+        result = sql_db.connection.execute(
+            "SELECT iregexp(?, ?)", ("test", "TEST")
+        ).fetchone()
+        assert result[0] == 1
 
     def test_iregexp_in_where_clause(self, sql_db):
         """Test that iregexp works in SQL WHERE clause."""
-        with sql_db.session_factory() as session:
-            sec1 = Security(
-                key="TEST1",
-                name="Test Security One",
-                type=SecurityType.STOCK,
-                category=SecurityCategory.EQUITY,
-                properties={},
-            )
-            sec2 = Security(
-                key="TEST2",
-                name="Another Security",
-                type=SecurityType.STOCK,
-                category=SecurityCategory.EQUITY,
-                properties={},
-            )
-            session.add_all([sec1, sec2])
-            session.commit()
+        conn = sql_db.connection
+        conn.execute(
+            "INSERT INTO security (key, name, type, category, properties) VALUES (?, ?, ?, ?, ?)",
+            ("TEST1", "Test Security One", "stock", "equity", "{}"),
+        )
+        conn.execute(
+            "INSERT INTO security (key, name, type, category, properties) VALUES (?, ?, ?, ?, ?)",
+            ("TEST2", "Another Security", "stock", "equity", "{}"),
+        )
+        conn.commit()
 
-            results = session.execute(
-                text("SELECT * FROM security WHERE iregexp(:pattern, name)"),
-                params={"pattern": "test"},
-            ).all()
+        results = conn.execute(
+            "SELECT key FROM security WHERE iregexp(?, name)", ("test",)
+        ).fetchall()
 
-            assert len(results) == 1
-            assert results[0][0] == "TEST1"
+        assert len(results) == 1
+        assert results[0][0] == "TEST1"
 
     def test_iregexp_case_insensitive_in_sql(self, sql_db):
         """Test case-insensitive matching in SQL queries."""
-        with sql_db.session_factory() as session:
-            acc1 = Account(name="Savings Account", institution="Bank A", properties={})
-            acc2 = Account(name="checking account", institution="Bank B", properties={})
-            acc3 = Account(
-                name="INVESTMENT ACCOUNT", institution="Bank C", properties={}
-            )
-            session.add_all([acc1, acc2, acc3])
-            session.commit()
+        conn = sql_db.connection
+        conn.execute(
+            "INSERT INTO account (name, institution, properties) VALUES (?, ?, ?)",
+            ("Savings Account", "Bank A", "{}"),
+        )
+        conn.execute(
+            "INSERT INTO account (name, institution, properties) VALUES (?, ?, ?)",
+            ("checking account", "Bank B", "{}"),
+        )
+        conn.execute(
+            "INSERT INTO account (name, institution, properties) VALUES (?, ?, ?)",
+            ("INVESTMENT ACCOUNT", "Bank C", "{}"),
+        )
+        conn.commit()
 
-            result = session.execute(
-                text("SELECT name FROM account WHERE iregexp(:pattern, name)"),
-                params={"pattern": "savings"},
-            ).all()
+        results = conn.execute(
+            "SELECT name FROM account WHERE iregexp(?, name)", ("savings",)
+        ).fetchall()
 
-            assert len(result) == 1
-            assert result[0][0] == "Savings Account"
+        assert len(results) == 1
+        assert results[0][0] == "Savings Account"
 
 
 # ---------------------------------------------------------------------------
@@ -191,68 +184,60 @@ def memory_db():
     return db
 
 
-# ---------------------------------------------------------------------------
-# SqliteDatabase
-# ---------------------------------------------------------------------------
+def _get_table_names(db: SqliteDatabase) -> set[str]:
+    """Get table names from the database using sqlite3 introspection."""
+    rows = db.connection.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    ).fetchall()
+    return {row[0] for row in rows}
+
+
+def _get_column_names(db: SqliteDatabase, table: str) -> set[str]:
+    """Get column names for a table using PRAGMA."""
+    rows = db.connection.execute(f"PRAGMA table_info({table})").fetchall()  # noqa: S608
+    return {row[1] for row in rows}
 
 
 class TestSqliteDatabase:
     """Tests for SqliteDatabase initialization and setup."""
 
     def test_creates_db_directory(self, tmp_path):
-        """Test that SqliteDatabase creates the parent directory."""
+        """Test that SqliteDatabase creates the parent directory on initialize."""
         db_path = tmp_path / "subdir" / "niveshpy.db"
-        SqliteDatabase(db_path=db_path)
+        db = SqliteDatabase(db_path=db_path)
+        db.initialize()
         assert db_path.parent.exists()
 
-    def test_creates_engine(self):
-        """Test that SqliteDatabase creates an engine."""
+    def test_creates_connection(self):
+        """Test that SqliteDatabase creates a connection."""
         db = SqliteDatabase(db_path=Path(":memory:"))
-        assert db._engine is not None
+        db.initialize()
+        assert db.connection is not None
+        assert isinstance(db.connection, sqlite3.Connection)
 
     def test_initialize_creates_tables(self, memory_db):
         """Test that initialize creates all expected tables."""
-        inspector = inspect(memory_db._engine)
-        tables = set(inspector.get_table_names())
+        tables = _get_table_names(memory_db)
         assert {"account", "security", "price", "transaction"}.issubset(tables)
-
-    def test_initialize_creates_session_factory(self, memory_db):
-        """Test that initialize sets up the session factory."""
-        assert memory_db.session_factory is not None
-
-    def test_session_factory_creates_sessions(self, memory_db):
-        """Test that session factory produces valid sessions."""
-        with memory_db.session_factory() as session:
-            assert isinstance(session, Session)
 
     def test_initialize_is_idempotent(self, memory_db: SqliteDatabase):
         """Test that initialize can be called multiple times safely."""
-        inspector = inspect(memory_db._engine)
-        tables_before = set(inspector.get_table_names())
-
+        tables_before = _get_table_names(memory_db)
         memory_db.initialize()
-
-        tables_after = set(inspector.get_table_names())
+        tables_after = _get_table_names(memory_db)
         assert tables_before == tables_after
 
     def test_table_schemas_correct(self, memory_db):
         """Test that created tables have correct schema."""
-        inspector = inspect(memory_db._engine)
-
-        account_columns = {col["name"] for col in inspector.get_columns("account")}
-        assert {"id", "name", "institution"}.issubset(account_columns)
-
-        security_columns = {col["name"] for col in inspector.get_columns("security")}
-        assert {"key", "name", "type", "category"}.issubset(security_columns)
-
-        price_columns = {col["name"] for col in inspector.get_columns("price")}
-        assert {"security_key", "date", "open", "high", "low", "close"}.issubset(
-            price_columns
+        assert {"id", "name", "institution"}.issubset(
+            _get_column_names(memory_db, "account")
         )
-
-        transaction_columns = {
-            col["name"] for col in inspector.get_columns("transaction")
-        }
+        assert {"key", "name", "type", "category"}.issubset(
+            _get_column_names(memory_db, "security")
+        )
+        assert {"security_key", "date", "open", "high", "low", "close"}.issubset(
+            _get_column_names(memory_db, "price")
+        )
         assert {
             "id",
             "transaction_date",
@@ -262,7 +247,11 @@ class TestSqliteDatabase:
             "units",
             "security_key",
             "account_id",
-        }.issubset(transaction_columns)
+        }.issubset(_get_column_names(memory_db, '"transaction"'))
+
+    def test_row_factory_set(self, memory_db):
+        """Test that row_factory is set to sqlite3.Row."""
+        assert memory_db.connection.row_factory is sqlite3.Row
 
 
 class TestSqlitePragma:
@@ -270,82 +259,63 @@ class TestSqlitePragma:
 
     def test_foreign_keys_enabled(self, memory_db):
         """Test that foreign key constraints are enabled."""
-        with memory_db.session_factory() as session:
-            result = session.execute(text("PRAGMA foreign_keys")).first()
-            assert result[0] == 1
+        result = memory_db.connection.execute("PRAGMA foreign_keys").fetchone()
+        assert result[0] == 1
 
     def test_iregexp_available(self, memory_db):
         """Test that iregexp function is registered and available."""
-        with memory_db.session_factory() as session:
-            result = session.execute(
-                text("SELECT iregexp(:pattern, :value)"),
-                params={"pattern": "test", "value": "TEST"},
-            ).first()
-            assert result[0] == 1
+        result = memory_db.connection.execute(
+            "SELECT iregexp(?, ?)", ("test", "TEST")
+        ).fetchone()
+        assert result[0] == 1
 
     def test_foreign_key_constraint_enforced(self, memory_db):
         """Test that foreign key violation raises an error."""
-        from datetime import date
-        from decimal import Decimal
+        with pytest.raises(IntegrityError):
+            with memory_db.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO price (security_key, date, open, high, low, close, properties) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    ("NONEXISTENT", "2024-01-01", 100, 100, 100, 100, "{}"),
+                )
 
-        with memory_db.session_factory() as session:
-            security = Security(
-                key="TEST",
-                name="Test Security",
-                type=SecurityType.STOCK,
-                category=SecurityCategory.EQUITY,
-                properties={},
+
+class TestCursorContextManager:
+    """Test cursor context manager behavior."""
+
+    def test_cursor_commits_on_success(self, memory_db):
+        """Test that cursor context manager allows commits."""
+        with memory_db.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO account (name, institution, properties) VALUES (?, ?, ?)",
+                ("Test", "Bank", "{}"),
             )
-            session.add(security)
-            session.commit()
+            cursor.connection.commit()
 
-            price = Price(
-                security_key="NONEXISTENT",
-                date=date(2024, 1, 1),
-                open=Decimal("100.0000"),
-                high=Decimal("100.0000"),
-                low=Decimal("100.0000"),
-                close=Decimal("100.0000"),
-                properties={},
+        result = memory_db.connection.execute("SELECT name FROM account").fetchone()
+        assert result[0] == "Test"
+
+    def test_cursor_wraps_integrity_error(self, memory_db):
+        """Test that IntegrityError is raised for constraint violations."""
+        with memory_db.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO account (name, institution, properties) VALUES (?, ?, ?)",
+                ("Test", "Bank", "{}"),
             )
-            session.add(price)
+            cursor.connection.commit()
 
-            with pytest.raises(Exception) as exc_info:
-                session.commit()
-            assert "FOREIGN KEY constraint failed" in str(exc_info.value)
+        with pytest.raises(IntegrityError):
+            with memory_db.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO account (name, institution, properties) VALUES (?, ?, ?)",
+                    ("Test", "Bank", "{}"),
+                )
 
-
-class TestSqliteSessions:
-    """Test session behavior."""
-
-    def test_multiple_sessions_independent(self, memory_db):
-        """Test that multiple sessions are independent."""
-        with memory_db.session_factory() as session1:
-            account = Account(name="Test 1", institution="Bank 1", properties={})
-            session1.add(account)
-
-            with memory_db.session_factory() as session2:
-                accounts = session2.execute(select(Account)).scalars().all()
-                assert len(accounts) == 0
-
-            session1.commit()
-
-            with memory_db.session_factory() as session2:
-                accounts = session2.execute(select(Account)).scalars().all()
-                assert len(accounts) == 1
-
-    def test_session_context_manager(self, memory_db):
-        """Test that session context manager cleans up properly."""
-        with memory_db.session_factory() as session:
-            account = Account(name="Cleanup Test", institution="Bank", properties={})
-            session.add(account)
-            session.commit()
-            account_id = account.id
-
-        with memory_db.session_factory() as session:
-            result = session.get(Account, account_id)
-            assert result is not None
-            assert result.name == "Cleanup Test"
+    def test_cursor_wraps_database_error(self, memory_db):
+        """Test that DatabaseError is raised for general SQL errors."""
+        with pytest.raises(DatabaseError):
+            with memory_db.cursor() as cursor:
+                cursor.execute("SELECT * FROM nonexistent_table")
 
 
 class TestMigrations:
@@ -353,8 +323,7 @@ class TestMigrations:
 
     def test_migration_table_created(self, memory_db):
         """Test that the migration tracking table is created."""
-        inspector = inspect(memory_db._engine)
-        tables = inspector.get_table_names()
+        tables = _get_table_names(memory_db)
         assert "migration" in tables
 
     def test_migrations_are_idempotent(self):
@@ -362,18 +331,14 @@ class TestMigrations:
         db = SqliteDatabase(db_path=Path(":memory:"))
         db.initialize()
         db.initialize()
-
-        inspector = inspect(db._engine)
-        tables = set(inspector.get_table_names())
+        tables = _get_table_names(db)
         assert {"account", "security", "price", "transaction"}.issubset(tables)
 
     def test_migrations_create_schema_from_scratch(self):
         """Test that migrations can create the full schema on an empty database."""
         db = SqliteDatabase(db_path=Path(":memory:"))
         db.initialize()
-
-        inspector = inspect(db._engine)
-        tables = set(inspector.get_table_names())
+        tables = _get_table_names(db)
         assert {"account", "security", "price", "transaction"}.issubset(tables)
 
     def test_all_migrations_recorded(self, memory_db):
@@ -385,7 +350,7 @@ class TestMigrations:
             / "sqlite"
             / "migrations"
         )
-        with memory_db.session_factory() as session:
-            result = session.execute(text("SELECT file FROM migration")).scalars().all()
-            expected_migrations = {f.name for f in migrations_path.glob("*.sql")}
-            assert expected_migrations == set(result)
+        results = memory_db.connection.execute("SELECT file FROM migration").fetchall()
+        recorded = {row[0] for row in results}
+        expected_migrations = {f.name for f in migrations_path.glob("*.sql")}
+        assert expected_migrations == recorded

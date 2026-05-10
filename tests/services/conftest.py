@@ -265,7 +265,7 @@ class MockTransactionRepository:
     def _matches_filters(
         self, txn: TransactionPublic, filters: Iterable[FilterNode]
     ) -> bool:
-        """Replicate get_sqlalchemy_filters AND/OR semantics.
+        """Replicate get_query_filters AND/OR semantics.
 
         All REGEX_MATCH filters across all fields are OR'd into one condition.
         Non-REGEX_MATCH filters each become a separate AND condition.

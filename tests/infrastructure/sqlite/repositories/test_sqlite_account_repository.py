@@ -8,9 +8,9 @@ from niveshpy.models.account import AccountCreate
 
 
 @pytest.fixture(scope="function")
-def account_repository(new_db):
+def account_repository(db):
     """Provide a fresh SqliteAccountRepository for each test."""
-    return SqliteAccountRepository(new_db)
+    return SqliteAccountRepository(db)
 
 
 def test_insert_account_returns_new_id_and_persists_row(
