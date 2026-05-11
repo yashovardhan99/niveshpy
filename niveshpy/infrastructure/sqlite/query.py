@@ -32,6 +32,10 @@ class Condition:
     expression: Expr
     params: tuple[Any, ...] = ()
 
+    def negate(self) -> Condition:
+        """Negate this condition by wrapping it in a NOT expression."""
+        return Condition(Expr(f"NOT ({self.expression})"), self.params)
+
 
 def q(column_or_table: str) -> str:
     """Quote an identifier (column or table name) for use in SQL queries."""
@@ -88,7 +92,7 @@ class SqlExpr:
         """Create an IS NOT NULL condition."""
         return Condition(Expr(f"{self} IS NOT NULL"), self._params)
 
-    def between(self, low: Any, high: Any) -> Condition:
+    def between(self, low: Any, high: Any, not_: bool = False) -> Condition:
         """Create a BETWEEN condition."""
         left_sql, left_params = (
             (str(low), (*self._params, *low._params))
@@ -100,25 +104,13 @@ class SqlExpr:
             if isinstance(high, SqlExpr)
             else ("?", (*left_params, high))
         )
+        keyword = "NOT BETWEEN" if not_ else "BETWEEN"
         return Condition(
-            Expr(f"{self} BETWEEN {left_sql} AND {right_sql}"), right_params
+            Expr(f"{self} {keyword} {left_sql} AND {right_sql}"), right_params
         )
 
-    def not_between(self, low: Any, high: Any) -> Condition:
-        """Create a NOT BETWEEN condition."""
-        left_sql, left_params = (
-            (str(low), (*self._params, *low._params))
-            if isinstance(low, SqlExpr)
-            else ("?", (*self._params, low))
-        )
-        right_sql, right_params = (
-            (str(high), (*left_params, *high._params))
-            if isinstance(high, SqlExpr)
-            else ("?", (*left_params, high))
-        )
-        return Condition(
-            Expr(f"{self} NOT BETWEEN {left_sql} AND {right_sql}"), right_params
-        )
+    not_between = functools.partialmethod(between, not_=True)
+    """Create a NOT BETWEEN condition."""
 
     def in_(self, values: Sequence[Any]) -> Condition:
         """Create an IN condition."""
@@ -337,7 +329,7 @@ class Query:
         self,
         *columns: str | tuple[str, str] | Col | AliasedExpr,
         distinct: bool = False,
-        all: bool = False,
+        all_: bool = False,
         prefix_table: str | None = None,
     ) -> Self:
         """Build a SELECT query.
@@ -345,7 +337,7 @@ class Query:
         Args:
             columns: Columns to select, specified as strings, (expression, alias) tuples, or _AliasedExpr instances.
             distinct: If True, add DISTINCT to the SELECT clause.
-            all: If True, add ALL to the SELECT clause.
+            all_: If True, add ALL to the SELECT clause.
             prefix_table: Optional table name to prefix column names with for disambiguation.
                 This will only apply to columns specified as strings or (expression, alias) tuples.
 
@@ -353,13 +345,13 @@ class Query:
             Self: The Query object with the SELECT clause added.
 
         Raises:
-            ValueError: If both distinct and all are True, which is not allowed in SQL.
+            ValueError: If both distinct and all_ are True, which is not allowed in SQL.
         """
-        if distinct and all:
+        if distinct and all_:
             raise ValueError("Cannot use both DISTINCT and ALL in a SELECT query.")
         if distinct:
             self.select_flag = self._SelectFlag.DISTINCT
-        if all:
+        if all_:
             self.select_flag = self._SelectFlag.ALL
 
         if prefix_table:
@@ -553,7 +545,7 @@ class Insert:
 
     table: str = ""
     flag: _InsertFlag = _InsertFlag.DEFAULT
-    columns: list[str] = field(factory=list)
+    insert_columns: list[str] = field(factory=list)
     values: list[tuple[Any, ...]] = field(factory=list)
     returning_columns: list[AliasedExpr] = field(factory=list)
 
@@ -572,9 +564,9 @@ class Insert:
         self.table = q(table)
         return self
 
-    def columns_(self, *columns: str) -> Self:
+    def columns(self, *columns: str) -> Self:
         """Specify the columns to insert values into."""
-        self.columns.extend(q(column) for column in columns)
+        self.insert_columns.extend(q(column) for column in columns)
         return self
 
     def values_(self, *values: Any) -> Self:
@@ -583,8 +575,10 @@ class Insert:
         This method can be called multiple times to add multiple rows.
         The number of values must match the number of columns (if specified).
         """
-        if self.columns and len(values) != len(self.columns):
-            raise ValueError(f"Expected {len(self.columns)} values, got {len(values)}.")
+        if self.insert_columns and len(values) != len(self.insert_columns):
+            raise ValueError(
+                f"Expected {len(self.insert_columns)} values, got {len(values)}."
+            )
         self.values.append(tuple(values))
         return self
 
@@ -603,11 +597,11 @@ class Insert:
         INTO {self.table}
         """)
 
-        if self.columns:
-            columns_str = ", ".join(self.columns)
+        if self.insert_columns:
+            columns_str = ", ".join(self.insert_columns)
             sql += f"({columns_str})\n"
 
-            placeholders = ", ".join(["?"] * len(self.columns))
+            placeholders = ", ".join(["?"] * len(self.insert_columns))
             sql += "VALUES\n"
             sql += f"({placeholders})\n"
 

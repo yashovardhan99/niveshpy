@@ -2,7 +2,7 @@
 
 import datetime
 from collections.abc import Iterable, Sequence
-from typing import Literal
+from typing import Literal, assert_never
 
 from attrs import evolve, frozen
 
@@ -54,6 +54,24 @@ class SqliteTransactionRepository:
     security_table_name = "security"
     transaction_table_name = "transaction"
     price_table_name = "price"
+
+    @property
+    def _account_columns(self) -> tuple[Col, ...]:
+        """Helper property to get the sequence of column names in the account table."""
+        return (
+            Col(self.account_table_name, "name"),
+            Col(self.account_table_name, "institution"),
+        )
+
+    @property
+    def _security_columns(self) -> tuple[Col, ...]:
+        """Helper property to get the sequence of column names in the security table."""
+        return (
+            Col(self.security_table_name, "key"),
+            Col(self.security_table_name, "name"),
+            Col(self.security_table_name, "type"),
+            Col(self.security_table_name, "category"),
+        )
 
     def get_transaction_by_id(
         self,
@@ -168,6 +186,8 @@ class SqliteTransactionRepository:
             return query.order_by("id ASC")
         elif sort_order == TransactionSortOrder.ID_DESC:
             return query.order_by("id DESC")
+        else:
+            assert_never(sort_order)
 
     def find_transactions(
         self,
@@ -200,16 +220,8 @@ class SqliteTransactionRepository:
                         Col(self.transaction_table_name, "description")
                     ],
                     Field.TYPE: [Col(self.transaction_table_name, "type")],
-                    Field.ACCOUNT: [
-                        Col(self.account_table_name, "name"),
-                        Col(self.account_table_name, "institution"),
-                    ],
-                    Field.SECURITY: [
-                        Col(self.security_table_name, "key"),
-                        Col(self.security_table_name, "name"),
-                        Col(self.security_table_name, "type"),
-                        Col(self.security_table_name, "category"),
-                    ],
+                    Field.ACCOUNT: self._account_columns,
+                    Field.SECURITY: self._security_columns,
                 },
             )
             .from_(self.transaction_table_name)
@@ -304,7 +316,7 @@ class SqliteTransactionRepository:
         stmt = (
             Insert()
             .into(self.transaction_table_name)
-            .columns_(*TRANSACTION_CREATE_COLUMNS)
+            .columns(*TRANSACTION_CREATE_COLUMNS)
             .values_(*c.unstructure_attrs_astuple(transaction))
         )
         try:
@@ -351,7 +363,7 @@ class SqliteTransactionRepository:
         stmt = (
             Insert()
             .into(self.transaction_table_name)
-            .columns_(*TRANSACTION_CREATE_COLUMNS)
+            .columns(*TRANSACTION_CREATE_COLUMNS)
         )
         c = get_converter()
         transaction_tuples = [c.unstructure_attrs_astuple(txn) for txn in transactions]
@@ -424,7 +436,7 @@ class SqliteTransactionRepository:
         insert_stmt = (
             Insert()
             .into(self.transaction_table_name)
-            .columns_(*TRANSACTION_CREATE_COLUMNS)
+            .columns(*TRANSACTION_CREATE_COLUMNS)
         )
         with self.database.cursor() as cursor:
             cursor.execute(str(delete_stmt), delete_stmt.params)
@@ -454,16 +466,8 @@ class SqliteTransactionRepository:
         query = generate_query_from_filters(
             filters,
             {
-                Field.ACCOUNT: [
-                    Col(self.account_table_name, "name"),
-                    Col(self.account_table_name, "institution"),
-                ],
-                Field.SECURITY: [
-                    Col(self.security_table_name, "key"),
-                    Col(self.security_table_name, "name"),
-                    Col(self.security_table_name, "type"),
-                    Col(self.security_table_name, "category"),
-                ],
+                Field.ACCOUNT: self._account_columns,
+                Field.SECURITY: self._security_columns,
             },
         )
         filter_fields = get_fields_from_filters(filters)
@@ -528,16 +532,8 @@ class SqliteTransactionRepository:
             generate_query_from_filters(
                 filters,
                 {
-                    Field.SECURITY: [
-                        Col(self.security_table_name, "key"),
-                        Col(self.security_table_name, "name"),
-                        Col(self.security_table_name, "type"),
-                        Col(self.security_table_name, "category"),
-                    ],
-                    Field.ACCOUNT: [
-                        Col(self.account_table_name, "name"),
-                        Col(self.account_table_name, "institution"),
-                    ],
+                    Field.SECURITY: self._security_columns,
+                    Field.ACCOUNT: self._account_columns,
                 },
                 include_fields={Field.SECURITY, Field.ACCOUNT},
             )
@@ -561,12 +557,7 @@ class SqliteTransactionRepository:
                 # Price filters: security + date (supports "as of date" price lookups)
                 filters,
                 {
-                    Field.SECURITY: [
-                        Col(self.security_table_name, "key"),
-                        Col(self.security_table_name, "name"),
-                        Col(self.security_table_name, "type"),
-                        Col(self.security_table_name, "category"),
-                    ],
+                    Field.SECURITY: self._security_columns,
                     Field.DATE: [Col(self.price_table_name, "date")],
                 },
                 include_fields={Field.SECURITY, Field.DATE},

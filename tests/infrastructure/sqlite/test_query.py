@@ -26,13 +26,13 @@ class TestSelectClause:
 
     def test_select_all(self):
         """Test SELECT with ALL keyword."""
-        q = Query().select("id", all=True)
+        q = Query().select("id", all_=True)
         assert "SELECT ALL\n" in str(q)
 
     def test_select_distinct_and_all_raises(self):
         """Test that using both DISTINCT and ALL raises a ValueError."""
         with pytest.raises(ValueError, match="Cannot use both DISTINCT and ALL"):
-            Query().select("id", distinct=True, all=True)
+            Query().select("id", distinct=True, all_=True)
 
 
 class TestFromClause:
@@ -422,7 +422,7 @@ class TestInsert:
         stmt = (
             Insert()
             .into("accounts")
-            .columns_("name", "institution")
+            .columns("name", "institution")
             .values_("Foo", "Bar")
         )
         sql = str(stmt)
@@ -439,7 +439,7 @@ class TestInsert:
             Insert()
             .or_ignore()
             .into("accounts")
-            .columns_("name", "institution")
+            .columns("name", "institution")
             .values_("Foo", "Bar")
         )
         sql = str(stmt)
@@ -453,7 +453,7 @@ class TestInsert:
             Insert()
             .or_replace()
             .into("prices")
-            .columns_("security_key", "date", "close")
+            .columns("security_key", "date", "close")
             .values_("AXIS123", "2024-01-01", 150.5)
         )
         sql = str(stmt)
@@ -467,7 +467,7 @@ class TestInsert:
         stmt = (
             Insert()
             .into("accounts")
-            .columns_("name")
+            .columns("name")
             .values_("Foo")
             .returning(Col("id").alias(None))
         )
@@ -479,7 +479,7 @@ class TestInsert:
         stmt = (
             Insert()
             .into("accounts")
-            .columns_("name")
+            .columns("name")
             .values_("Foo")
             .returning(Col("name").alias("account_name"))
         )
@@ -491,7 +491,7 @@ class TestInsert:
         stmt = (
             Insert()
             .into("accounts")
-            .columns_("name", "institution")
+            .columns("name", "institution")
             .values_("A", "X")
             .values_("B", "Y")
         )
@@ -500,7 +500,7 @@ class TestInsert:
 
     def test_insert_params_single_row(self):
         """Test params for a single row insert."""
-        stmt = Insert().into("t").columns_("a", "b", "c").values_(1, 2, 3)
+        stmt = Insert().into("t").columns("a", "b", "c").values_(1, 2, 3)
         assert stmt.params == (1, 2, 3)
 
     def test_insert_params_bulk(self):
@@ -508,7 +508,7 @@ class TestInsert:
         stmt = (
             Insert()
             .into("t")
-            .columns_("a", "b")
+            .columns("a", "b")
             .values_(1, 2)
             .values_(3, 4)
             .values_(5, 6)
@@ -517,13 +517,13 @@ class TestInsert:
 
     def test_insert_no_table_raises(self):
         """Test ValueError when table is not specified."""
-        stmt = Insert().columns_("a").values_(1)
+        stmt = Insert().columns("a").values_(1)
         with pytest.raises(ValueError, match="Table must be specified"):
             str(stmt)
 
     def test_insert_value_count_mismatch_raises(self):
         """Test ValueError when values count doesn't match columns."""
-        stmt = Insert().into("t").columns_("a", "b")
+        stmt = Insert().into("t").columns("a", "b")
         with pytest.raises(ValueError, match="Expected 2 values, got 3"):
             stmt.values_(1, 2, 3)
 
@@ -533,7 +533,7 @@ class TestInsert:
         result = (
             stmt.or_ignore()
             .into("t")
-            .columns_("a")
+            .columns("a")
             .values_(1)
             .returning(Col("id").alias(None))
         )

@@ -138,7 +138,7 @@ class SqliteAccountRepository:
         stmt = (
             Insert(self.account_table_name)
             .or_ignore()
-            .columns_("name", "institution", "properties")
+            .columns("name", "institution", "properties")
             .values_(*c.unstructure_attrs_astuple(account))
             .returning(Col("id").alias(None))
         )
@@ -167,7 +167,7 @@ class SqliteAccountRepository:
         stmt = (
             Insert(self.account_table_name)
             .or_ignore()
-            .columns_("name", "institution", "properties")
+            .columns("name", "institution", "properties")
         )
         result = self.database.executemany(stmt, account_tuples)
         logger.debug("Inserted %d new accounts.", result)

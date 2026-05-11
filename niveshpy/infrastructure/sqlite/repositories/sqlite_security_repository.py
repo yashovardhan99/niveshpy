@@ -93,7 +93,7 @@ class SqliteSecurityRepository:
         stmt = (
             Insert(self.security_table_name)
             .or_ignore()
-            .columns_("key", "name", "type", "category", "properties")
+            .columns("key", "name", "type", "category", "properties")
         ).values_(*c.unstructure_attrs_astuple(security))
         result = self.database.execute(stmt)
         if result == 0:
@@ -114,7 +114,7 @@ class SqliteSecurityRepository:
         stmt = (
             Insert(self.security_table_name)
             .or_ignore()
-            .columns_("key", "name", "type", "category", "properties")
+            .columns("key", "name", "type", "category", "properties")
         )
         c = get_converter()
         security_tuples = [c.unstructure_attrs_astuple(sec) for sec in securities]
@@ -173,6 +173,9 @@ class SqliteSecurityRepository:
 
         placeholders = ", ".join(["?"] * (len(properties) * 2))
 
+        # An update query builder is not available yet
+        # as this is the only update operation needed so far,
+        # and it has a specific structure due to JSON_SET usage.
         stmt = dedent(
             f"""UPDATE {self.security_table_name}
             SET properties = json_set(properties, {placeholders})

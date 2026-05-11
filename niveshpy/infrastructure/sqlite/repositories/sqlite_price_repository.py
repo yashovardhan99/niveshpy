@@ -272,7 +272,7 @@ class SqlitePriceRepository:
         stmt = (
             Insert(self.price_table_name)
             .or_replace()
-            .columns_(*PRICE_CREATE_COLUMNS)
+            .columns(*PRICE_CREATE_COLUMNS)
             .values_(*values)
         )
         try:
@@ -372,7 +372,7 @@ class SqlitePriceRepository:
             c = get_converter()
             for batch in batches:
                 tuples = [c.unstructure_attrs_astuple(price) for price in batch]
-                stmt = Insert(self.price_table_name).columns_(*PRICE_CREATE_COLUMNS)
+                stmt = Insert(self.price_table_name).columns(*PRICE_CREATE_COLUMNS)
                 try:
                     cursor.executemany(str(stmt), tuples)
                 except IntegrityError as e:

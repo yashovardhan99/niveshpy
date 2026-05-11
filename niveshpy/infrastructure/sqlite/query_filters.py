@@ -22,7 +22,7 @@ def prepare_expression(filter: FilterNode, column: Col) -> Condition:
         case Operator.REGEX_MATCH if isinstance(filter.value, str):
             return Fn("IREGEXP", filter.value, column).to_condition()
         case Operator.NOT_REGEX_MATCH if isinstance(filter.value, str):
-            return Fn("NOT IREGEXP", filter.value, column).to_condition()
+            return Fn("IREGEXP", filter.value, column).to_condition().negate()
         case Operator.EQUALS:
             return column.eq(filter.value)
         case Operator.NOT_EQUALS:
