@@ -167,15 +167,25 @@ class Col(SqlExpr):
     name: str
     table: str | None = None
 
-    def __init__(self, name: str, table: str | None = None) -> None:
+    def __init__(self, table_or_name: str, name: str | None = None) -> None:
         """Create a column reference expression.
 
         Args:
-            name: Column name. Can include table prefix as "table.column".
-            table: Optional table name for disambiguation.
+            table_or_name: Table name or column name (if name is None).
+            name: Optional column name if table_or_name is a table name.
+
+        If table_or_name contains a dot, it will be split into table and column parts.
         """
-        if "." in name and table is None:
-            table, name = name.split(".", 1)
+        if "." in table_or_name and name is None:
+            # Split into table and column if not explicitly provided
+            table, name = table_or_name.split(".", 1)
+        elif name is None:
+            # No dot and no explicit name means table_or_name is the column
+            name = table_or_name
+            table = None
+        else:
+            # Explicit table and name provided
+            table = table_or_name
 
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "table", table)
@@ -261,13 +271,6 @@ class AliasedExpr:
 
     expression: Expr
     alias: str | None = None
-
-    @classmethod
-    def from_arg(cls, arg: str | tuple[str, str]) -> Self:
-        """Create an AliasedExpr from a string or a (expression, alias) tuple."""
-        if isinstance(arg, tuple):
-            return cls(Expr(arg[0]), arg[1])
-        return cls(Expr(arg))
 
     def __str__(self) -> str:
         """Render the aliased expression as a string, including the alias if present."""
@@ -380,7 +383,7 @@ class Query:
             if prefix_table:
                 name = f"{prefix_table}.{name}"
 
-            parsed_columns.append(AliasedExpr(Expr(name), alias))
+            parsed_columns.append(Expr(name).alias(alias))
 
         self.select_expressions.extend(parsed_columns)
         return self
@@ -390,9 +393,9 @@ class Query:
         for table in tables:
             if isinstance(table, tuple):
                 name, alias = table
-                self.from_expressions.append(AliasedExpr.from_arg((q(name), alias)))
+                self.from_expressions.append(Expr(q(name)).alias(alias))
             else:
-                self.from_expressions.append(AliasedExpr.from_arg(q(table)))
+                self.from_expressions.append(Expr(q(table)).alias(None))
         return self
 
     def join(
@@ -404,9 +407,9 @@ class Query:
         """Add JOIN clause to the query."""
         if isinstance(table, tuple):
             name, alias = table
-            table_expr = AliasedExpr.from_arg((q(name), alias))
+            table_expr = AliasedExpr(Expr(q(name)), alias)
         else:
-            table_expr = AliasedExpr.from_arg(q(table))
+            table_expr = AliasedExpr(Expr(q(table)))
         self.join_expressions.append(_Join(_JoinType[type.upper()], table_expr, on_))
         return self
 
@@ -585,11 +588,9 @@ class Insert:
         self.values.append(tuple(values))
         return self
 
-    def returning(self, *columns: str | tuple[str, str]) -> Self:
+    def returning(self, *columns: AliasedExpr) -> Self:
         """Add a RETURNING clause to the insert statement."""
-        self.returning_columns.extend(
-            AliasedExpr.from_arg(column) for column in columns
-        )
+        self.returning_columns.extend(columns)
         return self
 
     def __str__(self) -> str:
@@ -643,11 +644,9 @@ class Delete:
         self.where_expressions.extend(conditions)
         return self
 
-    def returning(self, *columns: str | tuple[str, str]) -> Self:
+    def returning(self, *columns: AliasedExpr) -> Self:
         """Add a RETURNING clause to the delete statement."""
-        self.returning_columns.extend(
-            AliasedExpr.from_arg(column) for column in columns
-        )
+        self.returning_columns.extend(columns)
         return self
 
     def __str__(self) -> str:

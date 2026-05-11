@@ -144,7 +144,7 @@ class TestJoinClause:
             Query()
             .select("u.id", "o.id")
             .from_("users", "u")
-            .join(("orders", "o"), Col("id", "u").eq(Col("user_id", "o")))
+            .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
         )
         sql = str(q)
         assert 'JOIN "orders" AS o\n' in sql
@@ -156,7 +156,7 @@ class TestJoinClause:
             Query()
             .select("*")
             .from_("users", "u")
-            .join(("orders", "o"), Col("id", "u").eq(Col("user_id", "o")), type="left")
+            .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")), type="left")
         )
         assert 'LEFT JOIN "orders" AS o\n' in str(q)
 
@@ -181,8 +181,8 @@ class TestJoinClause:
             .from_("users", "u")
             .join(
                 ("orders", "o"),
-                Col("id", "u").eq(Col("user_id", "o")),
-                Col("amount", "o").gt(100),
+                Col("u", "id").eq(Col("o", "user_id")),
+                Col("o", "amount").gt(100),
             )
         )
         sql = str(q)
@@ -196,7 +196,7 @@ class TestJoinClause:
             Query()
             .select("*")
             .from_("users", "u")
-            .join(("orders", "o"), Col("id", "u").eq(Col("user_id", "o")))
+            .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
         )
         assert 'JOIN "orders" AS o\n' in str(q)
 
@@ -206,8 +206,8 @@ class TestJoinClause:
             Query()
             .select("u.id", "o.id", "p.id")
             .from_("users", "u")
-            .join(("orders", "o"), Col("id", "u").eq(Col("user_id", "o")))
-            .join(("products", "p"), Col("product_id", "o").eq(Col("id", "p")))
+            .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
+            .join(("products", "p"), Col("o", "product_id").eq(Col("p", "id")))
         )
         sql = str(q)
         assert 'JOIN "orders" AS o\n' in sql
@@ -219,8 +219,8 @@ class TestJoinClause:
             Query()
             .select("*")
             .from_("users u")
-            .join(("orders", "o"), Col("id", "u").eq(Col("user_id", "o")))
-            .where(Col("age", "u").gt(18))
+            .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
+            .where(Col("u", "age").gt(18))
         )
         sql = str(q)
         join_pos = sql.index("JOIN")
@@ -235,10 +235,10 @@ class TestJoinClause:
             .from_("users u")
             .join(
                 "orders o",
-                Col("id", "u").eq(Col("user_id", "o")),
-                Col("amount", "o").gt(500),
+                Col("u", "id").eq(Col("o", "user_id")),
+                Col("o", "amount").gt(500),
             )
-            .where(Col("age", "u").gt(18))
+            .where(Col("u", "age").gt(18))
         )
         assert q.params == (500, 18)
 
@@ -252,10 +252,10 @@ class TestJoinClause:
             .from_("users u")
             .join(
                 ("big_orders", "o"),
-                Col("user_id", "o").eq(Col("id", "u")),
-                Col("amount", "o").gt(2000),
+                Col("o", "user_id").eq(Col("u", "id")),
+                Col("o", "amount").gt(2000),
             )
-            .where(Col("status", "u").eq("active"))
+            .where(Col("u", "status").eq("active"))
         )
         assert q.params == (1000, 2000, "active")
 
@@ -369,10 +369,10 @@ class TestParamOrdering:
             .from_("users u")
             .join(
                 ("big_orders", "o"),
-                Col("user_id", "o").eq(Col("id", "u")),
-                Col("qty", "o").gt(5),
+                Col("o", "user_id").eq(Col("u", "id")),
+                Col("o", "qty").gt(5),
             )
-            .where(Col("status", "u").eq("active"))
+            .where(Col("u", "status").eq("active"))
             .group_by("u.id")
             .having(Fn("COUNT", Col("*")).gt(3))
             .order_by("u.id")
@@ -391,8 +391,8 @@ class TestSQLClauseOrdering:
             Query()
             .select("u.id", "COUNT(*)")
             .from_("users u")
-            .join("orders o", Col("id", "u").eq(Col("user_id", "o")))
-            .where(Col("age", "u").gt(18))
+            .join("orders o", Col("u", "id").eq(Col("o", "user_id")))
+            .where(Col("u", "age").gt(18))
             .group_by("u.id")
             .having(Fn("COUNT", Col("*")).gt(1))
             .order_by("u.id")
@@ -464,9 +464,15 @@ class TestInsert:
 
     def test_insert_returning(self):
         """Test RETURNING clause on insert."""
-        stmt = Insert().into("accounts").columns_("name").values_("Foo").returning("id")
+        stmt = (
+            Insert()
+            .into("accounts")
+            .columns_("name")
+            .values_("Foo")
+            .returning(Col("id").alias(None))
+        )
         sql = str(stmt)
-        assert "RETURNING id" in sql
+        assert 'RETURNING "id"' in sql
 
     def test_insert_returning_with_alias(self):
         """Test RETURNING clause with aliased column."""
@@ -475,10 +481,10 @@ class TestInsert:
             .into("accounts")
             .columns_("name")
             .values_("Foo")
-            .returning(("name", "account_name"))
+            .returning(Col("name").alias("account_name"))
         )
         sql = str(stmt)
-        assert "RETURNING name AS account_name" in sql
+        assert 'RETURNING "name" AS account_name' in sql
 
     def test_insert_bulk_values(self):
         """Test multiple .values_() calls produce multi-row VALUES."""
@@ -524,7 +530,13 @@ class TestInsert:
     def test_insert_chaining(self):
         """Test fluent API returns same instance."""
         stmt = Insert()
-        result = stmt.or_ignore().into("t").columns_("a").values_(1).returning("id")
+        result = (
+            stmt.or_ignore()
+            .into("t")
+            .columns_("a")
+            .values_(1)
+            .returning(Col("id").alias(None))
+        )
         assert result is stmt
 
 
@@ -569,9 +581,14 @@ class TestDelete:
 
     def test_delete_returning(self):
         """Test RETURNING clause on delete."""
-        stmt = Delete().from_("accounts").where(Col("id").eq(1)).returning("id", "name")
+        stmt = (
+            Delete()
+            .from_("accounts")
+            .where(Col("id").eq(1))
+            .returning(Col("id").alias(None), Col("name").alias(None))
+        )
         sql = str(stmt)
-        assert "RETURNING id, name" in sql
+        assert 'RETURNING "id", "name"' in sql
 
     def test_delete_no_table_raises(self):
         """Test ValueError when table is not specified."""
@@ -602,5 +619,5 @@ class TestDelete:
     def test_delete_chaining(self):
         """Test fluent API returns same instance."""
         stmt = Delete()
-        result = stmt.from_("t").where(Col("id").eq(1)).returning("id")
+        result = stmt.from_("t").where(Col("id").eq(1)).returning(Col("id").alias(None))
         assert result is stmt

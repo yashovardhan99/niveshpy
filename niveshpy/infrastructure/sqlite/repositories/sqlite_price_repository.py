@@ -141,12 +141,12 @@ class SqlitePriceRepository:
             generate_query_from_filters(
                 filters,
                 {
-                    Field.DATE: [Col("date", self.price_table_name)],
+                    Field.DATE: [Col(self.price_table_name, "date")],
                     Field.SECURITY: [
-                        Col("security_key", self.price_table_name),
-                        Col("name", self.security_table_name),
-                        Col("type", self.security_table_name),
-                        Col("category", self.security_table_name),
+                        Col(self.price_table_name, "security_key"),
+                        Col(self.security_table_name, "name"),
+                        Col(self.security_table_name, "type"),
+                        Col(self.security_table_name, "category"),
                     ],
                 },
             )
@@ -161,8 +161,8 @@ class SqlitePriceRepository:
         if Field.SECURITY in get_fields_from_filters(filters):
             query = query.join(
                 self.security_table_name,
-                Col("security_key", self.price_table_name).eq(
-                    Col("key", self.security_table_name)
+                Col(self.price_table_name, "security_key").eq(
+                    Col(self.security_table_name, "key")
                 ),
             )
 
@@ -204,10 +204,10 @@ class SqlitePriceRepository:
             filters,
             {
                 Field.SECURITY: [
-                    Col("security_key", self.price_table_name),
-                    Col("name", self.security_table_name),
-                    Col("type", self.security_table_name),
-                    Col("category", self.security_table_name),
+                    Col(self.price_table_name, "security_key"),
+                    Col(self.security_table_name, "name"),
+                    Col(self.security_table_name, "type"),
+                    Col(self.security_table_name, "category"),
                 ]
             },
         )
@@ -215,8 +215,8 @@ class SqlitePriceRepository:
         cte = (
             filter_query.from_(self.price_table_name)
             .select(
-                Col("security_key", self.price_table_name),
-                Fn("MAX", Col("date", self.price_table_name)).alias("max_date"),
+                Col(self.price_table_name, "security_key"),
+                Fn("MAX", Col(self.price_table_name, "date")).alias("max_date"),
             )
             .group_by(f"{self.price_table_name}.security_key")
         )
@@ -225,8 +225,8 @@ class SqlitePriceRepository:
             # Since the only possible filters at this point are on security fields
             cte = cte.join(
                 self.security_table_name,
-                Col("security_key", self.price_table_name).eq(
-                    Col("key", self.security_table_name)
+                Col(self.price_table_name, "security_key").eq(
+                    Col(self.security_table_name, "key")
                 ),
             )
 
@@ -237,10 +237,10 @@ class SqlitePriceRepository:
             .from_(self.price_table_name)
             .join(
                 "latest_prices",
-                Col("security_key", self.price_table_name).eq(
-                    Col("security_key", "latest_prices")
+                Col(self.price_table_name, "security_key").eq(
+                    Col("latest_prices", "security_key")
                 ),
-                Col("date", self.price_table_name).eq(Col("max_date", "latest_prices")),
+                Col(self.price_table_name, "date").eq(Col("latest_prices", "max_date")),
             )
             .order_by(f"{self.price_table_name}.security_key")
         )

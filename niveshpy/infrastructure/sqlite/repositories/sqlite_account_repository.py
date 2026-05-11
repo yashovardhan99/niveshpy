@@ -68,8 +68,8 @@ class SqliteAccountRepository:
                 filters,
                 {
                     Field.ACCOUNT: [
-                        Col("name", self.account_table_name),
-                        Col("institution", self.account_table_name),
+                        Col(self.account_table_name, "name"),
+                        Col(self.account_table_name, "institution"),
                     ],
                 },
             )
@@ -140,7 +140,7 @@ class SqliteAccountRepository:
             .or_ignore()
             .columns_("name", "institution", "properties")
             .values_(*c.unstructure_attrs_astuple(account))
-            .returning("id")
+            .returning(Col("id").alias(None))
         )
         with self.database.cursor() as cursor:
             result = cursor.execute(str(stmt), stmt.params)
