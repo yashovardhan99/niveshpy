@@ -543,11 +543,19 @@ class _InsertFlag(Enum):
 class Insert:
     """Insert Builder for SQLite."""
 
-    table: str = ""
-    flag: _InsertFlag = _InsertFlag.DEFAULT
-    insert_columns: list[str] = field(factory=list)
-    values: list[tuple[Any, ...]] = field(factory=list)
-    returning_columns: list[AliasedExpr] = field(factory=list)
+    table: str
+    flag: _InsertFlag
+    insert_columns: list[str]
+    values: list[tuple[Any, ...]]
+    returning_columns: list[AliasedExpr]
+
+    def __init__(self) -> None:
+        """Initialize the Insert builder with default values."""
+        self.table = ""
+        self.flag = _InsertFlag.DEFAULT
+        self.insert_columns = []
+        self.values = []
+        self.returning_columns = []
 
     def or_ignore(self) -> Self:
         """Set the insert flag to OR IGNORE."""
@@ -624,9 +632,15 @@ class Insert:
 class Delete:
     """Delete Builder for SQLite."""
 
-    table: str = ""
-    where_expressions: list[Condition] = field(factory=list)
-    returning_columns: list[AliasedExpr] = field(factory=list)
+    table: str
+    where_expressions: list[Condition]
+    returning_columns: list[AliasedExpr]
+
+    def __init__(self) -> None:
+        """Initialize the Delete builder with default values."""
+        self.table = ""
+        self.where_expressions = []
+        self.returning_columns = []
 
     def from_(self, table: str) -> Self:
         """Specify the table to delete from."""
