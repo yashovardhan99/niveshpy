@@ -136,7 +136,8 @@ class SqliteAccountRepository:
         """Insert a new account into the database."""
         c = get_converter()
         stmt = (
-            Insert(self.account_table_name)
+            Insert()
+            .into(self.account_table_name)
             .or_ignore()
             .columns("name", "institution", "properties")
             .values_(*c.unstructure_attrs_astuple(account))
@@ -165,7 +166,8 @@ class SqliteAccountRepository:
             return 0
 
         stmt = (
-            Insert(self.account_table_name)
+            Insert()
+            .into(self.account_table_name)
             .or_ignore()
             .columns("name", "institution", "properties")
         )
@@ -177,7 +179,7 @@ class SqliteAccountRepository:
 
     def delete_account_by_id(self, account_id: int) -> bool:
         """Delete an account by its ID."""
-        stmt = Delete(self.account_table_name).where(Col("id").eq(account_id))
+        stmt = Delete().from_(self.account_table_name).where(Col("id").eq(account_id))
         result = self.database.execute(stmt)
         if result == 0:
             logger.debug("No account found with ID %d to delete.", account_id)

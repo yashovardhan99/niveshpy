@@ -539,7 +539,7 @@ class _InsertFlag(Enum):
     OR_IGNORE = "OR IGNORE"
 
 
-@define
+@define(init=False)
 class Insert:
     """Insert Builder for SQLite."""
 
@@ -620,7 +620,7 @@ class Insert:
         )
 
 
-@define
+@define(init=False)
 class Delete:
     """Delete Builder for SQLite."""
 

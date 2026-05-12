@@ -270,7 +270,8 @@ class SqlitePriceRepository:
         values = c.unstructure_attrs_astuple(price)
 
         stmt = (
-            Insert(self.price_table_name)
+            Insert()
+            .into(self.price_table_name)
             .or_replace()
             .columns(*PRICE_CREATE_COLUMNS)
             .values_(*values)
@@ -352,9 +353,13 @@ class SqlitePriceRepository:
                 )
 
         with self.database.cursor() as cursor:
-            delete_stmt = Delete(self.price_table_name).where(
-                Col("security_key").eq(security_key),
-                Col("date").between(start_date, end_date),
+            delete_stmt = (
+                Delete()
+                .from_(self.price_table_name)
+                .where(
+                    Col("security_key").eq(security_key),
+                    Col("date").between(start_date, end_date),
+                )
             )
             cursor.execute(str(delete_stmt), delete_stmt.params)
 
@@ -372,7 +377,9 @@ class SqlitePriceRepository:
             c = get_converter()
             for batch in batches:
                 tuples = [c.unstructure_attrs_astuple(price) for price in batch]
-                stmt = Insert(self.price_table_name).columns(*PRICE_CREATE_COLUMNS)
+                stmt = (
+                    Insert().into(self.price_table_name).columns(*PRICE_CREATE_COLUMNS)
+                )
                 try:
                     cursor.executemany(str(stmt), tuples)
                 except IntegrityError as e:

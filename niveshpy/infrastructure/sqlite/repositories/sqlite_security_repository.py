@@ -91,7 +91,8 @@ class SqliteSecurityRepository:
         """Insert a new security into the database."""
         c = get_converter()
         stmt = (
-            Insert(self.security_table_name)
+            Insert()
+            .into(self.security_table_name)
             .or_ignore()
             .columns("key", "name", "type", "category", "properties")
         ).values_(*c.unstructure_attrs_astuple(security))
@@ -112,7 +113,8 @@ class SqliteSecurityRepository:
             return 0
 
         stmt = (
-            Insert(self.security_table_name)
+            Insert()
+            .into(self.security_table_name)
             .or_ignore()
             .columns("key", "name", "type", "category", "properties")
         )
@@ -131,7 +133,7 @@ class SqliteSecurityRepository:
 
     def delete_security_by_key(self, key: str) -> bool:
         """Delete a security from the database by its key."""
-        stmt = Delete(self.security_table_name).where(Col("key").eq(key))
+        stmt = Delete().from_(self.security_table_name).where(Col("key").eq(key))
         result = self.database.execute(stmt)
         if result == 0:
             logger.debug("No security found with key %s to delete.", key)
