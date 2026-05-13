@@ -335,7 +335,8 @@ class Query:
         """Build a SELECT query.
 
         Args:
-            columns: Columns to select, specified as strings, (expression, alias) tuples, or _AliasedExpr instances.
+            columns: Columns to select, specified as strings, (expression, alias) tuples,
+                Col instances, or AliasedExpr instances.
             distinct: If True, add DISTINCT to the SELECT clause.
             all_: If True, add ALL to the SELECT clause.
             prefix_table: Optional table name to prefix column names with for disambiguation.
@@ -381,12 +382,29 @@ class Query:
         return self
 
     def from_(self, *tables: str | tuple[str, str]) -> Self:
-        """Add FROM clause to the query."""
+        """Add FROM clause to the query.
+
+        Args:
+            tables: Table names or (table, alias) tuples to add to the FROM clause.
+                String table names must not contain whitespace; use the (table, alias)
+                tuple form to specify aliases.
+
+        Returns:
+            Self for method chaining.
+
+        Raises:
+            ValueError: If a string table name contains whitespace.
+        """
         for table in tables:
             if isinstance(table, tuple):
                 name, alias = table
                 self.from_expressions.append(Expr(q(name)).alias(alias))
             else:
+                if " " in table or "\t" in table or "\n" in table:
+                    raise ValueError(
+                        f"Table name '{table}' contains whitespace. "
+                        "Use the (table, alias) tuple form instead, e.g., ('users', 'u')."
+                    )
                 self.from_expressions.append(Expr(q(table)).alias(None))
         return self
 
@@ -396,11 +414,30 @@ class Query:
         *on_: Condition,
         type: Literal["inner", "left", "outer", "cross"] = "inner",
     ) -> Self:
-        """Add JOIN clause to the query."""
+        """Add JOIN clause to the query.
+
+        Args:
+            table: Table name or (table, alias) tuple to join.
+                String table names must not contain whitespace; use the (table, alias)
+                tuple form to specify aliases.
+            on_: Condition(s) for the JOIN ON clause.
+            type: Join type (inner, left, outer, cross).
+
+        Returns:
+            Self for method chaining.
+
+        Raises:
+            ValueError: If a string table name contains whitespace.
+        """
         if isinstance(table, tuple):
             name, alias = table
             table_expr = AliasedExpr(Expr(q(name)), alias)
         else:
+            if " " in table or "\t" in table or "\n" in table:
+                raise ValueError(
+                    f"Table name '{table}' contains whitespace. "
+                    "Use the (table, alias) tuple form instead, e.g., ('users', 'u')."
+                )
             table_expr = AliasedExpr(Expr(q(table)))
         self.join_expressions.append(_Join(_JoinType[type.upper()], table_expr, on_))
         return self

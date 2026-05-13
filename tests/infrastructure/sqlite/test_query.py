@@ -56,6 +56,21 @@ class TestFromClause:
         assert '"users",' in sql
         assert '"orders"' in sql
 
+    def test_from_with_whitespace_raises(self):
+        """Test that FROM rejects table names with whitespace."""
+        with pytest.raises(ValueError, match="contains whitespace"):
+            Query().select("*").from_("users u")
+
+    def test_from_with_tab_raises(self):
+        """Test that FROM rejects table names with tab whitespace."""
+        with pytest.raises(ValueError, match="contains whitespace"):
+            Query().select("*").from_("users\tu")
+
+    def test_from_with_newline_raises(self):
+        """Test that FROM rejects table names with newline whitespace."""
+        with pytest.raises(ValueError, match="contains whitespace"):
+            Query().select("*").from_("users\nu")
+
 
 class TestWhereClause:
     """Tests for the WHERE clause of the Query Builder."""
@@ -213,12 +228,33 @@ class TestJoinClause:
         assert 'JOIN "orders" AS o\n' in sql
         assert 'JOIN "products" AS p\n' in sql
 
+    def test_join_with_whitespace_raises(self):
+        """Test that JOIN rejects table names with whitespace."""
+        with pytest.raises(ValueError, match="contains whitespace"):
+            Query().select("*").from_("users").join(
+                "orders o", Col("users.id").eq(Col("orders.user_id"))
+            )
+
+    def test_join_with_tab_raises(self):
+        """Test that JOIN rejects table names with tab whitespace."""
+        with pytest.raises(ValueError, match="contains whitespace"):
+            Query().select("*").from_("users").join(
+                "orders\to", Col("users.id").eq(Col("orders.user_id"))
+            )
+
+    def test_join_with_newline_raises(self):
+        """Test that JOIN rejects table names with newline whitespace."""
+        with pytest.raises(ValueError, match="contains whitespace"):
+            Query().select("*").from_("users").join(
+                "orders\no", Col("users.id").eq(Col("orders.user_id"))
+            )
+
     def test_join_appears_before_where_in_sql(self):
         """Test that JOIN clause appears before WHERE in generated SQL."""
         q = (
             Query()
             .select("*")
-            .from_("users u")
+            .from_(("users", "u"))
             .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
             .where(Col("u", "age").gt(18))
         )
@@ -232,9 +268,9 @@ class TestJoinClause:
         q = (
             Query()
             .select("*")
-            .from_("users u")
+            .from_(("users", "u"))
             .join(
-                "orders o",
+                ("orders", "o"),
                 Col("u", "id").eq(Col("o", "user_id")),
                 Col("o", "amount").gt(500),
             )
@@ -249,7 +285,7 @@ class TestJoinClause:
             Query()
             .with_cte("big_orders", cte)
             .select("*")
-            .from_("users u")
+            .from_(("users", "u"))
             .join(
                 ("big_orders", "o"),
                 Col("o", "user_id").eq(Col("u", "id")),
@@ -366,7 +402,7 @@ class TestParamOrdering:
             Query()
             .with_cte("big_orders", cte)
             .select("u.id", "COUNT(*)")
-            .from_("users u")
+            .from_(("users", "u"))
             .join(
                 ("big_orders", "o"),
                 Col("o", "user_id").eq(Col("u", "id")),
@@ -390,8 +426,8 @@ class TestSQLClauseOrdering:
         q = (
             Query()
             .select("u.id", "COUNT(*)")
-            .from_("users u")
-            .join("orders o", Col("u", "id").eq(Col("o", "user_id")))
+            .from_(("users", "u"))
+            .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
             .where(Col("u", "age").gt(18))
             .group_by("u.id")
             .having(Fn("COUNT", Col("*")).gt(1))
