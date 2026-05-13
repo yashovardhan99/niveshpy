@@ -143,3 +143,4 @@ version_scheme = "no-guess-dev"
 
 [tool.uv]
 add-bounds = "major"
+exclude-newer = "P3D"
