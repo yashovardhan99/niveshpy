@@ -13,6 +13,7 @@ from niveshpy.exceptions import ResourceNotFoundError
 from niveshpy.infrastructure.sqlite.converters import get_converter
 from niveshpy.infrastructure.sqlite.query import (
     SECURITY_COLUMNS,
+    Col,
     Delete,
     Insert,
     Query,
@@ -43,7 +44,7 @@ class SqliteSecurityRepository:
             Query()
             .select(*SECURITY_COLUMNS)
             .from_(self.security_table_name)
-            .where(("key = ?", key))
+            .where(Col("key").eq(key))
         )
         return self.database.select_one(query, cl=SecurityPublic)
 
@@ -57,8 +58,8 @@ class SqliteSecurityRepository:
             generate_query_from_filters(
                 filters,
                 {
-                    Field.SECURITY: ["key", "name"],
-                    Field.TYPE: ["type", "category"],
+                    Field.SECURITY: [Col("key"), Col("name")],
+                    Field.TYPE: [Col("type"), Col("category")],
                 },
             )
             .from_(self.security_table_name)
@@ -90,9 +91,10 @@ class SqliteSecurityRepository:
         """Insert a new security into the database."""
         c = get_converter()
         stmt = (
-            Insert(self.security_table_name)
+            Insert()
+            .into(self.security_table_name)
             .or_ignore()
-            .columns_("key", "name", "type", "category", "properties")
+            .columns("key", "name", "type", "category", "properties")
         ).values_(*c.unstructure_attrs_astuple(security))
         result = self.database.execute(stmt)
         if result == 0:
@@ -111,9 +113,10 @@ class SqliteSecurityRepository:
             return 0
 
         stmt = (
-            Insert(self.security_table_name)
+            Insert()
+            .into(self.security_table_name)
             .or_ignore()
-            .columns_("key", "name", "type", "category", "properties")
+            .columns("key", "name", "type", "category", "properties")
         )
         c = get_converter()
         security_tuples = [c.unstructure_attrs_astuple(sec) for sec in securities]
@@ -130,7 +133,7 @@ class SqliteSecurityRepository:
 
     def delete_security_by_key(self, key: str) -> bool:
         """Delete a security from the database by its key."""
-        stmt = Delete(self.security_table_name).where(("key = ?", key))
+        stmt = Delete().from_(self.security_table_name).where(Col("key").eq(key))
         result = self.database.execute(stmt)
         if result == 0:
             logger.debug("No security found with key %s to delete.", key)
@@ -172,6 +175,9 @@ class SqliteSecurityRepository:
 
         placeholders = ", ".join(["?"] * (len(properties) * 2))
 
+        # An update query builder is not available yet
+        # as this is the only update operation needed so far,
+        # and it has a specific structure due to JSON_SET usage.
         stmt = dedent(
             f"""UPDATE {self.security_table_name}
             SET properties = json_set(properties, {placeholders})

@@ -10,6 +10,7 @@ from niveshpy.exceptions import InvalidInputError
 from niveshpy.infrastructure.sqlite.converters import get_converter
 from niveshpy.infrastructure.sqlite.query import (
     ACCOUNT_COLUMNS,
+    Col,
     Delete,
     Insert,
     Query,
@@ -40,7 +41,7 @@ class SqliteAccountRepository:
             Query()
             .select(*ACCOUNT_COLUMNS)
             .from_(self.account_table_name)
-            .where(("id = ?", account_id))
+            .where(Col("id").eq(account_id))
         )
         return self.database.select_one(query, cl=AccountPublic)
 
@@ -52,7 +53,7 @@ class SqliteAccountRepository:
             Query()
             .select(*ACCOUNT_COLUMNS)
             .from_(self.account_table_name)
-            .where(("name = ?", name), ("institution = ?", institution))
+            .where(Col("name").eq(name), Col("institution").eq(institution))
         )
         return self.database.select_one(query, cl=AccountPublic)
 
@@ -66,7 +67,10 @@ class SqliteAccountRepository:
             generate_query_from_filters(
                 filters,
                 {
-                    Field.ACCOUNT: ["name", "institution"],
+                    Field.ACCOUNT: [
+                        Col(self.account_table_name, "name"),
+                        Col(self.account_table_name, "institution"),
+                    ],
                 },
             )
             .from_(self.account_table_name)
@@ -97,7 +101,7 @@ class SqliteAccountRepository:
             Query()
             .select(*ACCOUNT_COLUMNS)
             .from_(self.account_table_name)
-            .where(in_("id", *account_ids))
+            .where(Col("id").in_(account_ids))
         )
         return self.database.select_many(query, cl=AccountPublic)
 
@@ -132,11 +136,12 @@ class SqliteAccountRepository:
         """Insert a new account into the database."""
         c = get_converter()
         stmt = (
-            Insert(self.account_table_name)
+            Insert()
+            .into(self.account_table_name)
             .or_ignore()
-            .columns_("name", "institution", "properties")
+            .columns("name", "institution", "properties")
             .values_(*c.unstructure_attrs_astuple(account))
-            .returning("id")
+            .returning(Col("id").alias(None))
         )
         with self.database.cursor() as cursor:
             result = cursor.execute(str(stmt), stmt.params)
@@ -161,9 +166,10 @@ class SqliteAccountRepository:
             return 0
 
         stmt = (
-            Insert(self.account_table_name)
+            Insert()
+            .into(self.account_table_name)
             .or_ignore()
-            .columns_("name", "institution", "properties")
+            .columns("name", "institution", "properties")
         )
         result = self.database.executemany(stmt, account_tuples)
         logger.debug("Inserted %d new accounts.", result)
@@ -173,7 +179,7 @@ class SqliteAccountRepository:
 
     def delete_account_by_id(self, account_id: int) -> bool:
         """Delete an account by its ID."""
-        stmt = Delete(self.account_table_name).where(("id = ?", account_id))
+        stmt = Delete().from_(self.account_table_name).where(Col("id").eq(account_id))
         result = self.database.execute(stmt)
         if result == 0:
             logger.debug("No account found with ID %d to delete.", account_id)

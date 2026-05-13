@@ -34,7 +34,7 @@ T = TypeVar("T")
 class SqliteDatabase:
     """SQLite database session management and migrations."""
 
-    _debug: bool = field(default=False, repr=False)
+    _debug: bool = field(default=False, repr=False, alias="debug")
     db_path: Path = field(
         factory=lambda: platformdirs.user_data_path("niveshpy") / "niveshpy.db"
     )

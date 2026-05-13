@@ -2,7 +2,7 @@
 
 import pytest
 
-from niveshpy.infrastructure.sqlite.query import Delete, Insert, Query, or_
+from niveshpy.infrastructure.sqlite.query import Col, Delete, Fn, Insert, Query, or_
 
 
 class TestSelectClause:
@@ -26,13 +26,13 @@ class TestSelectClause:
 
     def test_select_all(self):
         """Test SELECT with ALL keyword."""
-        q = Query().select("id", all=True)
+        q = Query().select("id", all_=True)
         assert "SELECT ALL\n" in str(q)
 
     def test_select_distinct_and_all_raises(self):
         """Test that using both DISTINCT and ALL raises a ValueError."""
         with pytest.raises(ValueError, match="Cannot use both DISTINCT and ALL"):
-            Query().select("id", distinct=True, all=True)
+            Query().select("id", distinct=True, all_=True)
 
 
 class TestFromClause:
@@ -56,20 +56,35 @@ class TestFromClause:
         assert '"users",' in sql
         assert '"orders"' in sql
 
+    def test_from_with_whitespace_raises(self):
+        """Test that FROM rejects table names with whitespace."""
+        with pytest.raises(ValueError, match="contains whitespace"):
+            Query().select("*").from_("users u")
+
+    def test_from_with_tab_raises(self):
+        """Test that FROM rejects table names with tab whitespace."""
+        with pytest.raises(ValueError, match="contains whitespace"):
+            Query().select("*").from_("users\tu")
+
+    def test_from_with_newline_raises(self):
+        """Test that FROM rejects table names with newline whitespace."""
+        with pytest.raises(ValueError, match="contains whitespace"):
+            Query().select("*").from_("users\nu")
+
 
 class TestWhereClause:
     """Tests for the WHERE clause of the Query Builder."""
 
     def test_where_no_params(self):
         """Test WHERE clause with no parameters."""
-        q = Query().select("*").from_("users").where("active = 1")
-        assert "WHERE\n  active = 1\n" in str(q)
-        assert q.params == ()
+        q = Query().select("*").from_("users").where(Col("active").eq(1))
+        assert 'WHERE\n  "active" = ?\n' in str(q)
+        assert q.params == (1,)
 
     def test_where_single_param(self):
         """Test WHERE clause with a single parameter."""
-        q = Query().select("*").from_("users").where(("age > ?", 18))
-        assert "WHERE\n  age > ?\n" in str(q)
+        q = Query().select("*").from_("users").where(Col("age").gt(18))
+        assert 'WHERE\n  "age" > ?\n' in str(q)
         assert q.params == (18,)
 
     def test_where_two_params(self):
@@ -78,7 +93,7 @@ class TestWhereClause:
             Query()
             .select("*")
             .from_("users")
-            .where(("created_at BETWEEN ? AND ?", "2023-01-01", "2023-12-31"))
+            .where(Col("created_at").between("2023-01-01", "2023-12-31"))
         )
         assert q.params == ("2023-01-01", "2023-12-31")
 
@@ -88,7 +103,7 @@ class TestWhereClause:
             Query()
             .select("*")
             .from_("users")
-            .where(("age > ?", 18), ("status = ?", "active"))
+            .where(Col("age").gt(18), Col("status").eq("active"))
         )
         sql = str(q)
         assert "AND" in sql
@@ -100,10 +115,10 @@ class TestWhereClause:
             Query()
             .select("*")
             .from_("users")
-            .where(or_(("status = ?", "active"), ("status = ?", "pending")))
+            .where(or_(Col("status").eq("active"), Col("status").eq("pending")))
         )
         sql = str(q)
-        assert "(status = ? OR status = ?)" in sql
+        assert '("status" = ? OR "status" = ?)' in sql
         assert q.params == ("active", "pending")
 
     def test_where_or_mixed_with_and(self):
@@ -113,13 +128,13 @@ class TestWhereClause:
             .select("*")
             .from_("users")
             .where(
-                ("age > ?", 18),
-                or_(("status = ?", "active"), ("status = ?", "pending")),
+                Col("age").gt(18),
+                or_(Col("status").eq("active"), Col("status").eq("pending")),
             )
         )
         sql = str(q)
-        assert "age > ?" in sql
-        assert "AND (status = ? OR status = ?)" in sql
+        assert '"age" > ?' in sql
+        assert 'AND ("status" = ? OR "status" = ?)' in sql
         assert q.params == (18, "active", "pending")
 
     def test_where_or_no_params(self):
@@ -128,10 +143,10 @@ class TestWhereClause:
             Query()
             .select("*")
             .from_("users")
-            .where(or_("deleted_at IS NULL", "active = 1"))
+            .where(or_(Col("deleted_at").is_null(), Col("active").is_not_null()))
         )
         sql = str(q)
-        assert "(deleted_at IS NULL OR active = 1)" in sql
+        assert '("deleted_at" IS NULL OR "active" IS NOT NULL)' in sql
         assert q.params == ()
 
 
@@ -143,33 +158,34 @@ class TestJoinClause:
         q = (
             Query()
             .select("u.id", "o.id")
-            .from_("users u")
-            .join("orders o", "u.id = o.user_id")
+            .from_(("users", "u"))
+            .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
         )
         sql = str(q)
-        assert "JOIN orders o\n" in sql
-        assert "ON\n  u.id = o.user_id\n" in sql
+        assert '"users" AS u' in sql  # Verify alias form generates correct SQL
+        assert 'JOIN "orders" AS o\n' in sql
+        assert 'ON\n  "u"."id" = "o"."user_id"\n' in sql
 
     def test_left_join(self):
         """Test LEFT JOIN with a simple condition."""
         q = (
             Query()
             .select("*")
-            .from_("users u")
-            .join("orders o", "u.id = o.user_id", type="left")
+            .from_(("users", "u"))
+            .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")), type="left")
         )
-        assert "LEFT JOIN orders o\n" in str(q)
+        assert 'LEFT JOIN "orders" AS o\n' in str(q)
 
     def test_cross_join_no_on(self):
         """Test CROSS JOIN without an ON condition."""
         q = (
             Query()
             .select("a.id", "b.id")
-            .from_("table_a a")
-            .join("table_b b", type="cross")
+            .from_(("table_a", "a"))
+            .join(("table_b", "b"), type="cross")
         )
         sql = str(q)
-        assert "CROSS JOIN table_b b\n" in sql
+        assert 'CROSS JOIN "table_b" AS b\n' in sql
         assert "ON" not in sql
         assert q.params == ()
 
@@ -178,12 +194,16 @@ class TestJoinClause:
         q = (
             Query()
             .select("*")
-            .from_("users u")
-            .join("orders o", "u.id = o.user_id", ("o.amount > ?", 100))
+            .from_(("users", "u"))
+            .join(
+                ("orders", "o"),
+                Col("u", "id").eq(Col("o", "user_id")),
+                Col("o", "amount").gt(100),
+            )
         )
         sql = str(q)
-        assert "JOIN orders o\n" in sql
-        assert "AND o.amount > ?\n" in sql
+        assert 'JOIN "orders" AS o\n' in sql
+        assert 'AND "o"."amount" > ?\n' in sql
         assert q.params == (100,)
 
     def test_join_with_alias_tuple(self):
@@ -191,32 +211,53 @@ class TestJoinClause:
         q = (
             Query()
             .select("*")
-            .from_("users u")
-            .join(("orders", "o"), "u.id = o.user_id")
+            .from_(("users", "u"))
+            .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
         )
-        assert "JOIN orders AS o\n" in str(q)
+        assert 'JOIN "orders" AS o\n' in str(q)
 
     def test_multiple_joins(self):
         """Test chaining multiple JOINs in a single query."""
         q = (
             Query()
             .select("u.id", "o.id", "p.id")
-            .from_("users u")
-            .join("orders o", "u.id = o.user_id")
-            .join("products p", "o.product_id = p.id")
+            .from_(("users", "u"))
+            .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
+            .join(("products", "p"), Col("o", "product_id").eq(Col("p", "id")))
         )
         sql = str(q)
-        assert "JOIN orders o\n" in sql
-        assert "JOIN products p\n" in sql
+        assert 'JOIN "orders" AS o\n' in sql
+        assert 'JOIN "products" AS p\n' in sql
+
+    def test_join_with_whitespace_raises(self):
+        """Test that JOIN rejects table names with whitespace."""
+        with pytest.raises(ValueError, match="contains whitespace"):
+            Query().select("*").from_("users").join(
+                "orders o", Col("users.id").eq(Col("orders.user_id"))
+            )
+
+    def test_join_with_tab_raises(self):
+        """Test that JOIN rejects table names with tab whitespace."""
+        with pytest.raises(ValueError, match="contains whitespace"):
+            Query().select("*").from_("users").join(
+                "orders\to", Col("users.id").eq(Col("orders.user_id"))
+            )
+
+    def test_join_with_newline_raises(self):
+        """Test that JOIN rejects table names with newline whitespace."""
+        with pytest.raises(ValueError, match="contains whitespace"):
+            Query().select("*").from_("users").join(
+                "orders\no", Col("users.id").eq(Col("orders.user_id"))
+            )
 
     def test_join_appears_before_where_in_sql(self):
         """Test that JOIN clause appears before WHERE in generated SQL."""
         q = (
             Query()
             .select("*")
-            .from_("users u")
-            .join("orders o", "u.id = o.user_id")
-            .where(("u.age > ?", 18))
+            .from_(("users", "u"))
+            .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
+            .where(Col("u", "age").gt(18))
         )
         sql = str(q)
         join_pos = sql.index("JOIN")
@@ -228,22 +269,30 @@ class TestJoinClause:
         q = (
             Query()
             .select("*")
-            .from_("users u")
-            .join("orders o", "u.id = o.user_id", ("o.amount > ?", 500))
-            .where(("u.age > ?", 18))
+            .from_(("users", "u"))
+            .join(
+                ("orders", "o"),
+                Col("u", "id").eq(Col("o", "user_id")),
+                Col("o", "amount").gt(500),
+            )
+            .where(Col("u", "age").gt(18))
         )
         assert q.params == (500, 18)
 
     def test_join_params_between_cte_and_where(self):
         """Test param order is CTE → JOIN → WHERE."""
-        cte = Query().select("id").from_("orders").where(("amount > ?", 1000))
+        cte = Query().select("id").from_("orders").where(Col("amount").gt(1000))
         q = (
             Query()
             .with_cte("big_orders", cte)
             .select("*")
-            .from_("users u")
-            .join("big_orders o", ("o.user_id = u.id AND o.amount > ?", 2000))
-            .where(("u.status = ?", "active"))
+            .from_(("users", "u"))
+            .join(
+                ("big_orders", "o"),
+                Col("o", "user_id").eq(Col("u", "id")),
+                Col("o", "amount").gt(2000),
+            )
+            .where(Col("u", "status").eq("active"))
         )
         assert q.params == (1000, 2000, "active")
 
@@ -267,7 +316,7 @@ class TestHavingClause:
             .select("country", "COUNT(*)")
             .from_("users")
             .group_by("country")
-            .having(("COUNT(*) > ?", 5))
+            .having(Fn("COUNT", Col("*")).gt(5))
         )
         sql = str(q)
         assert "HAVING\n  COUNT(*) > ?\n" in sql
@@ -311,7 +360,7 @@ class TestCTE:
 
     def test_simple_cte(self):
         """Test a single CTE wrapping a subquery."""
-        inner = Query().select("id").from_("users").where(("active = ?", 1))
+        inner = Query().select("id").from_("users").where(Col("active").eq(1))
         q = Query().with_cte("active_users", inner).select("*").from_("active_users")
         sql = str(q)
         assert sql.startswith("WITH active_users AS (\n")
@@ -319,8 +368,8 @@ class TestCTE:
 
     def test_multiple_ctes(self):
         """Test multiple CTEs separated by commas."""
-        cte1 = Query().select("id").from_("users").where(("active = ?", 1))
-        cte2 = Query().select("id").from_("orders").where(("amount > ?", 100))
+        cte1 = Query().select("id").from_("users").where(Col("active").eq(1))
+        cte2 = Query().select("id").from_("orders").where(Col("amount").gt(100))
         q = (
             Query()
             .with_cte("active_users", cte1)
@@ -340,7 +389,7 @@ class TestFluentChaining:
     def test_chaining_returns_same_instance(self):
         """Test that all builder methods return the same Query instance."""
         q = Query()
-        result = q.select("*").from_("users").where("1=1").order_by("id").limit(5)
+        result = q.select("*").from_("users").order_by("id").limit(5)
         assert result is q
 
 
@@ -349,16 +398,20 @@ class TestParamOrdering:
 
     def test_full_query_param_order(self):
         """Params follow SQL clause order: CTE → JOIN → WHERE → HAVING → LIMIT → OFFSET."""
-        cte = Query().select("id").from_("orders").where(("amount > ?", 1000))
+        cte = Query().select("id").from_("orders").where(Col("amount").gt(1000))
         q = (
             Query()
             .with_cte("big_orders", cte)
             .select("u.id", "COUNT(*)")
-            .from_("users u")
-            .join("big_orders o", ("o.user_id = u.id AND o.qty > ?", 5))
-            .where(("u.status = ?", "active"))
+            .from_(("users", "u"))
+            .join(
+                ("big_orders", "o"),
+                Col("o", "user_id").eq(Col("u", "id")),
+                Col("o", "qty").gt(5),
+            )
+            .where(Col("u", "status").eq("active"))
             .group_by("u.id")
-            .having(("COUNT(*) > ?", 3))
+            .having(Fn("COUNT", Col("*")).gt(3))
             .order_by("u.id")
             .limit(10)
             .offset(20)
@@ -374,11 +427,11 @@ class TestSQLClauseOrdering:
         q = (
             Query()
             .select("u.id", "COUNT(*)")
-            .from_("users u")
-            .join("orders o", "u.id = o.user_id")
-            .where(("u.age > ?", 18))
+            .from_(("users", "u"))
+            .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
+            .where(Col("u", "age").gt(18))
             .group_by("u.id")
-            .having(("COUNT(*) > ?", 1))
+            .having(Fn("COUNT", Col("*")).gt(1))
             .order_by("u.id")
             .limit(10)
             .offset(0)
@@ -406,7 +459,7 @@ class TestInsert:
         stmt = (
             Insert()
             .into("accounts")
-            .columns_("name", "institution")
+            .columns("name", "institution")
             .values_("Foo", "Bar")
         )
         sql = str(stmt)
@@ -423,7 +476,7 @@ class TestInsert:
             Insert()
             .or_ignore()
             .into("accounts")
-            .columns_("name", "institution")
+            .columns("name", "institution")
             .values_("Foo", "Bar")
         )
         sql = str(stmt)
@@ -437,7 +490,7 @@ class TestInsert:
             Insert()
             .or_replace()
             .into("prices")
-            .columns_("security_key", "date", "close")
+            .columns("security_key", "date", "close")
             .values_("AXIS123", "2024-01-01", 150.5)
         )
         sql = str(stmt)
@@ -448,28 +501,34 @@ class TestInsert:
 
     def test_insert_returning(self):
         """Test RETURNING clause on insert."""
-        stmt = Insert().into("accounts").columns_("name").values_("Foo").returning("id")
+        stmt = (
+            Insert()
+            .into("accounts")
+            .columns("name")
+            .values_("Foo")
+            .returning(Col("id").alias(None))
+        )
         sql = str(stmt)
-        assert "RETURNING id" in sql
+        assert 'RETURNING "id"' in sql
 
     def test_insert_returning_with_alias(self):
         """Test RETURNING clause with aliased column."""
         stmt = (
             Insert()
             .into("accounts")
-            .columns_("name")
+            .columns("name")
             .values_("Foo")
-            .returning(("name", "account_name"))
+            .returning(Col("name").alias("account_name"))
         )
         sql = str(stmt)
-        assert "RETURNING name AS account_name" in sql
+        assert 'RETURNING "name" AS account_name' in sql
 
     def test_insert_bulk_values(self):
         """Test multiple .values_() calls produce multi-row VALUES."""
         stmt = (
             Insert()
             .into("accounts")
-            .columns_("name", "institution")
+            .columns("name", "institution")
             .values_("A", "X")
             .values_("B", "Y")
         )
@@ -478,7 +537,7 @@ class TestInsert:
 
     def test_insert_params_single_row(self):
         """Test params for a single row insert."""
-        stmt = Insert().into("t").columns_("a", "b", "c").values_(1, 2, 3)
+        stmt = Insert().into("t").columns("a", "b", "c").values_(1, 2, 3)
         assert stmt.params == (1, 2, 3)
 
     def test_insert_params_bulk(self):
@@ -486,7 +545,7 @@ class TestInsert:
         stmt = (
             Insert()
             .into("t")
-            .columns_("a", "b")
+            .columns("a", "b")
             .values_(1, 2)
             .values_(3, 4)
             .values_(5, 6)
@@ -495,21 +554,156 @@ class TestInsert:
 
     def test_insert_no_table_raises(self):
         """Test ValueError when table is not specified."""
-        stmt = Insert().columns_("a").values_(1)
+        stmt = Insert().columns("a").values_(1)
         with pytest.raises(ValueError, match="Table must be specified"):
             str(stmt)
 
     def test_insert_value_count_mismatch_raises(self):
         """Test ValueError when values count doesn't match columns."""
-        stmt = Insert().into("t").columns_("a", "b")
+        stmt = Insert().into("t").columns("a", "b")
         with pytest.raises(ValueError, match="Expected 2 values, got 3"):
             stmt.values_(1, 2, 3)
 
     def test_insert_chaining(self):
         """Test fluent API returns same instance."""
         stmt = Insert()
-        result = stmt.or_ignore().into("t").columns_("a").values_(1).returning("id")
+        result = (
+            stmt.or_ignore()
+            .into("t")
+            .columns("a")
+            .values_(1)
+            .returning(Col("id").alias(None))
+        )
         assert result is stmt
+
+    def test_on_conflict_do_update_generates_correct_sql(self):
+        """Test single conflict column + multiple update columns generates correct ON CONFLICT DO UPDATE."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "open", "high", "low", "close")
+            .values_("AXIS123", "2024-01-01", 100, 110, 90, 105)
+            .on_conflict("security_key")
+            .do_update("open", "high", "low", "close")
+        )
+        sql = str(stmt)
+        assert 'ON CONFLICT ("security_key")' in sql
+        assert "DO UPDATE SET" in sql
+        assert '"open" = excluded."open"' in sql
+        assert '"high" = excluded."high"' in sql
+        assert '"low" = excluded."low"' in sql
+        assert '"close" = excluded."close"' in sql
+        assert stmt.params == ("AXIS123", "2024-01-01", 100, 110, 90, 105)
+
+    def test_on_conflict_composite_key_conflict_target(self):
+        """Test two conflict columns (composite key) appear in ON CONFLICT clause."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+            .on_conflict("security_key", "date")
+            .do_update("close")
+        )
+        sql = str(stmt)
+        assert 'ON CONFLICT ("security_key", "date")' in sql
+        assert 'DO UPDATE SET "close" = excluded."close"' in sql
+
+    def test_on_conflict_do_nothing_when_no_update_columns(self):
+        """Test on_conflict without do_update generates DO NOTHING."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+            .on_conflict("security_key", "date")
+        )
+        sql = str(stmt)
+        assert 'ON CONFLICT ("security_key", "date")' in sql
+        assert "DO NOTHING" in sql
+        assert "DO UPDATE" not in sql
+
+    def test_on_conflict_params_unchanged(self):
+        """Test ON CONFLICT clause doesn't add extra parameters."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns(
+                "security_key", "date", "open", "high", "low", "close", "properties"
+            )
+            .values_("AXIS123", "2024-01-01", 100, 110, 90, 105, "{}")
+            .on_conflict("security_key", "date")
+            .do_update("open", "high", "low", "close", "properties")
+        )
+        # Params should only be the insert values, not anything from the ON CONFLICT clause
+        assert stmt.params == ("AXIS123", "2024-01-01", 100, 110, 90, 105, "{}")
+
+    def test_on_conflict_cannot_combine_with_or_replace(self):
+        """Test that calling or_replace() after on_conflict() raises ValueError."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+            .on_conflict("security_key", "date")
+        )
+        with pytest.raises(ValueError, match="Cannot combine OR REPLACE"):
+            stmt.or_replace()
+
+    def test_on_conflict_cannot_combine_with_or_ignore(self):
+        """Test that calling or_ignore() after on_conflict() raises ValueError."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+            .on_conflict("security_key", "date")
+        )
+        with pytest.raises(ValueError, match="Cannot combine OR REPLACE"):
+            stmt.or_ignore()
+
+    def test_or_replace_before_on_conflict_raises(self):
+        """Test that calling on_conflict() after or_replace() raises ValueError."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .or_replace()
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+        )
+        with pytest.raises(ValueError, match="Cannot combine ON CONFLICT"):
+            stmt.on_conflict("security_key", "date")
+
+    def test_do_update_without_on_conflict_raises(self):
+        """Test that calling do_update() without on_conflict() raises ValueError."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+        )
+        with pytest.raises(ValueError, match="on_conflict\\(\\) must be called before"):
+            stmt.do_update("close")
+
+    def test_on_conflict_do_update_comes_before_returning_in_sql(self):
+        """Test that ON CONFLICT appears before RETURNING in generated SQL."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+            .on_conflict("security_key", "date")
+            .do_update("close")
+            .returning(Col("security_key").alias(None))
+        )
+        sql = str(stmt)
+        conflict_pos = sql.find("ON CONFLICT")
+        returning_pos = sql.find("RETURNING")
+        assert conflict_pos != -1, "ON CONFLICT not found in SQL"
+        assert returning_pos != -1, "RETURNING not found in SQL"
+        assert conflict_pos < returning_pos, (
+            "ON CONFLICT should appear before RETURNING"
+        )
 
 
 class TestDelete:
@@ -517,11 +711,11 @@ class TestDelete:
 
     def test_simple_delete(self):
         """Test basic DELETE FROM with WHERE."""
-        stmt = Delete().from_("accounts").where(("id = ?", 5))
+        stmt = Delete().from_("accounts").where(Col("id").eq(5))
         sql = str(stmt)
         assert 'DELETE FROM "accounts"' in sql
         assert "WHERE" in sql
-        assert "id = ?" in sql
+        assert '"id" = ?' in sql
         assert stmt.params == (5,)
 
     def test_delete_multiple_conditions(self):
@@ -530,34 +724,41 @@ class TestDelete:
             Delete()
             .from_("transactions")
             .where(
-                ("account_id = ?", 1),
-                ("transaction_date >= ?", "2024-01-01"),
+                Col("account_id").eq(1),
+                Col("transaction_date").ge("2024-01-01"),
             )
         )
         sql = str(stmt)
-        assert "account_id = ?" in sql
+        assert '"account_id" = ?' in sql
         assert "AND" in sql
-        assert "transaction_date >= ?" in sql
+        assert '"transaction_date" >= ?' in sql
         assert stmt.params == (1, "2024-01-01")
 
     def test_delete_with_or(self):
         """Test DELETE with OR-combined conditions."""
         stmt = (
-            Delete().from_("accounts").where(or_(("name = ?", "A"), ("name = ?", "B")))
+            Delete()
+            .from_("accounts")
+            .where(or_(Col("name").eq("A"), Col("name").eq("B")))
         )
         sql = str(stmt)
-        assert "(name = ? OR name = ?)" in sql
+        assert '("name" = ? OR "name" = ?)' in sql
         assert stmt.params == ("A", "B")
 
     def test_delete_returning(self):
         """Test RETURNING clause on delete."""
-        stmt = Delete().from_("accounts").where(("id = ?", 1)).returning("id", "name")
+        stmt = (
+            Delete()
+            .from_("accounts")
+            .where(Col("id").eq(1))
+            .returning(Col("id").alias(None), Col("name").alias(None))
+        )
         sql = str(stmt)
-        assert "RETURNING id, name" in sql
+        assert 'RETURNING "id", "name"' in sql
 
     def test_delete_no_table_raises(self):
         """Test ValueError when table is not specified."""
-        stmt = Delete().where(("id = ?", 1))
+        stmt = Delete().where(Col("id").eq(1))
         with pytest.raises(ValueError, match="Table must be specified"):
             str(stmt)
 
@@ -575,8 +776,8 @@ class TestDelete:
             Delete()
             .from_("prices")
             .where(
-                ("security_key = ?", "AXIS123"),
-                ("date BETWEEN ? AND ?", "2024-01-01", "2024-12-31"),
+                Col("security_key").eq("AXIS123"),
+                Col("date").between("2024-01-01", "2024-12-31"),
             )
         )
         assert stmt.params == ("AXIS123", "2024-01-01", "2024-12-31")
@@ -584,5 +785,5 @@ class TestDelete:
     def test_delete_chaining(self):
         """Test fluent API returns same instance."""
         stmt = Delete()
-        result = stmt.from_("t").where(("id = ?", 1)).returning("id")
+        result = stmt.from_("t").where(Col("id").eq(1)).returning(Col("id").alias(None))
         assert result is stmt

@@ -317,3 +317,62 @@ def test_replace_prices_in_range_invalid_batch_size(
             [price],
             batch_size=0,
         )
+
+
+def test_overwrite_price_does_not_trigger_fk_violation_on_conflict(
+    price_repository: SqlitePriceRepository,
+    security_repository: SqliteSecurityRepository,
+) -> None:
+    """Overwrite uses true upsert, not delete+insert, preserving FK semantics.
+
+    This test verifies that overwrite_price() uses ON CONFLICT DO UPDATE (true upsert)
+    rather than INSERT OR REPLACE (which deletes then inserts). The difference matters
+    when FK child tables exist — true upsert avoids cascading deletes.
+    """
+    # Create security
+    security_repository.insert_security(
+        SecurityCreate(
+            key="AAPL",
+            name="Apple Inc.",
+            type=SecurityType.STOCK,
+            category=SecurityCategory.EQUITY,
+        )
+    )
+
+    # Insert initial price
+    price1 = PriceCreate(
+        security_key="AAPL",
+        date=datetime.date(2024, 1, 1),
+        open=Decimal("150.00"),
+        high=Decimal("155.00"),
+        low=Decimal("149.00"),
+        close=Decimal("154.00"),
+    )
+    price_repository.overwrite_price(price1)
+
+    # Fetch and verify initial price
+    fetched = price_repository.get_price_by_key_and_date(
+        "AAPL", datetime.date(2024, 1, 1)
+    )
+    assert fetched is not None
+    assert fetched.close == Decimal("154.00")
+
+    # Overwrite the same (key, date) with new OHLC values
+    price2 = PriceCreate(
+        security_key="AAPL",
+        date=datetime.date(2024, 1, 1),
+        open=Decimal("152.00"),
+        high=Decimal("157.00"),
+        low=Decimal("151.00"),
+        close=Decimal("156.00"),
+    )
+    # This should not raise an error; it should update in-place
+    price_repository.overwrite_price(price2)
+
+    # Fetch and verify the row was updated, not deleted and reinserted
+    fetched = price_repository.get_price_by_key_and_date(
+        "AAPL", datetime.date(2024, 1, 1)
+    )
+    assert fetched is not None
+    assert fetched.close == Decimal("156.00")
+    assert fetched.open == Decimal("152.00")
