@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (Internal) Improve various aspects of query builder.
 
+### Removed
+
+- Remove Outdated GA publish workflow.
+
 ## [1.0.0a8] - 2026-05-10
 
 ### Added
