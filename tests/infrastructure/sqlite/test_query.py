@@ -539,6 +539,135 @@ class TestInsert:
         )
         assert result is stmt
 
+    def test_on_conflict_do_update_generates_correct_sql(self):
+        """Test single conflict column + multiple update columns generates correct ON CONFLICT DO UPDATE."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "open", "high", "low", "close")
+            .values_("AXIS123", "2024-01-01", 100, 110, 90, 105)
+            .on_conflict("security_key")
+            .do_update("open", "high", "low", "close")
+        )
+        sql = str(stmt)
+        assert 'ON CONFLICT ("security_key")' in sql
+        assert "DO UPDATE SET" in sql
+        assert '"open" = excluded."open"' in sql
+        assert '"high" = excluded."high"' in sql
+        assert '"low" = excluded."low"' in sql
+        assert '"close" = excluded."close"' in sql
+        assert stmt.params == ("AXIS123", "2024-01-01", 100, 110, 90, 105)
+
+    def test_on_conflict_composite_key_conflict_target(self):
+        """Test two conflict columns (composite key) appear in ON CONFLICT clause."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+            .on_conflict("security_key", "date")
+            .do_update("close")
+        )
+        sql = str(stmt)
+        assert 'ON CONFLICT ("security_key", "date")' in sql
+        assert 'DO UPDATE SET "close" = excluded."close"' in sql
+
+    def test_on_conflict_do_nothing_when_no_update_columns(self):
+        """Test on_conflict without do_update generates DO NOTHING."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+            .on_conflict("security_key", "date")
+        )
+        sql = str(stmt)
+        assert 'ON CONFLICT ("security_key", "date")' in sql
+        assert "DO NOTHING" in sql
+        assert "DO UPDATE" not in sql
+
+    def test_on_conflict_params_unchanged(self):
+        """Test ON CONFLICT clause doesn't add extra parameters."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns(
+                "security_key", "date", "open", "high", "low", "close", "properties"
+            )
+            .values_("AXIS123", "2024-01-01", 100, 110, 90, 105, "{}")
+            .on_conflict("security_key", "date")
+            .do_update("open", "high", "low", "close", "properties")
+        )
+        # Params should only be the insert values, not anything from the ON CONFLICT clause
+        assert stmt.params == ("AXIS123", "2024-01-01", 100, 110, 90, 105, "{}")
+
+    def test_on_conflict_cannot_combine_with_or_replace(self):
+        """Test that calling or_replace() after on_conflict() raises ValueError."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+            .on_conflict("security_key", "date")
+        )
+        with pytest.raises(ValueError, match="Cannot combine OR REPLACE"):
+            stmt.or_replace()
+
+    def test_on_conflict_cannot_combine_with_or_ignore(self):
+        """Test that calling or_ignore() after on_conflict() raises ValueError."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+            .on_conflict("security_key", "date")
+        )
+        with pytest.raises(ValueError, match="Cannot combine OR REPLACE"):
+            stmt.or_ignore()
+
+    def test_or_replace_before_on_conflict_raises(self):
+        """Test that calling on_conflict() after or_replace() raises ValueError."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .or_replace()
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+        )
+        with pytest.raises(ValueError, match="Cannot combine ON CONFLICT"):
+            stmt.on_conflict("security_key", "date")
+
+    def test_do_update_without_on_conflict_raises(self):
+        """Test that calling do_update() without on_conflict() raises ValueError."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+        )
+        with pytest.raises(ValueError, match="on_conflict\\(\\) must be called before"):
+            stmt.do_update("close")
+
+    def test_on_conflict_do_update_comes_before_returning_in_sql(self):
+        """Test that ON CONFLICT appears before RETURNING in generated SQL."""
+        stmt = (
+            Insert()
+            .into("prices")
+            .columns("security_key", "date", "close")
+            .values_("AXIS123", "2024-01-01", 105)
+            .on_conflict("security_key", "date")
+            .do_update("close")
+            .returning(Col("security_key").alias(None))
+        )
+        sql = str(stmt)
+        conflict_pos = sql.find("ON CONFLICT")
+        returning_pos = sql.find("RETURNING")
+        assert conflict_pos != -1, "ON CONFLICT not found in SQL"
+        assert returning_pos != -1, "RETURNING not found in SQL"
+        assert conflict_pos < returning_pos, (
+            "ON CONFLICT should appear before RETURNING"
+        )
+
 
 class TestDelete:
     """Tests for the DELETE statement builder."""

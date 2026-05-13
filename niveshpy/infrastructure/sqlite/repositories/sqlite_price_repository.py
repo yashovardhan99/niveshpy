@@ -272,9 +272,10 @@ class SqlitePriceRepository:
         stmt = (
             Insert()
             .into(self.price_table_name)
-            .or_replace()
             .columns(*PRICE_CREATE_COLUMNS)
             .values_(*values)
+            .on_conflict("security_key", "date")
+            .do_update("open", "high", "low", "close", "properties")
         )
         try:
             self.database.execute(stmt)

@@ -548,6 +548,8 @@ class Insert:
     insert_columns: list[str]
     values: list[tuple[Any, ...]]
     returning_columns: list[AliasedExpr]
+    conflict_columns: list[str]
+    update_columns: list[str]
 
     def __init__(self) -> None:
         """Initialize the Insert builder with default values."""
@@ -556,15 +558,63 @@ class Insert:
         self.insert_columns = []
         self.values = []
         self.returning_columns = []
+        self.conflict_columns = []
+        self.update_columns = []
 
     def or_ignore(self) -> Self:
         """Set the insert flag to OR IGNORE."""
+        if self.conflict_columns:
+            raise ValueError(
+                "Cannot combine OR REPLACE / OR IGNORE with ON CONFLICT … DO UPDATE."
+            )
         self.flag = _InsertFlag.OR_IGNORE
         return self
 
     def or_replace(self) -> Self:
         """Set the insert flag to OR REPLACE."""
+        if self.conflict_columns:
+            raise ValueError(
+                "Cannot combine OR REPLACE / OR IGNORE with ON CONFLICT … DO UPDATE."
+            )
         self.flag = _InsertFlag.OR_REPLACE
+        return self
+
+    def on_conflict(self, *columns: str) -> Self:
+        """Specify the columns that define the conflict target for upsert.
+
+        Args:
+            columns: Column names that form the unique/primary key for conflict detection.
+
+        Returns:
+            Self for method chaining.
+
+        Raises:
+            ValueError: If OR REPLACE or OR IGNORE flags are already set.
+        """
+        if self.flag != _InsertFlag.DEFAULT:
+            raise ValueError(
+                "Cannot combine ON CONFLICT … DO UPDATE with INSERT OR REPLACE / OR IGNORE flags."
+            )
+        self.conflict_columns = [q(col) for col in columns]
+        return self
+
+    def do_update(self, *columns: str) -> Self:
+        """Specify the columns to update when a conflict is detected.
+
+        If no columns are provided, DO NOTHING is used instead.
+
+        Args:
+            columns: Column names to update on conflict.
+
+        Returns:
+            Self for method chaining.
+
+        Raises:
+            ValueError: If on_conflict() was not called first.
+        """
+        if not self.conflict_columns:
+            raise ValueError("on_conflict() must be called before do_update().")
+        self.update_columns = [q(col) for col in columns]
         return self
 
     def into(self, table: str) -> Self:
@@ -613,9 +663,20 @@ class Insert:
             sql += "VALUES\n"
             sql += f"({placeholders})\n"
 
+        if self.conflict_columns:
+            conflict_str = ", ".join(self.conflict_columns)
+            sql += f"ON CONFLICT ({conflict_str}) "
+            if self.update_columns:
+                update_assignments = ", ".join(
+                    f"{col} = excluded.{col}" for col in self.update_columns
+                )
+                sql += f"DO UPDATE SET {update_assignments}\n"
+            else:
+                sql += "DO NOTHING\n"
+
         if self.returning_columns:
             returning_str = ", ".join(str(col) for col in self.returning_columns)
-            sql += f"\nRETURNING {returning_str}"
+            sql += f"RETURNING {returning_str}"
 
         return sql
 
