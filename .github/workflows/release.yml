@@ -60,7 +60,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           # Install a specific version of uv.
-          version: "0.11.3"
+          version: "0.11.14"
           enable-cache: true
 
       - name: Install python
@@ -118,11 +118,14 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           # Install a specific version of uv.
-          version: "0.11.3"
+          version: "0.11.14"
           enable-cache: true
 
       - name: Install python
         run: uv python install
+
+      - name: Check Lockfile
+        run: uv lock --check
 
       - name: Build distribution
         run: uv build
