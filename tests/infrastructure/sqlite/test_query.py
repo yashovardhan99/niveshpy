@@ -143,10 +143,10 @@ class TestWhereClause:
             Query()
             .select("*")
             .from_("users")
-            .where(or_(Col("deleted_at").is_null(), Col("active").eq(Col("active"))))
+            .where(or_(Col("deleted_at").is_null(), Col("active").is_not_null()))
         )
         sql = str(q)
-        assert '("deleted_at" IS NULL OR "active" = "active")' in sql
+        assert '("deleted_at" IS NULL OR "active" IS NOT NULL)' in sql
         assert q.params == ()
 
 
@@ -158,10 +158,11 @@ class TestJoinClause:
         q = (
             Query()
             .select("u.id", "o.id")
-            .from_("users", "u")
+            .from_(("users", "u"))
             .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
         )
         sql = str(q)
+        assert '"users" AS u' in sql  # Verify alias form generates correct SQL
         assert 'JOIN "orders" AS o\n' in sql
         assert 'ON\n  "u"."id" = "o"."user_id"\n' in sql
 
@@ -170,7 +171,7 @@ class TestJoinClause:
         q = (
             Query()
             .select("*")
-            .from_("users", "u")
+            .from_(("users", "u"))
             .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")), type="left")
         )
         assert 'LEFT JOIN "orders" AS o\n' in str(q)
@@ -180,7 +181,7 @@ class TestJoinClause:
         q = (
             Query()
             .select("a.id", "b.id")
-            .from_("table_a", "a")
+            .from_(("table_a", "a"))
             .join(("table_b", "b"), type="cross")
         )
         sql = str(q)
@@ -193,7 +194,7 @@ class TestJoinClause:
         q = (
             Query()
             .select("*")
-            .from_("users", "u")
+            .from_(("users", "u"))
             .join(
                 ("orders", "o"),
                 Col("u", "id").eq(Col("o", "user_id")),
@@ -210,7 +211,7 @@ class TestJoinClause:
         q = (
             Query()
             .select("*")
-            .from_("users", "u")
+            .from_(("users", "u"))
             .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
         )
         assert 'JOIN "orders" AS o\n' in str(q)
@@ -220,7 +221,7 @@ class TestJoinClause:
         q = (
             Query()
             .select("u.id", "o.id", "p.id")
-            .from_("users", "u")
+            .from_(("users", "u"))
             .join(("orders", "o"), Col("u", "id").eq(Col("o", "user_id")))
             .join(("products", "p"), Col("o", "product_id").eq(Col("p", "id")))
         )

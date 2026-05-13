@@ -11,7 +11,7 @@ from decimal import Decimal
 
 import pytest
 
-from niveshpy.exceptions import DatabaseError, IntegrityError
+from niveshpy.exceptions import IntegrityError
 from niveshpy.models.security import SecurityCategory, SecurityType
 from niveshpy.models.transaction import TransactionType
 
@@ -262,11 +262,11 @@ def test_delete_account_with_dependent_transaction_raises_integrity_error(
             cursor.execute("DELETE FROM account WHERE id = ?", (seeded_account,))
 
 
-def test_insert_transaction_with_nonexistent_security_key_raises_database_error(
+def test_insert_transaction_with_nonexistent_security_key_raises_integrity_error(
     db, seeded_account
 ):
-    """Inserting a transaction with a non-existent security_key raises DatabaseError."""
-    with pytest.raises(DatabaseError):
+    """Inserting a transaction with a non-existent security_key raises IntegrityError."""
+    with pytest.raises(IntegrityError):
         with db.cursor() as cursor:
             cursor.execute(
                 'INSERT INTO "transaction" '
@@ -285,11 +285,11 @@ def test_insert_transaction_with_nonexistent_security_key_raises_database_error(
             )
 
 
-def test_insert_transaction_with_nonexistent_account_id_raises_database_error(
+def test_insert_transaction_with_nonexistent_account_id_raises_integrity_error(
     db, seeded_security
 ):
-    """Inserting a transaction with a non-existent account_id raises DatabaseError."""
-    with pytest.raises(DatabaseError):
+    """Inserting a transaction with a non-existent account_id raises IntegrityError."""
+    with pytest.raises(IntegrityError):
         with db.cursor() as cursor:
             cursor.execute(
                 'INSERT INTO "transaction" '
