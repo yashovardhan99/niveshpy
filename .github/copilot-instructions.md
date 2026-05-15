@@ -1,61 +1,59 @@
 # Copilot Instructions for NiveshPy
 
+NiveshPy is a Python CLI for managing mutual-fund portfolios (Indian markets).
+
 ## Build, Test, and Lint
 
-This project uses [uv](https://docs.astral.sh/uv/) for dependency management and [Hatch](https://hatch.pypa.io/) as the build backend with VCS-based versioning.
+Uses [uv](https://docs.astral.sh/uv/) for deps and [Hatch](https://hatch.pypa.io/) (VCS versioning) for builds.
 
 ```sh
-# Install all dev dependencies
-uv sync --group dev
-
-# Run full test suite with coverage
-uv run coverage run -m pytest
-
-# Run a single test file
-uv run pytest tests/models/test_account.py
-
-# Run a single test by name
-uv run pytest -k "test_account_create_with_required_fields"
-
-# Lint and format
-uv run ruff check .
-uv run ruff format --check .
-
-# Type checking
-uv run ty check
-
-# Build docs locally
-uv run mkdocs serve
+uv sync --group dev                                  # install dev deps
+uv run coverage run -m pytest                        # full test suite + coverage
+uv run pytest tests/services/test_account_service.py # one file
+uv run pytest -k "test_account_create"               # by name
+uv run ruff check .                                  # lint
+uv run ruff format --check .                         # format check
+uv run ty check                                      # type check (NOT in pre-commit; manual / CI)
+uv run mkdocs serve                                  # docs locally
 ```
 
-Pre-commit hooks run `ruff check`, `ruff format`, and `ty check` automatically.
+Pre-commit hooks run **only** `ruff check` and `ruff format`. `ty check` is run separately.
 
 ## Architecture
 
-NiveshPy is a financial CLI for managing mutual fund portfolios, targeted at Indian markets. It follows a layered architecture:
-
 ```
-CLI (Click commands) → Services (business logic) → Database (SQLite)
-                                                  → Providers (external data)
-                                                  → Parsers (file parsing)
+CLI (Click)  →  Services            →  Repository Protocols          →  SQLite Repositories                       →  SqliteDatabase
+(niveshpy/cli) (niveshpy/services)    (niveshpy/domain/repositories)    (niveshpy/infrastructure/sqlite/repositories) (infrastructure/sqlite/sqlite_db.py)
+                                   ↘  Domain services (niveshpy/domain/services, pure logic, no I/O)
+                                   ↘  Parsers / Providers (plugins via entry points)
 ```
 
-- **CLI layer** (`niveshpy/cli/`): Click command groups (`accounts`, `securities`, `transactions`, `parse`, `prices`, `reports`). Uses a `LazyGroup`/`LazyCommand` pattern in `cli/utils/essentials.py` for on-demand loading.
-- **Services layer** (`niveshpy/services/`): One service per domain entity. Services accept query strings, translate them into SQL filters via the query language, and use `database.session()` for DB access.
-- **Models** (`niveshpy/models/`): SQLite models with a layered pattern — `FooBase` (shared fields) → `FooCreate` (input without ID) → `Foo(table=True)` (DB model) → `FooPublic` (output with ID). Domain models: `Account`, `Security`, `Transaction`, `Price`.
-- **Parsers/Providers** (`niveshpy/parsers/`, `niveshpy/providers/`): Plugin system using Python entry points (`importlib.metadata`). Each plugin has a `Factory` class implementing a `Protocol` from `niveshpy/models/`. Discovered at runtime via `core/parsers.py` and `core/providers.py`.
-- **Query language** (`niveshpy/core/query/`): Custom tokenizer → parser → AST for CLI filtering (e.g., `name:foo`).
-- **Database** (`niveshpy/database.py`): SQLite. Stored in `platformdirs.user_data_path("niveshpy")`. Registers a custom `iregexp` SQLite function and enables foreign keys on every connection.
+- **CLI** ([niveshpy/cli/](niveshpy/cli/)): Click groups (`accounts`, `securities`, `transactions`, `parse`, `prices`, `reports`). Commands load on demand via `LazyGroup` / `LazyCommand` in [niveshpy/cli/utils/essentials.py](niveshpy/cli/utils/essentials.py).
+- **Application container** ([niveshpy/core/app.py](niveshpy/core/app.py)): single `Application` class wires services to concrete sqlite repositories using `@functools.cached_property` + lazy imports. This is the source of truth for DI wiring — start here when tracing how a CLI command reaches the DB.
+- **Services** ([niveshpy/services/](niveshpy/services/)): one per domain entity. Declared as `@dataclass(slots=True, frozen=True)` holding repository protocol deps. Methods accept `tuple[str, ...]` of query strings plus `limit`/`offset`, and translate them into filters via `get_prepared_filters_from_queries(queries, ast.Field.X)`. **Services never touch the DB directly** — they go through repositories.
+- **Repository protocols** ([niveshpy/domain/repositories/](niveshpy/domain/repositories/)): `AccountRepository`, `SecurityRepository`, `TransactionRepository`, `PriceRepository` are `Protocol`s. Concrete SQLite impls live in [niveshpy/infrastructure/sqlite/repositories/](niveshpy/infrastructure/sqlite/repositories/) (`SqliteAccountRepository`, etc.).
+- **Domain layer** ([niveshpy/domain/](niveshpy/domain/)): pure logic, no I/O. `domain/services/` (e.g., `LotAccountingService` for tax-lot accounting), `domain/models/` (value objects like `lot.py`).
+- **Database** ([niveshpy/infrastructure/sqlite/sqlite_db.py](niveshpy/infrastructure/sqlite/sqlite_db.py)): raw `sqlite3` (no SQLModel/SQLAlchemy). Stored at `platformdirs.user_data_path("niveshpy") / "niveshpy.db"`. Registers a custom `iregexp` function and `PRAGMA foreign_keys=ON` per connection. Repositories use `with db.cursor() as cur:` — that context manager translates `sqlite3.IntegrityError → IntegrityError` and `sqlite3.Error → DatabaseError`. Migrations live under `infrastructure/sqlite/migrations/`.
+- **Plugin system** ([niveshpy/core/parsers.py](niveshpy/core/parsers.py), [niveshpy/core/providers.py](niveshpy/core/providers.py)): parsers and providers are discovered via `importlib.metadata` entry points (`niveshpy.parsers`, `niveshpy.providers.price` in [pyproject.toml](pyproject.toml)). Each plugin implements `ParserFactory` / `ProviderFactory` ([niveshpy/models/parser.py](niveshpy/models/parser.py), [niveshpy/models/provider.py](niveshpy/models/provider.py)) and exposes `create_*` + `get_*_info`. Reference implementations: [niveshpy/parsers/cas.py](niveshpy/parsers/cas.py), [niveshpy/providers/amfi.py](niveshpy/providers/amfi.py).
+- **Query language** ([niveshpy/core/query/](niveshpy/core/query/)): tokenizer → parser → AST for CLI filters like `name:foo`. Public entry: `get_prepared_filters_from_queries`.
 
 ## Key Conventions
 
-- **Google-style docstrings** — enforced by ruff rule `D` with `convention = "google"`.
-- **Model layering** — every domain model follows `Base → Create → Table → Public`. `Base` holds shared fields, `Create` is for input, `Table` (with `table=True`) is the DB model, `Public` is for output. Don't collapse these layers.
-- **Custom exceptions** (`niveshpy/exceptions.py`) — hierarchical: `NiveshPyError` → category (`ValidationError`, `ResourceError`, `DatabaseError`, `NetworkError`, `OperationError`) → specific (e.g., `ResourceNotFoundError`, `QuerySyntaxError`). Always raise domain-specific exceptions, not bare `Exception`.
-- **Plugin protocol** — parsers and providers are registered via entry points in `pyproject.toml` and must implement `ParserFactory` or `ProviderFactory` protocols. Use the factory pattern (`create_parser`/`create_provider` + `get_parser_info`/`get_provider_info`).
-- **Session management** — always use `with database.session() as session:` OR `database.session.begin()` for database access. Never hold sessions across operations.
-- **Decimal precision** — financial amounts use `Decimal` with explicit `NUMERIC(24, 2)` for amounts and `NUMERIC(24, 4)` for prices. Never use floats for money.
-- **CLI output** — use Rich for formatting (tables, errors, progress). Output helpers are in `cli/utils/output.py`.
-- **Ruff config** — `E501` (line length) is ignored. Tests are allowed to use `assert` (rule `S101` disabled for `tests/`).
-- **Testing** — tests use an in-memory SQLite database (fixtures in `tests/conftest.py`). `platformdirs` is mocked session-wide to avoid touching the real filesystem. Tests are organized to mirror the `niveshpy/` package structure.
-- **Python support** — 3.11+ (CI tests on 3.11, 3.12, 3.13). Use `|` union syntax over `Union`/`Optional`.
+- **Models** ([niveshpy/models/](niveshpy/models/)): plain `attrs @frozen` classes — typically just `FooCreate` (input) and `FooPublic` (output). **Not SQLModel**; there is no `Base` or `table=True` class. Repositories own the SQL/row mapping.
+- **Result types** ([niveshpy/services/result.py](niveshpy/services/result.py)): use `InsertResult[T]` + `MergeAction` enum (`INSERT` / `UPDATE` / `NOTHING`) for upsert-style returns instead of ad-hoc tuples.
+- **Custom exceptions** ([niveshpy/exceptions.py](niveshpy/exceptions.py)): hierarchical — `NiveshPyError` → category (`ValidationError`, `ResourceError`, `DatabaseError`, `NetworkError`, `OperationError`) → specific (e.g., `ResourceNotFoundError`, `AmbiguousResourceError`, `IntegrityError`, `QuerySyntaxError`, `InvalidInputError`). Always raise a domain-specific exception, never bare `Exception`.
+- **Decimal precision**: financial amounts use `Decimal` — `NUMERIC(24, 2)` for amounts, `NUMERIC(24, 4)` for prices. Never use `float` for money.
+- **CLI output**: use Rich (tables, errors, progress). Helpers in [niveshpy/cli/utils/output.py](niveshpy/cli/utils/output.py).
+- **Docstrings**: Google style (ruff `D` with `convention = "google"`).
+- **Ruff**: `E501` (line length) is ignored; `tests/*` may use `assert` (`S101` disabled).
+- **Python**: 3.11+ (CI: 3.11, 3.12, 3.13). Use `|` unions, not `Union` / `Optional`.
+- **Tests** ([tests/](tests/)): mirror the `niveshpy/` layout. [tests/conftest.py](tests/conftest.py) builds an in-memory `SqliteDatabase(db_path=Path(":memory:"))` and session-wide-mocks `platformdirs.user_data_path` so the real filesystem is never touched.
+
+## Further Reading
+
+| Topic | File |
+|---|---|
+| Architecture overview & decisions | [docs/architecture/index.md](docs/architecture/index.md), [docs/architecture/direction.md](docs/architecture/direction.md) |
+| Authoring a parser plugin | [docs/advanced/parsers.md](docs/advanced/parsers.md) |
+| Authoring a provider plugin | [docs/advanced/providers.md](docs/advanced/providers.md) |
+| Query language reference | [docs/cli/queries.md](docs/cli/queries.md) |
