@@ -15,7 +15,7 @@ dependencies = [
     "platformdirs >= 4.5.1, < 5.0.0",
     "pyxirr>=0.10.8,<0.11.0",
     "requests>=2.32.5, < 3.0.0",
-    "rich>=13.9.4",                   # casparser depends on rich < 14
+    "rich>=13.9.4, < 14",             # casparser depends on rich < 14
 ]
 requires-python = ">=3.11"
 authors = [
