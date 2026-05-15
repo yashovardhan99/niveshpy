@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `uv lock --check` to CI/CD processes.
+
 ### Changed
 
 - (Internal) Improve various aspects of query builder.
+- Update uv version in GitHub Actions workflows.
+
+### Removed
+
+- Remove Outdated GA publish workflow.
 
 ## [1.0.0a8] - 2026-05-10
 
