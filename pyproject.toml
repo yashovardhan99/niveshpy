@@ -69,7 +69,6 @@ amfi = "niveshpy.providers.amfi:AMFIProviderFactory"
 [dependency-groups]
 testing = ["coverage>=7.13.1, < 8.0.0", "pytest>=9.0.2, < 10.0.0"]
 linting = ["ruff >= 0.14.10, < 1.0.0", "ty>=0.0.27"]
-stubs = ["types-requests>=2.32.4.20250913, < 3.0.0"]
 docs = [
     "mkdocs-click>=0.9.0, < 1.0.0",
     "mkdocs-macros-plugin >= 1.5.0, < 2.0.0",
@@ -79,7 +78,6 @@ docs = [
 dev = [
     { include-group = "testing" },
     { include-group = "linting" },
-    { include-group = "stubs" },
     { include-group = "docs" },
 ]
 
