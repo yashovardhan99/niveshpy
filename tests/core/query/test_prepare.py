@@ -5,13 +5,13 @@ from decimal import Decimal
 
 import pytest
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
 from niveshpy.core.query.prepare import (
     combine_filters,
     get_fields_from_queries,
     group_filters,
     prepare_filters,
 )
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.exceptions import QuerySyntaxError
 
 

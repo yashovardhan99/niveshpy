@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from attrs import evolve
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.domain.repositories import PriceRepository, SecurityRepository
 from niveshpy.exceptions import InvalidInputError, ResourceNotFoundError
 from niveshpy.models.output import ProgressUpdate, Warning

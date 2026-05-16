@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
 from niveshpy.models.security import (
     SecurityCategory,

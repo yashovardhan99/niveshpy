@@ -10,8 +10,8 @@ from typing import Literal
 from attrs import evolve
 
 from niveshpy.core.logging import logger
-from niveshpy.core.query.ast import Field
 from niveshpy.core.query.prepare import get_prepared_filters_from_queries
+from niveshpy.domain.query.ast import Field
 from niveshpy.domain.repositories import (
     AccountRepository,
     PriceRepository,

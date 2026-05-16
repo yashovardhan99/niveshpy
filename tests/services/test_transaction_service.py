@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.domain.repositories import AccountRepository, SecurityRepository
 from niveshpy.domain.services import LotAccountingService
 from niveshpy.exceptions import (

@@ -7,8 +7,8 @@ from typing import Literal, assert_never
 from attrs import evolve, frozen
 
 from niveshpy.core.logging import logger
-from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_fields_from_filters
+from niveshpy.domain.query.ast import Field, FilterNode
 from niveshpy.domain.repositories import AccountRepository, SecurityRepository
 from niveshpy.domain.repositories.transaction_repository import (
     TransactionFetchProfile,

@@ -11,11 +11,11 @@ from attrs import evolve
 
 from niveshpy.core import providers as provider_registry
 from niveshpy.core.logging import logger
-from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import (
     get_fields_from_queries,
     get_prepared_filters_from_queries,
 )
+from niveshpy.domain.query import ast
 from niveshpy.domain.repositories import PriceRepository, SecurityRepository
 from niveshpy.exceptions import (
     InvalidInputError,

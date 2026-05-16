@@ -5,7 +5,7 @@ from collections.abc import Iterable, Sequence
 from enum import Enum, auto
 from typing import Protocol
 
-from niveshpy.core.query.ast import FilterNode
+from niveshpy.domain.query.ast import FilterNode
 from niveshpy.models.price import PriceCreate, PricePublic
 
 

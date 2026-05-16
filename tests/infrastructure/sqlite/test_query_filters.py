@@ -9,7 +9,7 @@ from decimal import Decimal
 
 import pytest
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.exceptions import OperationError, QuerySyntaxError
 from niveshpy.infrastructure.sqlite.query import Col
 from niveshpy.infrastructure.sqlite.query_filters import (

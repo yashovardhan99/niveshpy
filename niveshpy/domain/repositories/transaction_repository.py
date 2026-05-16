@@ -5,7 +5,7 @@ from collections.abc import Iterable, Sequence
 from enum import Enum, auto
 from typing import Literal, Protocol
 
-from niveshpy.core.query.ast import FilterNode
+from niveshpy.domain.query.ast import FilterNode
 from niveshpy.models.report import Allocation, HoldingUnitRow
 from niveshpy.models.transaction import TransactionCreate, TransactionPublic
 

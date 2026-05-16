@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from attrs import asdict, evolve
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.domain.repositories.price_repository import PriceFetchProfile
 from niveshpy.domain.repositories.transaction_repository import (
     TransactionFetchProfile,
