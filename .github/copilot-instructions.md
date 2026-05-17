@@ -40,7 +40,6 @@ CLI (Click)  →  Services            →  Repository Protocols          →  SQ
 ## Key Conventions
 
 - **Models** ([niveshpy/models/](niveshpy/models/)): plain `attrs @frozen` classes — typically just `FooCreate` (input) and `FooPublic` (output). **Not SQLModel**; there is no `Base` or `table=True` class. Repositories own the SQL/row mapping.
-- **Result types** ([niveshpy/services/result.py](niveshpy/services/result.py)): use `InsertResult[T]` + `MergeAction` enum (`INSERT` / `UPDATE` / `NOTHING`) for upsert-style returns instead of ad-hoc tuples.
 - **Custom exceptions** ([niveshpy/exceptions.py](niveshpy/exceptions.py)): hierarchical — `NiveshPyError` → category (`ValidationError`, `ResourceError`, `DatabaseError`, `NetworkError`, `OperationError`) → specific (e.g., `ResourceNotFoundError`, `AmbiguousResourceError`, `IntegrityError`, `QuerySyntaxError`, `InvalidInputError`). Always raise a domain-specific exception, never bare `Exception`.
 - **Decimal precision**: financial amounts use `Decimal` — `NUMERIC(24, 2)` for amounts, `NUMERIC(24, 4)` for prices. Never use `float` for money.
 - **CLI output**: use Rich (tables, errors, progress). Helpers in [niveshpy/cli/utils/output.py](niveshpy/cli/utils/output.py).
