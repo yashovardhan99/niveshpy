@@ -2,14 +2,15 @@
 
 import datetime
 from collections.abc import Iterable
-from dataclasses import dataclass, field
 from typing import Protocol
+
+from attrs import field, frozen
 
 from niveshpy.models.price import PriceCreate
 from niveshpy.models.security import SecurityPublic
 
 
-@dataclass
+@frozen
 class ProviderInfo:
     """Model for provider metadata."""
 
