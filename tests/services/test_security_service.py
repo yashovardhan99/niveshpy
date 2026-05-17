@@ -13,7 +13,7 @@ from niveshpy.models.security import (
     SecurityPublic,
     SecurityType,
 )
-from niveshpy.services.security import SecurityService
+from niveshpy.services.security_service import SecurityService
 from tests.services.conftest import MockSecurityRepository
 
 

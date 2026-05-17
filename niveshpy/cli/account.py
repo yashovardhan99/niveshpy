@@ -27,7 +27,6 @@ from niveshpy.exceptions import (
     ResourceError,
     ResourceNotFoundError,
 )
-from niveshpy.services.result import MergeAction
 
 
 @essentials.group()
@@ -141,14 +140,14 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
             )
             ctx.exit(1)
 
-        result = state.app.account.add_account(
+        account_id, created = state.app.account.add_account(
             name=name, institution=institution, source="cli"
         )
-        if result.action == MergeAction.NOTHING:
-            display_warning(f"Account already exists with ID {result.data}.")
+        if not created:
+            display_warning(f"Account already exists with ID {account_id}.")
         else:
             display_success(
-                f"Account [b]{name}[/b] added successfully with ID {result.data}."
+                f"Account [b]{name}[/b] added successfully with ID {account_id}."
             )
     else:
         # Interactive mode
@@ -178,14 +177,14 @@ def add(ctx: click.Context, name: str, institution: str) -> None:
                 .strip()
             )
 
-            result = state.app.account.add_account(
+            account_id, created = state.app.account.add_account(
                 name=name, institution=institution, source="cli"
             )
-            if result.action == MergeAction.NOTHING:
-                display_warning(f"Account already exists with ID {result.data}.")
+            if not created:
+                display_warning(f"Account already exists with ID {account_id}.")
             else:
                 display_success(
-                    f"Account [b]{name}[/b] added successfully with ID {result.data}."
+                    f"Account [b]{name}[/b] added successfully with ID {account_id}."
                 )
 
             # Reset for next iteration

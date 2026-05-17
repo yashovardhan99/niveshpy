@@ -16,10 +16,6 @@ from niveshpy.exceptions import (
     QuerySyntaxError,
 )
 from niveshpy.models.account import AccountCreate, AccountPublic
-from niveshpy.services.result import (
-    InsertResult,
-    MergeAction,
-)
 
 
 @dataclass(slots=True, frozen=True)
@@ -63,7 +59,7 @@ class AccountService:
 
     def add_account(
         self, name: str, institution: str, source: str | None = None
-    ) -> InsertResult[int]:
+    ) -> tuple[int, bool]:
         """Add a new account."""
         if not name.strip() or not institution.strip():
             raise InvalidInputError(
@@ -78,7 +74,7 @@ class AccountService:
         )
         account_id = self.account_repository.insert_account(account)
         if account_id is not None:
-            return InsertResult(MergeAction.INSERT, account_id)
+            return (account_id, True)
         else:
             logger.debug("Account already exists; Fetching existing account ID.")
             existing_account = (
@@ -87,7 +83,7 @@ class AccountService:
                 )
             )
             if existing_account is not None and existing_account.id is not None:
-                return InsertResult(MergeAction.NOTHING, existing_account.id)
+                return (existing_account.id, False)
             else:
                 raise OperationError("Failed to insert or fetch existing account ID.")
 

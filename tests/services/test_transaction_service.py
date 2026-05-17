@@ -27,7 +27,7 @@ from niveshpy.models.transaction import (
     TransactionPublic,
     TransactionType,
 )
-from niveshpy.services.transaction import TransactionService
+from niveshpy.services.transaction_service import TransactionService
 from tests.services.conftest import (
     MockAccountRepository,
     MockSecurityRepository,
