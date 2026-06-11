@@ -18,7 +18,7 @@ jobs:
   validate-tag:
     runs-on: ubuntu-latest
     steps:
-      - uses: mukunku/tag-exists-action@v1.6.0
+      - uses: mukunku/tag-exists-action@v1.7.0
         id: check-tag
         with:
           tag: ${{ github.event.inputs.version }}
@@ -39,7 +39,7 @@ jobs:
         run: |
           echo "Version: ${{ github.event.inputs.version }}"
 
-      - uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ vars.ACTIONS_BOT_APP_ID }}
@@ -109,7 +109,7 @@ jobs:
       - validate-tag
       - tag-and-release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
           ref: ${{ github.event.inputs.version }}
@@ -131,7 +131,7 @@ jobs:
         run: uv build
 
       - name: Store the distribution packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-package-distributions
           path: dist/
@@ -150,7 +150,7 @@ jobs:
       id-token: write # IMPORTANT: mandatory for trusted publishing
     steps:
       - name: Download all the dists
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: python-package-distributions
           path: dist/
@@ -168,7 +168,7 @@ jobs:
       contents: write # to upload the distribution to the release
     steps:
       - name: Download all the dists
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: python-package-distributions
           path: dist/
