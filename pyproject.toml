@@ -8,14 +8,14 @@ description = "A simple python library for all your investment needs."
 dynamic = ["version"]
 dependencies = [
     "attrs>=26.1.0,<27.0.0",
-    "casparser>=0.8.1,<0.10.0",
+    "casparser>=0.8.1,<1.0.0",
     "cattrs>=26.1.0,<27.0.0",
     "click>=8.3.1, < 9.0.0",
     "inquirerpy>=0.3.4, < 1.0.0",
     "platformdirs >= 4.5.1, < 5.0.0",
     "pyxirr>=0.10.8,<0.11.0",
     "requests>=2.32.5, < 3.0.0",
-    "rich>=13.9.4, < 14",             # casparser depends on rich < 14
+    "rich>=13.9.4, < 16.0.0",
 ]
 requires-python = ">=3.11"
 authors = [
