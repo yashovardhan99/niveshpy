@@ -8,8 +8,8 @@ from itertools import islice
 from attrs import evolve, frozen
 
 from niveshpy.core.logging import logger
-from niveshpy.core.query.ast import Field, FilterNode
 from niveshpy.core.query.prepare import get_fields_from_filters
+from niveshpy.domain.query.ast import Field, FilterNode
 from niveshpy.domain.repositories import SecurityRepository
 from niveshpy.domain.repositories.price_repository import PriceFetchProfile
 from niveshpy.exceptions import IntegrityError, InvalidInputError, ResourceNotFoundError

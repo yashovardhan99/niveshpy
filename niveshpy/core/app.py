@@ -20,12 +20,12 @@ if TYPE_CHECKING:
     )
     from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
     from niveshpy.models.parser import Parser
-    from niveshpy.services.account import AccountService
-    from niveshpy.services.parsing import ParsingService
-    from niveshpy.services.price import PriceService
+    from niveshpy.services.account_service import AccountService
+    from niveshpy.services.parsing_service import ParsingService
+    from niveshpy.services.price_service import PriceService
     from niveshpy.services.report_service import ReportService
-    from niveshpy.services.security import SecurityService
-    from niveshpy.services.transaction import TransactionService
+    from niveshpy.services.security_service import SecurityService
+    from niveshpy.services.transaction_service import TransactionService
 
 
 class Application:
@@ -51,7 +51,7 @@ class Application:
     @functools.cached_property
     def security(self) -> SecurityService:
         """Return the security service."""
-        from niveshpy.services.security import SecurityService
+        from niveshpy.services.security_service import SecurityService
 
         return SecurityService(self.security_repository)
 
@@ -65,7 +65,7 @@ class Application:
     @functools.cached_property
     def account(self) -> AccountService:
         """Return the account service."""
-        from niveshpy.services.account import AccountService
+        from niveshpy.services.account_service import AccountService
 
         return AccountService(self.account_repository)
 
@@ -80,7 +80,7 @@ class Application:
     def transaction(self) -> TransactionService:
         """Return the transaction service."""
         from niveshpy.domain.services import LotAccountingService
-        from niveshpy.services.transaction import TransactionService
+        from niveshpy.services.transaction_service import TransactionService
 
         return TransactionService(
             transaction_repository=self.transaction_repository,
@@ -108,7 +108,7 @@ class Application:
         progress_callback: Callable[[str, int, int], None] | None = None,
     ) -> ParsingService:
         """Get the parsing service for the given parser key."""
-        from niveshpy.services.parsing import ParsingService
+        from niveshpy.services.parsing_service import ParsingService
 
         return ParsingService(
             parser,
@@ -128,7 +128,7 @@ class Application:
     @functools.cached_property
     def price(self) -> PriceService:
         """Return the price service."""
-        from niveshpy.services.price import PriceService
+        from niveshpy.services.price_service import PriceService
 
         return PriceService(self.price_repository, self.security_repository)
 

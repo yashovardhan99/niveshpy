@@ -6,9 +6,9 @@ from collections.abc import Container, Iterable
 from dataclasses import replace
 
 from niveshpy.core.logging import logger
-from niveshpy.core.query.ast import Field, FilterNode, FilterValue, Operator
 from niveshpy.core.query.parser import QueryParser
 from niveshpy.core.query.tokenizer import QueryLexer
+from niveshpy.domain.query.ast import Field, FilterNode, FilterValue, Operator
 from niveshpy.exceptions import QuerySyntaxError
 
 

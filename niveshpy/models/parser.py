@@ -2,9 +2,10 @@
 
 import datetime
 from collections.abc import Iterable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+
+from attrs import frozen
 
 from niveshpy.models.account import (
     AccountCreate,
@@ -14,7 +15,7 @@ from niveshpy.models.security import SecurityCreate
 from niveshpy.models.transaction import TransactionCreate
 
 
-@dataclass
+@frozen
 class ParserInfo:
     """Model for parser metadata."""
 

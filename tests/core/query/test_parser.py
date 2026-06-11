@@ -5,8 +5,8 @@ from decimal import Decimal
 
 import pytest
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
 from niveshpy.core.query.tokens import Int, Keyword, Literal, Unknown
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.exceptions import QuerySyntaxError
 
 

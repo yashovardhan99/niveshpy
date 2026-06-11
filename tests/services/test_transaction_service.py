@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.domain.repositories import AccountRepository, SecurityRepository
 from niveshpy.domain.services import LotAccountingService
 from niveshpy.exceptions import (
@@ -27,7 +27,7 @@ from niveshpy.models.transaction import (
     TransactionPublic,
     TransactionType,
 )
-from niveshpy.services.transaction import TransactionService
+from niveshpy.services.transaction_service import TransactionService
 from tests.services.conftest import (
     MockAccountRepository,
     MockSecurityRepository,

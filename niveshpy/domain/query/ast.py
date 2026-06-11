@@ -1,4 +1,4 @@
-"""Module defining the AST nodes for the query parser."""
+"""AST nodes for the query language."""
 
 from dataclasses import dataclass
 from datetime import date

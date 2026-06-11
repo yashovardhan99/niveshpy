@@ -2,7 +2,7 @@
 
 from collections.abc import Container, Iterable, Mapping, Sequence
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.exceptions import OperationError, QuerySyntaxError
 from niveshpy.infrastructure.sqlite.query import Col, Condition, Fn, Query, or_
 

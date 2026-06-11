@@ -2,9 +2,9 @@
 
 import pytest
 
-from niveshpy.core.query.ast import Field
 from niveshpy.core.query.parser import QueryParser
 from niveshpy.core.query.tokenizer import QueryLexer
+from niveshpy.domain.query.ast import Field
 
 
 @pytest.fixture

@@ -3,7 +3,7 @@
 from collections.abc import Iterable, Sequence
 from typing import Protocol
 
-from niveshpy.core.query.ast import FilterNode
+from niveshpy.domain.query.ast import FilterNode
 from niveshpy.models.account import AccountCreate, AccountPublic
 
 

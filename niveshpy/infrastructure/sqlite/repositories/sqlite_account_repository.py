@@ -5,7 +5,7 @@ from collections.abc import Iterable, Sequence
 from attrs import frozen
 
 from niveshpy.core.logging import logger
-from niveshpy.core.query.ast import Field, FilterNode
+from niveshpy.domain.query.ast import Field, FilterNode
 from niveshpy.exceptions import InvalidInputError
 from niveshpy.infrastructure.sqlite.converters import get_converter
 from niveshpy.infrastructure.sqlite.query import (

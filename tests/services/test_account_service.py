@@ -6,8 +6,7 @@ import pytest
 
 from niveshpy.exceptions import AmbiguousResourceError, InvalidInputError
 from niveshpy.models.account import AccountCreate, AccountPublic
-from niveshpy.services.account import AccountService
-from niveshpy.services.result import InsertResult, MergeAction
+from niveshpy.services.account_service import AccountService
 from tests.services.conftest import MockAccountRepository
 
 
@@ -139,79 +138,77 @@ class TestAddAccount:
 
     def test_add_account_success(self, account_service: AccountService):
         """Test successfully adding a new account."""
-        result = account_service.add_account(
+        account_id, created = account_service.add_account(
             name="Test Account", institution="Test Bank", source=None
         )
 
-        assert isinstance(result, InsertResult)
-        assert result.action == MergeAction.INSERT
-        assert result.data is not None
+        assert created is True
+        assert account_id is not None
 
     def test_add_account_with_source(self, account_service: AccountService):
         """Test adding account with source property."""
-        result = account_service.add_account(
+        account_id, created = account_service.add_account(
             name="Test Account", institution="Test Bank", source="CAS"
         )
 
-        assert result.action == MergeAction.INSERT
-        assert result.data is not None
+        assert created is True
+        assert account_id is not None
 
     def test_add_account_duplicate_returns_existing(
         self, account_service: AccountService
     ):
         """Test that adding duplicate account returns existing one."""
         # Add first account
-        result1 = account_service.add_account(
+        account_id1, created1 = account_service.add_account(
             name="Duplicate Account", institution="Test Bank", source=None
         )
-        account_id = result1.data
 
         # Try to add duplicate
-        result2 = account_service.add_account(
+        account_id2, created2 = account_service.add_account(
             name="Duplicate Account", institution="Test Bank", source=None
         )
 
-        assert result2.action == MergeAction.NOTHING
-        assert result2.data == account_id
+        assert created2 is False
+        assert account_id2 == account_id1
 
     def test_add_account_same_name_different_institution(
         self, account_service: AccountService
     ):
         """Test adding accounts with same name but different institutions."""
-        result1 = account_service.add_account(
+        account_id1, created1 = account_service.add_account(
             name="Savings", institution="HDFC Bank", source=None
         )
-        result2 = account_service.add_account(
+        account_id2, created2 = account_service.add_account(
             name="Savings", institution="ICICI Bank", source=None
         )
 
-        assert result1.action == MergeAction.INSERT
-        assert result2.action == MergeAction.INSERT
-        assert result1.data != result2.data
+        assert created1 is True
+        assert created2 is True
+        assert account_id1 != account_id2
 
     def test_add_account_different_name_same_institution(
         self, account_service: AccountService
     ):
         """Test adding accounts with different names but same institution."""
-        result1 = account_service.add_account(
+        account_id1, created1 = account_service.add_account(
             name="Savings", institution="HDFC Bank", source=None
         )
-        result2 = account_service.add_account(
+        account_id2, created2 = account_service.add_account(
             name="Current", institution="HDFC Bank", source=None
         )
 
-        assert result1.action == MergeAction.INSERT
-        assert result2.action == MergeAction.INSERT
-        assert result1.data != result2.data
+        assert created1 is True
+        assert created2 is True
+        assert account_id1 != account_id2
 
     def test_add_account_strips_whitespace(self, account_service: AccountService):
         """Test that add_account strips whitespace from name and institution."""
-        result = account_service.add_account(
+        account_id, created = account_service.add_account(
             name="  Test Account  ", institution="  Test Bank  ", source=None
         )
-        assert result.action == MergeAction.INSERT
-        assert result.data is not None
-        account = account_service.account_repository.get_account_by_id(result.data)
+        assert created is True
+        assert account_id is not None
+        account = account_service.account_repository.get_account_by_id(account_id)
         assert account is not None
         assert account.name == "Test Account"
         assert account.institution == "Test Bank"
@@ -265,21 +262,21 @@ class TestAddAccount:
 
     def test_add_account_special_characters(self, account_service: AccountService):
         """Test adding account with special characters."""
-        result = account_service.add_account(
+        account_id, created = account_service.add_account(
             name="Account #1 (Primary)", institution="Bank & Co.", source=None
         )
 
-        assert result.action == MergeAction.INSERT
-        assert result.data is not None
+        assert created is True
+        assert account_id is not None
 
     def test_add_account_unicode_characters(self, account_service: AccountService):
         """Test adding account with unicode characters."""
-        result = account_service.add_account(
+        account_id, created = account_service.add_account(
             name="बचत खाता", institution="भारतीय स्टेट बैंक", source=None
         )
 
-        assert result.action == MergeAction.INSERT
-        assert result.data is not None
+        assert created is True
+        assert account_id is not None
 
 
 class TestResolveAccountId:

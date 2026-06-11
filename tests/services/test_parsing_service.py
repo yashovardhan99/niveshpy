@@ -10,7 +10,7 @@ from niveshpy.models.account import AccountCreate
 from niveshpy.models.parser import Parser
 from niveshpy.models.security import SecurityCategory, SecurityCreate, SecurityType
 from niveshpy.models.transaction import TransactionCreate, TransactionType
-from niveshpy.services.parsing import ParsingService
+from niveshpy.services.parsing_service import ParsingService
 from tests.services.conftest import (
     MockAccountRepository,
     MockSecurityRepository,

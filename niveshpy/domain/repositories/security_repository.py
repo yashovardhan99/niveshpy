@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from typing import Any, Protocol
 
-from niveshpy.core.query.ast import FilterNode
+from niveshpy.domain.query.ast import FilterNode
 from niveshpy.models.security import SecurityCreate, SecurityPublic
 
 

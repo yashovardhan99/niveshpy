@@ -2,7 +2,7 @@
 
 import pytest
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.exceptions import ResourceNotFoundError
 from niveshpy.infrastructure.sqlite.repositories import SqliteSecurityRepository
 from niveshpy.models.security import SecurityCategory, SecurityCreate, SecurityType

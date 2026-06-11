@@ -5,9 +5,9 @@ import itertools
 from collections.abc import Iterable, Sequence
 from datetime import date, timedelta
 
-from niveshpy.core.query import ast
 from niveshpy.core.query import tokens as Tokens
 from niveshpy.core.query.tokenizer import QueryLexer
+from niveshpy.domain.query import ast
 from niveshpy.exceptions import OperationError, QuerySyntaxError
 
 

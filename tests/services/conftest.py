@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from attrs import asdict, evolve
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.domain.repositories.price_repository import PriceFetchProfile
 from niveshpy.domain.repositories.transaction_repository import (
     TransactionFetchProfile,
@@ -658,7 +658,6 @@ class MockPriceRepository:
         start_date = None
         end_date = None
         for filter in filters:
-            print(f"DEBUG: Processing filter: {filter}")
             if filter.field == Field.DATE:
                 if filter.operator in (
                     Operator.GREATER_THAN,
@@ -707,7 +706,6 @@ class MockPriceRepository:
         securities = self._search_security_filter(filters, securities)
         price_dicts = [self._prices[s.key] for s in securities if s.key in self._prices]
         start_date, end_date = self._get_date_range(filters)
-        print(f"DEBUG: start_date={start_date}, end_date={end_date}")
         prices = []
         for price_dict in price_dicts:
             for date, price in price_dict.items():

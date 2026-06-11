@@ -2,7 +2,7 @@
 
 import pytest
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.infrastructure.sqlite.repositories import SqliteAccountRepository
 from niveshpy.models.account import AccountCreate
 

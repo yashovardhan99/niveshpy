@@ -3,8 +3,8 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from niveshpy.core.query import ast
 from niveshpy.core.query.prepare import get_prepared_filters_from_queries
+from niveshpy.domain.query import ast
 from niveshpy.domain.repositories import SecurityRepository
 from niveshpy.exceptions import (
     AmbiguousResourceError,

@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from attrs import evolve
 
-from niveshpy.core.query.ast import Field, FilterNode, Operator
+from niveshpy.domain.query.ast import Field, FilterNode, Operator
 from niveshpy.domain.repositories import PriceRepository, SecurityRepository
 from niveshpy.exceptions import InvalidInputError, ResourceNotFoundError
 from niveshpy.models.output import ProgressUpdate, Warning
@@ -18,7 +18,7 @@ from niveshpy.models.security import (
     SecurityPublic,
     SecurityType,
 )
-from niveshpy.services.price import PriceService
+from niveshpy.services.price_service import PriceService
 from tests.services.conftest import MockPriceRepository, MockSecurityRepository
 
 from .price_test_providers import (
@@ -464,7 +464,7 @@ class TestValidateProvider:
         with pytest.raises(ResourceNotFoundError, match="Price provider.*nonexistent"):
             price_service.validate_provider("nonexistent")
 
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_validate_provider_exists(self, mock_registry, price_service):
         """Test that existing provider validates successfully."""
         mock_registry.get_provider.return_value = ConfigurableProvider()
@@ -472,7 +472,7 @@ class TestValidateProvider:
         # Should not raise
         price_service.validate_provider("dummy")
 
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_validate_provider_discovers_before_checking(
         self, mock_registry, price_service
     ):
@@ -488,7 +488,7 @@ class TestValidateProvider:
 class TestSyncPrices:
     """Tests for sync_prices method."""
 
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_sync_prices_basic_flow(
         self,
         mock_registry,
@@ -522,7 +522,7 @@ class TestSyncPrices:
         assert "last_price_date" in security.properties
         assert security.properties["price_provider"] == "dummy"
 
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_sync_prices_multiple_securities(
         self,
         mock_registry,
@@ -551,7 +551,7 @@ class TestSyncPrices:
             )
             assert len(prices) > 0
 
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_sync_prices_force_flag(
         self,
         mock_registry,
@@ -585,7 +585,7 @@ class TestSyncPrices:
         )
         assert len(prices) > 0
 
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_sync_prices_no_matching_securities(self, mock_registry, price_service):
         """Test that no matching securities raises ResourceNotFoundError."""
         ConfigurableProviderFactory.configure(behavior=ProviderBehavior.NORMAL)
@@ -596,7 +596,7 @@ class TestSyncPrices:
         with pytest.raises(ResourceNotFoundError, match="No securities found"):
             list(price_service.sync_prices(queries=(), force=False, provider_key=None))
 
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_sync_prices_security_without_provider(self, mock_registry, price_service):
         """Test that securities without applicable provider generate warnings."""
         # Create a security that won't be supported
@@ -624,7 +624,7 @@ class TestSyncPrices:
         assert len(warnings) > 0
         assert "No applicable price provider" in warnings[0].content
 
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_sync_prices_yields_progress_updates(
         self, mock_registry, price_service, sample_securities
     ):
@@ -647,7 +647,7 @@ class TestSyncPrices:
         assert "sync.prices.fetch" in stages
         assert "sync.prices.save" in stages
 
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_sync_prices_specific_provider(
         self, mock_registry, price_service, sample_securities
     ):
@@ -662,7 +662,7 @@ class TestSyncPrices:
         # Should have called discover with specific provider name
         mock_registry.discover_installed_providers.assert_called_with("dummy")
 
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_sync_prices_metadata_updated(
         self,
         mock_registry,
@@ -684,7 +684,7 @@ class TestSyncPrices:
         assert "price_provider" in security.properties
         assert security.properties["price_provider"] == "dummy"
 
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_sync_prices_up_to_date_prices(
         self, mock_registry, price_service, sample_securities
     ):
@@ -743,7 +743,7 @@ class TestSyncPrices:
             ProviderBehavior.OLD_DATA,
         ],
     )
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_sync_prices_provider_no_prices_saved(
         self,
         mock_registry,
@@ -772,7 +772,7 @@ class TestSyncPrices:
         )
         assert len(prices) == 0
 
-    @patch("niveshpy.services.price.provider_registry")
+    @patch("niveshpy.services.price_service.provider_registry")
     def test_sync_prices_large_batch_insert(
         self,
         mock_registry,
