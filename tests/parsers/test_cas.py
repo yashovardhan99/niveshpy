@@ -140,7 +140,7 @@ class TestCASParserInit:
             mock_module.read_cas_pdf.return_value = {"bad": "data"}
             mock_module.CASData = MagicMock  # dict is not a MagicMock instance
             with pytest.raises(InvalidInputError, match="Only CAMS and Kfintech"):
-                CASParser(TEST_FILE_PATH)
+                CASParser(TEST_FILE_PATH, TEST_PASSWORD)
 
     def test_init_summary_cas_raises(self):
         """Verify InvalidInputError when CASData has cas_type='SUMMARY'."""
@@ -149,7 +149,7 @@ class TestCASParserInit:
             mock_module.read_cas_pdf.return_value = summary_data
             mock_module.CASData = type(summary_data)
             with pytest.raises(InvalidInputError, match="Only DETAILED"):
-                CASParser(TEST_FILE_PATH)
+                CASParser(TEST_FILE_PATH, TEST_PASSWORD)
 
     def test_init_with_password(self):
         """Verify casparser.read_cas_pdf is called with the provided password."""
@@ -161,15 +161,6 @@ class TestCASParserInit:
             mock_module.read_cas_pdf.assert_called_once_with(
                 TEST_FILE_PATH, TEST_PASSWORD
             )
-
-    def test_init_without_password(self):
-        """Verify casparser.read_cas_pdf is called with None when no password given."""
-        cas_data = _make_cas_data()
-        with patch("niveshpy.parsers.cas.casparser") as mock_module:
-            mock_module.read_cas_pdf.return_value = cas_data
-            mock_module.CASData = type(cas_data)
-            CASParser(TEST_FILE_PATH)
-            mock_module.read_cas_pdf.assert_called_once_with(TEST_FILE_PATH, None)
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +183,7 @@ class TestGetDateRange:
         mock_casparser.read_cas_pdf.return_value = bad_data
         mock_casparser.CASData = type(bad_data)
 
-        p = CASParser(TEST_FILE_PATH)
+        p = CASParser(TEST_FILE_PATH, TEST_PASSWORD)
         with pytest.raises(OperationError, match="Failed to parse statement period"):
             p.get_date_range()
 
@@ -235,7 +226,7 @@ class TestGetAccounts:
         with patch("niveshpy.parsers.cas.casparser") as mock_module:
             mock_module.read_cas_pdf.return_value = cas_data
             mock_module.CASData = type(cas_data)
-            p = CASParser(TEST_FILE_PATH)
+            p = CASParser(TEST_FILE_PATH, TEST_PASSWORD)
             accounts = p.get_accounts()
 
         assert len(accounts) == 3
@@ -267,7 +258,7 @@ class TestGetSecurities:
         with patch("niveshpy.parsers.cas.casparser") as mock_module:
             mock_module.read_cas_pdf.return_value = cas_data
             mock_module.CASData = type(cas_data)
-            p = CASParser(TEST_FILE_PATH)
+            p = CASParser(TEST_FILE_PATH, TEST_PASSWORD)
             securities = list(p.get_securities())
 
         assert len(securities) == 1
@@ -285,7 +276,7 @@ class TestGetSecurities:
         with patch("niveshpy.parsers.cas.casparser") as mock_module:
             mock_module.read_cas_pdf.return_value = cas_data
             mock_module.CASData = type(cas_data)
-            p = CASParser(TEST_FILE_PATH)
+            p = CASParser(TEST_FILE_PATH, TEST_PASSWORD)
             securities = list(p.get_securities())
 
         assert securities[0].category == SecurityCategory.OTHER
@@ -319,7 +310,7 @@ class TestGetTransactions:
         with patch("niveshpy.parsers.cas.casparser") as mock_module:
             mock_module.read_cas_pdf.return_value = cas_data
             mock_module.CASData = type(cas_data)
-            p = CASParser(TEST_FILE_PATH)
+            p = CASParser(TEST_FILE_PATH, TEST_PASSWORD)
             transactions = list(p.get_transactions(accounts_for_transactions))
 
         assert len(transactions) == 1
@@ -338,7 +329,7 @@ class TestGetTransactions:
         with patch("niveshpy.parsers.cas.casparser") as mock_module:
             mock_module.read_cas_pdf.return_value = cas_data
             mock_module.CASData = type(cas_data)
-            p = CASParser(TEST_FILE_PATH)
+            p = CASParser(TEST_FILE_PATH, TEST_PASSWORD)
             transactions = list(p.get_transactions(accounts_for_transactions))
 
         assert len(transactions) == 1
@@ -356,7 +347,7 @@ class TestGetTransactions:
         with patch("niveshpy.parsers.cas.casparser") as mock_module:
             mock_module.read_cas_pdf.return_value = cas_data
             mock_module.CASData = type(cas_data)
-            p = CASParser(TEST_FILE_PATH)
+            p = CASParser(TEST_FILE_PATH, TEST_PASSWORD)
             transactions = list(p.get_transactions(accounts_for_transactions))
 
         assert len(transactions) == 1
@@ -368,7 +359,7 @@ class TestGetTransactions:
         with patch("niveshpy.parsers.cas.casparser") as mock_module:
             mock_module.read_cas_pdf.return_value = cas_data
             mock_module.CASData = type(cas_data)
-            p = CASParser(TEST_FILE_PATH)
+            p = CASParser(TEST_FILE_PATH, TEST_PASSWORD)
 
             # Provide accounts that don't match the folio
             wrong_accounts = [
