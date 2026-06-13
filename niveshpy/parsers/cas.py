@@ -24,7 +24,7 @@ from niveshpy.models.transaction import (
 class CASParser:
     """Service for managing CAS statements."""
 
-    def __init__(self, file_path: str, password: str | None = None):
+    def __init__(self, file_path: str, password: str):
         """Initialize the CAS Parser with a file path."""
         logger.info(
             "Parsing CAS file: %s (password=%s)",
@@ -161,4 +161,9 @@ class CASParserFactory:
         """Create a CASParser instance."""
         if isinstance(file_path, Path):
             file_path = file_path.as_posix()
+        if password is None:
+            logger.warning(
+                "Creating CASParser without password. Ensure the CAS statement is not password-protected."
+            )
+            password = ""
         return CASParser(file_path, password)
