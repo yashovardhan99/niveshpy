@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from attrs import define
 
 from niveshpy.core.logging import logger
+from niveshpy.domain.services import get_transaction_validation_service
 
 if TYPE_CHECKING:
     from niveshpy.domain.repositories import (
@@ -115,6 +116,7 @@ class Application:
             self.account_repository,
             self.security_repository,
             self.transaction_repository,
+            get_transaction_validation_service(),
             progress_callback=progress_callback,
         )
 

@@ -48,6 +48,7 @@ class TransactionService:
         limit: int = 30,
         offset: int = 0,
         cost: bool = False,
+        include_ignored: bool = False,
     ) -> Sequence[TransactionPublic]:
         """List transactions matching the query."""
         if limit < 1:
@@ -69,6 +70,7 @@ class TransactionService:
                 cost_query_filters,
                 fetch_profile=TransactionFetchProfile.MINIMAL,
                 sort_order=TransactionSortOrder.DATE_ASC_ID_ASC,
+                include_ignored=include_ignored,
             )
 
             transactions_with_cost = (
@@ -86,6 +88,7 @@ class TransactionService:
             offset=offset,
             fetch_profile=TransactionFetchProfile.WITH_RELATIONS,
             sort_order=TransactionSortOrder.DATE_DESC_ID_ASC,
+            include_ignored=include_ignored,
         )
         if cost:
             id_to_cost_transaction: dict[int, TransactionPublic] = {

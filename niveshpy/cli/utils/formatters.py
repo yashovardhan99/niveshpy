@@ -106,6 +106,7 @@ def format_transaction_type(txn_type: TransactionType) -> str:
     type_format_map = {
         TransactionType.PURCHASE: "[green]Purchase",
         TransactionType.SALE: "[red]Sale",
+        TransactionType.REVERSAL: "[yellow]Reversal",
     }
     return type_format_map.get(txn_type, "[reverse]Unknown")
 

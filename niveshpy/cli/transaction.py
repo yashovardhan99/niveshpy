@@ -7,6 +7,7 @@ import textwrap
 from pathlib import Path
 
 import click
+from attrs import evolve
 
 from niveshpy.cli.utils import essentials, flags, inputs
 from niveshpy.cli.utils.builders import build_csv, build_table
@@ -27,7 +28,7 @@ from niveshpy.cli.utils.formatters import (
     format_security,
     format_transaction_type,
 )
-from niveshpy.cli.utils.models import Column, OutputFormat
+from niveshpy.cli.utils.models import Column, OutputFormat, Row
 from niveshpy.cli.utils.overrides import command
 from niveshpy.core.app import AppState
 from niveshpy.core.converter import get_csv_converter, get_json_converter
@@ -53,6 +54,13 @@ def cli() -> None:
     default=False,
     help="Show cost basis information. Calculating cost basis may take longer.",
 )
+@click.option(
+    "--all",
+    "include_ignored",
+    is_flag=True,
+    default=False,
+    help="Include ignored transactions in the output.",
+)
 @click.pass_context
 def show(
     ctx: click.Context,
@@ -62,6 +70,7 @@ def show(
     format: OutputFormat,
     output_file: Path | None,
     cost: bool,
+    include_ignored: bool,
 ) -> None:
     """List all transactions.
 
@@ -72,7 +81,11 @@ def show(
     state = ctx.ensure_object(AppState)
     with loading_spinner("Loading transactions..."):
         result = state.app.transaction.list_transactions(
-            queries=queries, limit=limit, offset=offset, cost=cost
+            queries=queries,
+            limit=limit,
+            offset=offset,
+            cost=cost,
+            include_ignored=include_ignored,
         )
 
     if len(result) == 0:
@@ -128,7 +141,21 @@ def show(
                         style="bold magenta",
                     ),
                 )
-            table = build_table(result, columns)
+            rows = []
+            if include_ignored:
+                for row in result:
+                    if row.is_ignored:
+                        row = Row(
+                            evolve(
+                                row,
+                                description=f"[bold][IGNORED][/bold] {row.description}",
+                            ),
+                            override_style="dim",
+                        )
+                    rows.append(row)
+            else:
+                rows = result
+            table = build_table(rows, columns)
             display(table)
         elif format == OutputFormat.CSV:
             c = get_csv_converter()

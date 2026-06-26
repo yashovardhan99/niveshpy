@@ -6,6 +6,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from niveshpy.cli.utils.models import Row
+
 if TYPE_CHECKING:
     from rich.table import Table
 
@@ -13,7 +15,7 @@ if TYPE_CHECKING:
 
 
 def build_table(
-    items: Iterable[Any | SectionBreak | TotalRow],
+    items: Iterable[Any | SectionBreak | TotalRow | Row[Any]],
     columns: Sequence[Column],
     **kwargs: Any,
 ) -> Table:
@@ -41,6 +43,12 @@ def build_table(
                 str(item.total),
                 style="bold",
             )
+        elif isinstance(item, Row):
+            row = []
+            for column in columns:
+                value = column.get(item.data)
+                row.append(column.format(value))
+            table.add_row(*row, style=item.override_style)
         else:
             row = []
             for column in columns:

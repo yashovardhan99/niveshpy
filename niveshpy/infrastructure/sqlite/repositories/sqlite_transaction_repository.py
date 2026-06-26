@@ -196,6 +196,7 @@ class SqliteTransactionRepository:
         offset: int = 0,
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
         sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
+        include_ignored: bool = False,
     ) -> Sequence[TransactionPublic]:
         """Find transactions matching the given filters with optional pagination.
 
@@ -205,6 +206,7 @@ class SqliteTransactionRepository:
             offset: Optional number of transactions to skip before returning results.
             fetch_profile: The fetch profile to determine the level of detail to retrieve.
             sort_order: The sort order to determine the order of the returned transactions.
+            include_ignored: If True, include transactions marked as ignored; otherwise, exclude them.
 
         Returns:
             A sequence of TransactionPublic objects matching the filters and pagination criteria.
@@ -227,6 +229,13 @@ class SqliteTransactionRepository:
             .from_(self.transaction_table_name)
             .select(*TRANSACTION_COLUMNS, prefix_table=self.transaction_table_name)
         )
+
+        if not include_ignored:
+            # Exclude transactions that are marked as ignored
+            query = query.where(
+                Col(self.transaction_table_name, "is_ignored").eq(False)
+            )
+
         fields = get_fields_from_filters(filters)
 
         if Field.ACCOUNT in fields:
@@ -474,6 +483,7 @@ class SqliteTransactionRepository:
 
         query = (
             query.from_(self.transaction_table_name)
+            .where(Col(self.transaction_table_name, "is_ignored").eq(False))
             .select(
                 Col(self.transaction_table_name, "security_key"),
                 Col(self.transaction_table_name, "account_id"),
@@ -538,6 +548,7 @@ class SqliteTransactionRepository:
                 include_fields={Field.SECURITY, Field.ACCOUNT},
             )
             .from_(self.transaction_table_name)
+            .where(Col(self.transaction_table_name, "is_ignored").eq(False))
             .select(
                 Col(self.transaction_table_name, "security_key"),
                 Fn("SUM", Col(self.transaction_table_name, "units")).alias(

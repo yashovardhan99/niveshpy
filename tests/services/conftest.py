@@ -331,6 +331,7 @@ class MockTransactionRepository:
         offset=0,
         fetch_profile=TransactionFetchProfile.WITH_RELATIONS,
         sort_order=TransactionSortOrder.DATE_DESC_ID_ASC,
+        include_ignored: bool = False,
     ) -> Sequence[TransactionPublic]:
         """Find transactions matching the given filters with optional pagination."""
         if not filters:
@@ -344,6 +345,8 @@ class MockTransactionRepository:
                     ],
                 )
             )
+            if not include_ignored:
+                transactions = [t for t in transactions if not t.is_ignored]
             if sort_order == TransactionSortOrder.DATE_DESC_ID_ASC:
                 transactions.sort(
                     key=lambda t: (
@@ -507,7 +510,11 @@ class MockTransactionRepository:
         filters = list(filters)
         all_txns = list(self._transactions.values())
         if filters:
-            all_txns = [t for t in all_txns if self._matches_filters(t, filters)]
+            all_txns = [
+                t
+                for t in all_txns
+                if self._matches_filters(t, filters) and not t.is_ignored
+            ]
 
         # Group by (security_key, account_id)
         groups: dict[tuple[str, int], list] = {}
@@ -547,7 +554,11 @@ class MockTransactionRepository:
         filters = list(filters)
         all_txns = list(self._transactions.values())
         if filters:
-            all_txns = [t for t in all_txns if self._matches_filters(t, filters)]
+            all_txns = [
+                t
+                for t in all_txns
+                if self._matches_filters(t, filters) and not t.is_ignored
+            ]
 
         # Group by security_key only (aggregate across accounts)
         sec_groups: dict[str, list] = {}

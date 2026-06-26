@@ -57,6 +57,7 @@ class TransactionRepository(Protocol):
         offset: int = 0,
         fetch_profile: TransactionFetchProfile = TransactionFetchProfile.WITH_RELATIONS,
         sort_order: TransactionSortOrder = TransactionSortOrder.DATE_DESC_ID_ASC,
+        include_ignored: bool = False,
     ) -> Sequence[TransactionPublic]:
         """Find transactions matching the given filters with optional pagination.
 
@@ -66,6 +67,7 @@ class TransactionRepository(Protocol):
             offset: Optional number of transactions to skip before returning results.
             fetch_profile: The fetch profile to determine the level of detail to retrieve.
             sort_order: The sort order to determine the order of the returned transactions.
+            include_ignored: If True, include transactions marked as ignored; otherwise, exclude them.
 
         Returns:
             A sequence of TransactionPublic objects matching the filters and pagination criteria.
@@ -144,6 +146,9 @@ class TransactionRepository(Protocol):
     ) -> Sequence[HoldingUnitRow]:
         """Find holding units matching the given filters.
 
+        This should always exclude transactions that are marked as ignored, regardless
+        of the filters provided.
+
         Args:
             filters: An iterable of FilterNode objects to filter holding units.
 
@@ -157,6 +162,8 @@ class TransactionRepository(Protocol):
         group_by: Literal["category", "type", "both"],
     ) -> Sequence[Allocation]:
         """Find allocations matching the given filters.
+
+        Always exclude transactions that are marked as ignored, regardless of the filters provided.
 
         Args:
             filters: An iterable of FilterNode objects to filter allocations.

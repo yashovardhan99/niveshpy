@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add `uv lock --check` to CI/CD processes.
+- New transaction type: `REVERSAL`
+- New transaction validation service to find and natch reversed transactions.
+- New `--all` flag to show ignored transactions.
+- New database fields - is_ignored.
 
 ### Changed
 
