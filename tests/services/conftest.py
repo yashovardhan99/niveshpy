@@ -550,13 +550,9 @@ class MockTransactionRepository:
             )
 
         filters = list(filters)
-        all_txns = list(self._transactions.values())
+        all_txns = [txn for txn in self._transactions.values() if not txn.is_ignored]
         if filters:
-            all_txns = [
-                t
-                for t in all_txns
-                if self._matches_filters(t, filters) and not t.is_ignored
-            ]
+            all_txns = [t for t in all_txns if self._matches_filters(t, filters)]
 
         # Group by security_key only (aggregate across accounts)
         sec_groups: dict[str, list] = {}
