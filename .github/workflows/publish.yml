@@ -1,0 +1,69 @@
+# This workflow is triggered manually to publish missed updates to PyPI.
+# It is not intended to be used for regular releases,
+# which should be done through the release workflow.
+name: Publish to PyPi
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag for the release (e.g., v1.0.0)"
+        required: true
+jobs:
+  validate-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: mukunku/tag-exists-action@v1.7.0
+        id: check-tag
+        with:
+          tag: ${{ github.event.inputs.tag }}
+      - name: Fail if tag does not exist
+        if: steps.check-tag.outputs.exists == 'false'
+        run: |
+          echo "Tag does not exist. Please use an existing version."
+          exit 1
+
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # IMPORTANT: mandatory for trusted publishing
+    environment:
+      name: pypi
+      url: https://pypi.org/p/niveshpy
+    needs: validate-tag
+    steps:
+      - parallel:
+          - name: Log Inputs
+            run: |
+              echo "Tag: ${{ github.event.inputs.tag }}"
+
+          - uses: actions/checkout@v7.0.0
+            with:
+              persist-credentials: false
+              ref: ${{ github.event.inputs.tag }}
+
+          - name: Install uv
+            uses: astral-sh/setup-uv@v8.2.0
+            with:
+              # Install a specific version of uv.
+              version: "0.11.19"
+              enable-cache: true
+
+      - name: Install python
+        run: uv python install
+
+      - name: Check Lockfile
+        run: uv lock --check
+
+      - name: Build distribution
+        run: uv build
+
+      - parallel:
+          - name: Smoke test (wheel)
+            run: uv run --isolated --no-project --with $(ls dist/*.whl) niveshpy --help
+
+          - name: Smoke test (source distribution)
+            run: uv run --isolated --no-project --with $(ls dist/*.tar.gz) niveshpy --help
+
+      - name: Publish distribution 📦 to PyPI
+        run: uv publish
