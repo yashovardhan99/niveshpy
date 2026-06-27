@@ -510,11 +510,9 @@ class MockTransactionRepository:
         filters = list(filters)
         all_txns = list(self._transactions.values())
         if filters:
-            all_txns = [
-                t
-                for t in all_txns
-                if self._matches_filters(t, filters) and not t.is_ignored
-            ]
+            all_txns = [t for t in all_txns if self._matches_filters(t, filters)]
+
+        all_txns = [t for t in all_txns if not t.is_ignored]
 
         # Group by (security_key, account_id)
         groups: dict[tuple[str, int], list] = {}
