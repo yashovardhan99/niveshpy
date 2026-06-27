@@ -117,7 +117,7 @@ Depending on the terminal, the CLI will show a list of all such keys along with 
             file_path = file_path.as_posix()
             return SampleParser(file_path)
     ```
-    
+
     1. Transactions for all provided security-account combinations in the given date-range will be overwritten. This is to ensure transactions remain accurate and current. Keep this in mind when returning these dates.
     2. It's a good practice to include a `source` key in the metadata dictionary for any object you are returning.
     3. You can also include other key-value pairs in the metadata dictionary that may be relevant.

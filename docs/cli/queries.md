@@ -11,10 +11,10 @@ Spaces can be used to divide into multiple queries:
 
 If you have a space as part of your query, use quotes: `'ABC mutual fund'`
 
-All text queries are case-insensitive and support regex, so you can do things like:  
-`'^ABC Mutual Fund'`  
-`'Gold ETF$'`  
-`'uti (gold|nifty)'`  
+All text queries are case-insensitive and support regex, so you can do things like: \
+`'^ABC Mutual Fund'` \
+`'Gold ETF$'` \
+`'uti (gold|nifty)'`
 
 If you want to search on specific fields, you can use the following prefixes:
 
