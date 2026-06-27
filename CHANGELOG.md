@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0a9] - 2026-06-27
+
 ### Added
 
 - Add `uv lock --check` to CI/CD processes.
@@ -172,7 +174,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pre-built plugin: amfi (Mutual Fund)
 - Documentation
 
-[unreleased]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a8...HEAD
+[unreleased]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a9...HEAD
+[1.0.0a9]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a8...v1.0.0a9
 [1.0.0a8]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a7...v1.0.0a8
 [1.0.0a7]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a6...v1.0.0a7
 [1.0.0a6]: https://github.com/yashovardhan99/niveshpy/compare/v1.0.0a5...v1.0.0a6
