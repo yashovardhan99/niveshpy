@@ -243,3 +243,166 @@ def test_delete_transaction_by_id_returns_true_then_false(
 
     second_delete = transaction_repository.delete_transaction_by_id(1)
     assert second_delete is False
+
+
+class TestFindTransactionsIsIgnored:
+    """Tests for the is_ignored flag handling in find_transactions."""
+
+    def test_excluded_by_default(
+        self,
+        transaction_repository: SqliteTransactionRepository,
+        security_repository: SqliteSecurityRepository,
+        account_repository: SqliteAccountRepository,
+    ) -> None:
+        """Ignored transactions are excluded by default."""
+        account_repository.insert_account(
+            AccountCreate(name="Test Account", institution="Test Bank")
+        )
+        security_repository.insert_security(
+            SecurityCreate(
+                key="IGN123",
+                name="Ignored Fund",
+                category=SecurityCategory.EQUITY,
+                type=SecurityType.MUTUAL_FUND,
+            )
+        )
+
+        # Insert one normal and one ignored transaction
+        transaction_repository.insert_transaction(
+            TransactionCreate(
+                account_id=1,
+                security_key="IGN123",
+                transaction_date=datetime.date(2024, 1, 1),
+                units=Decimal(100),
+                amount=Decimal(1000),
+                type=TransactionType.PURCHASE,
+                description="Normal transaction",
+                is_ignored=False,
+            )
+        )
+        transaction_repository.insert_transaction(
+            TransactionCreate(
+                account_id=1,
+                security_key="IGN123",
+                transaction_date=datetime.date(2024, 1, 2),
+                units=Decimal(200),
+                amount=Decimal(2000),
+                type=TransactionType.PURCHASE,
+                description="Ignored transaction",
+                is_ignored=True,
+            )
+        )
+
+        # With default include_ignored=False, only normal should be returned
+        result = transaction_repository.find_transactions([], include_ignored=False)
+        assert len(result) == 1
+        assert result[0].description == "Normal transaction"
+        assert result[0].is_ignored is False
+
+    def test_included_with_flag(
+        self,
+        transaction_repository: SqliteTransactionRepository,
+        security_repository: SqliteSecurityRepository,
+        account_repository: SqliteAccountRepository,
+    ) -> None:
+        """Ignored transactions are included when include_ignored=True."""
+        account_repository.insert_account(
+            AccountCreate(name="Test Account", institution="Test Bank")
+        )
+        security_repository.insert_security(
+            SecurityCreate(
+                key="IGN123",
+                name="Ignored Fund",
+                category=SecurityCategory.EQUITY,
+                type=SecurityType.MUTUAL_FUND,
+            )
+        )
+
+        # Insert one normal and one ignored transaction
+        transaction_repository.insert_transaction(
+            TransactionCreate(
+                account_id=1,
+                security_key="IGN123",
+                transaction_date=datetime.date(2024, 1, 1),
+                units=Decimal(100),
+                amount=Decimal(1000),
+                type=TransactionType.PURCHASE,
+                description="Normal transaction",
+                is_ignored=False,
+            )
+        )
+        transaction_repository.insert_transaction(
+            TransactionCreate(
+                account_id=1,
+                security_key="IGN123",
+                transaction_date=datetime.date(2024, 1, 2),
+                units=Decimal(200),
+                amount=Decimal(2000),
+                type=TransactionType.PURCHASE,
+                description="Ignored transaction",
+                is_ignored=True,
+            )
+        )
+
+        # With include_ignored=True, both should be returned
+        result = transaction_repository.find_transactions([], include_ignored=True)
+        assert len(result) == 2
+        descriptions = {txn.description for txn in result}
+        assert "Normal transaction" in descriptions
+        assert "Ignored transaction" in descriptions
+
+    def test_find_holding_units_excludes_ignored(
+        self,
+        transaction_repository: SqliteTransactionRepository,
+        security_repository: SqliteSecurityRepository,
+        account_repository: SqliteAccountRepository,
+    ) -> None:
+        """find_holding_units excludes ignored transactions."""
+        account_repository.insert_account(
+            AccountCreate(name="Test Account", institution="Test Bank")
+        )
+        security_repository.insert_security(
+            SecurityCreate(
+                key="HLD123",
+                name="Holdings Fund",
+                category=SecurityCategory.EQUITY,
+                type=SecurityType.MUTUAL_FUND,
+            )
+        )
+
+        # Insert a normal transaction and an ignored transaction
+        transaction_repository.insert_transaction(
+            TransactionCreate(
+                account_id=1,
+                security_key="HLD123",
+                transaction_date=datetime.date(2024, 1, 1),
+                units=Decimal(100),
+                amount=Decimal(1000),
+                type=TransactionType.PURCHASE,
+                description="Normal purchase",
+                is_ignored=False,
+            )
+        )
+        transaction_repository.insert_transaction(
+            TransactionCreate(
+                account_id=1,
+                security_key="HLD123",
+                transaction_date=datetime.date(2024, 1, 2),
+                units=Decimal(200),
+                amount=Decimal(2000),
+                type=TransactionType.PURCHASE,
+                description="Ignored purchase",
+                is_ignored=True,
+            )
+        )
+
+        # find_holding_units should only count the normal transaction (excludes ignored)
+        holdings = transaction_repository.find_holding_units([])
+        # Filter to get only the holding for account 1 and security HLD123
+        holding_row = next(
+            (h for h in holdings if h.account_id == 1 and h.security_key == "HLD123"),
+            None,
+        )
+        assert holding_row is not None
+        # Should only include the 100 units from the normal transaction, not the 200 from ignored
+        assert holding_row.total_units == Decimal(100)

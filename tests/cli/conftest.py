@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,7 @@ from click.testing import CliRunner, Result
 from niveshpy.cli.main import cli
 from niveshpy.core.app import Application
 from niveshpy.infrastructure.sqlite.sqlite_db import SqliteDatabase
+from niveshpy.models.transaction import TransactionCreate, TransactionType
 
 
 @pytest.fixture
@@ -151,6 +154,43 @@ class CliScenario:
             and txn["security"]["key"] == security_key
         )
         return int(transaction["id"])
+
+    def add_ignored_transaction(
+        self,
+        transaction_date: str,
+        transaction_type: str,
+        description: str,
+        amount: str,
+        units: str,
+        account_id: int,
+        security_key: str,
+    ) -> int:
+        """Add an ignored transaction directly to the repository and return its id."""
+        app = Application()
+
+        # Convert transaction type string to enum (handle case-insensitive)
+        txn_type_map = {
+            "purchase": TransactionType.PURCHASE,
+            "sale": TransactionType.SALE,
+            "reversal": TransactionType.REVERSAL,
+        }
+        txn_type = txn_type_map.get(transaction_type.lower())
+        if txn_type is None:
+            raise ValueError(f"Unknown transaction type: {transaction_type}")
+
+        txn = TransactionCreate(
+            transaction_date=datetime.datetime.strptime(
+                transaction_date, "%Y-%m-%d"
+            ).date(),
+            type=txn_type,
+            description=description,
+            amount=Decimal(amount),
+            units=Decimal(units),
+            account_id=account_id,
+            security_key=security_key,
+            is_ignored=True,
+        )
+        return app.transaction_repository.insert_transaction(txn)
 
 
 @pytest.fixture

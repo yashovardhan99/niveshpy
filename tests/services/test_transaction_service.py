@@ -270,6 +270,88 @@ class TestListTransactions:
         assert transactions[0].security.key is not None
         assert transactions[0].account.id is not None
 
+    def test_list_transactions_ignored_excluded_by_default(
+        self,
+        transaction_service,
+        sample_accounts: Sequence[AccountPublic],
+        sample_securities: Sequence[SecurityPublic],
+    ):
+        """Ignored transactions are excluded by default."""
+        # Insert a normal transaction and an ignored transaction
+        ignored_txn = TransactionCreate(
+            transaction_date=datetime.date(2024, 5, 1),
+            type=TransactionType.PURCHASE,
+            description="Ignored transaction",
+            amount=Decimal("500.00"),
+            units=Decimal("5.00"),
+            account_id=sample_accounts[0].id,
+            security_key=sample_securities[0].key,
+            is_ignored=True,
+        )
+        normal_txn = TransactionCreate(
+            transaction_date=datetime.date(2024, 5, 2),
+            type=TransactionType.PURCHASE,
+            description="Normal transaction",
+            amount=Decimal("600.00"),
+            units=Decimal("6.00"),
+            account_id=sample_accounts[0].id,
+            security_key=sample_securities[0].key,
+            is_ignored=False,
+        )
+
+        transaction_service.transaction_repository.insert_transaction(ignored_txn)
+        transaction_service.transaction_repository.insert_transaction(normal_txn)
+
+        transactions = transaction_service.list_transactions(
+            queries=(), limit=30, offset=0
+        )
+
+        # Only the normal transaction should be returned
+        assert len(transactions) == 1
+        assert transactions[0].description == "Normal transaction"
+
+    def test_list_transactions_ignored_included_with_flag(
+        self,
+        transaction_service,
+        sample_accounts: Sequence[AccountPublic],
+        sample_securities: Sequence[SecurityPublic],
+    ):
+        """Ignored transactions are included when flag is set."""
+        # Insert a normal transaction and an ignored transaction
+        ignored_txn = TransactionCreate(
+            transaction_date=datetime.date(2024, 5, 1),
+            type=TransactionType.PURCHASE,
+            description="Ignored transaction",
+            amount=Decimal("500.00"),
+            units=Decimal("5.00"),
+            account_id=sample_accounts[0].id,
+            security_key=sample_securities[0].key,
+            is_ignored=True,
+        )
+        normal_txn = TransactionCreate(
+            transaction_date=datetime.date(2024, 5, 2),
+            type=TransactionType.PURCHASE,
+            description="Normal transaction",
+            amount=Decimal("600.00"),
+            units=Decimal("6.00"),
+            account_id=sample_accounts[0].id,
+            security_key=sample_securities[0].key,
+            is_ignored=False,
+        )
+
+        transaction_service.transaction_repository.insert_transaction(ignored_txn)
+        transaction_service.transaction_repository.insert_transaction(normal_txn)
+
+        transactions = transaction_service.list_transactions(
+            queries=(), limit=30, offset=0, include_ignored=True
+        )
+
+        # Both transactions should be returned
+        assert len(transactions) == 2
+        descriptions = {txn.description for txn in transactions}
+        assert "Ignored transaction" in descriptions
+        assert "Normal transaction" in descriptions
+
 
 @pytest.fixture
 def cost_basis_transactions(
