@@ -88,7 +88,7 @@ jobs:
 
       - name: Create Draft release
         run: |
-          gh release create  $TAG --notes-from-tag --discussion-category "General" --draft=true
+          gh release create  $TAG --notes-from-tag --draft=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.version }}
@@ -96,7 +96,7 @@ jobs:
 
       - name: Create Draft Pre-release
         run: |
-          gh release create $TAG --notes-from-tag --prerelease --discussion-category "General" --draft=true
+          gh release create $TAG --notes-from-tag --prerelease --draft=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.version }}
@@ -188,7 +188,7 @@ jobs:
           FILE: dist/*.tar.gz dist/*.whl
 
       - name: Publish release
-        run: gh release edit $TAG --draft=false --repo yashovardhan99/niveshpy
+        run: gh release edit $TAG --draft=false --repo yashovardhan99/niveshpy --discussion-category "General"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.version }}
