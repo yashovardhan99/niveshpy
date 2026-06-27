@@ -380,6 +380,8 @@ class MockTransactionRepository:
                 for t in self._transactions.values()
                 if self._matches_filters(t, filters)
             ]
+            if not include_ignored:
+                transactions = [t for t in transactions if not t.is_ignored]
             if sort_order == TransactionSortOrder.DATE_DESC_ID_ASC:
                 transactions.sort(
                     key=lambda t: (
