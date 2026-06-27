@@ -10,6 +10,8 @@ from niveshpy.domain.repositories import (
     SecurityRepository,
     TransactionRepository,
 )
+from niveshpy.domain.services.transaction_validation import TransactionValidationService
+from niveshpy.exceptions import OperationError
 from niveshpy.models.account import AccountCreate, AccountPublic
 from niveshpy.models.parser import Parser
 from niveshpy.models.security import SecurityCreate
@@ -25,6 +27,9 @@ class ParsingService:
     _security_repository: SecurityRepository = field(alias="security_repository")
     _transaction_repository: TransactionRepository = field(
         alias="transaction_repository"
+    )
+    _transaction_validation_service: TransactionValidationService = field(
+        alias="transaction_validation_service"
     )
     _progress_callback: Callable[[str, int, int], None] | None = field(
         default=None, alias="progress_callback"
@@ -101,6 +106,11 @@ class ParsingService:
         transactions = list(
             map(self._add_metadata, self._parser.get_transactions(accounts))
         )
+        try:
+            transactions = self._transaction_validation_service.validate(transactions)
+        except ExceptionGroup as e:
+            message = f"Transaction validation failed with {len(e.exceptions)} errors."
+            raise OperationError(message) from e
         self._report_progress("transactions", 0, len(transactions))
         account_ids = [account.id for account in accounts]
         inserted_count = self._transaction_repository.overwrite_transactions_in_date_range_for_accounts(

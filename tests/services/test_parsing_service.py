@@ -6,6 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from niveshpy.domain.services.transaction_validation import (
+    get_transaction_validation_service,
+)
 from niveshpy.models.account import AccountCreate
 from niveshpy.models.parser import Parser
 from niveshpy.models.security import SecurityCategory, SecurityCreate, SecurityType
@@ -37,6 +40,12 @@ def transaction_repository(
 ) -> MockTransactionRepository:
     """Create MockTransactionRepository instance with the mocked repositories."""
     return MockTransactionRepository(account_repository, security_repository)
+
+
+@pytest.fixture
+def validation_service():
+    """Real TransactionValidationService for testing."""
+    return get_transaction_validation_service()
 
 
 @pytest.fixture
@@ -108,6 +117,7 @@ def parsing_service(
     account_repository: MockAccountRepository,
     security_repository: MockSecurityRepository,
     transaction_repository: MockTransactionRepository,
+    validation_service,
 ):
     """Create ParsingService instance with mock parser and mocked repositories."""
     return ParsingService(
@@ -115,6 +125,7 @@ def parsing_service(
         account_repository=account_repository,
         security_repository=security_repository,
         transaction_repository=transaction_repository,
+        transaction_validation_service=validation_service,
     )
 
 
@@ -130,6 +141,7 @@ def parsing_service_with_callback(
     account_repository: MockAccountRepository,
     security_repository: MockSecurityRepository,
     transaction_repository: MockTransactionRepository,
+    validation_service,
     progress_callback,
 ):
     """Create ParsingService instance with progress callback and mocked repositories."""
@@ -138,6 +150,7 @@ def parsing_service_with_callback(
         account_repository=account_repository,
         security_repository=security_repository,
         transaction_repository=transaction_repository,
+        transaction_validation_service=validation_service,
         progress_callback=progress_callback,
     )
 
@@ -230,11 +243,14 @@ class TestParsingService:
         empty_parser.get_securities.return_value = []
         empty_parser.get_transactions.return_value = []
 
+        validation_service = get_transaction_validation_service()
+
         service = ParsingService(
             parser=empty_parser,
             account_repository=account_repository,
             security_repository=security_repository,
             transaction_repository=transaction_repository,
+            transaction_validation_service=validation_service,
         )
         service.parse_and_store_all()
 
@@ -252,11 +268,14 @@ class TestParsingService:
     ):
         """Test that parsing same accounts twice does not modify them."""
         # First parse
+        validation_service = get_transaction_validation_service()
+
         service = ParsingService(
             parser=mock_parser,
             account_repository=account_repository,
             security_repository=security_repository,
             transaction_repository=transaction_repository,
+            transaction_validation_service=validation_service,
         )
         service.parse_and_store_all()
 
@@ -291,11 +310,14 @@ class TestParsingService:
     ):
         """Test that parsing same securities twice does not modify them."""
         # First parse
+        validation_service = get_transaction_validation_service()
+
         service = ParsingService(
             parser=mock_parser,
             account_repository=account_repository,
             security_repository=security_repository,
             transaction_repository=transaction_repository,
+            transaction_validation_service=validation_service,
         )
         service.parse_and_store_all()
 
@@ -367,11 +389,14 @@ class TestParsingService:
             ]
 
         parser.get_transactions.side_effect = first_transactions
+        validation_service = get_transaction_validation_service()
+
         service = ParsingService(
             parser=parser,
             account_repository=account_repository,
             security_repository=security_repository,
             transaction_repository=transaction_repository,
+            transaction_validation_service=validation_service,
         )
         service.parse_and_store_all()
 
@@ -479,12 +504,15 @@ class TestParsingService:
 
         parser2.get_transactions.side_effect = transactions_account2
 
+        validation_service = get_transaction_validation_service()
+
         # Parse first account
         service1 = ParsingService(
             parser=parser1,
             account_repository=account_repository,
             security_repository=security_repository,
             transaction_repository=transaction_repository,
+            transaction_validation_service=validation_service,
         )
         service1.parse_and_store_all()
 
@@ -494,6 +522,7 @@ class TestParsingService:
             account_repository=account_repository,
             security_repository=security_repository,
             transaction_repository=transaction_repository,
+            transaction_validation_service=validation_service,
         )
         service2.parse_and_store_all()
 
@@ -504,3 +533,41 @@ class TestParsingService:
         descriptions = {txn.description for txn in transactions}
         assert "Account 1 Transaction" in descriptions
         assert "Account 2 Transaction" in descriptions
+
+    def test_validate_processes_reversals(
+        self,
+        validation_service,
+    ):
+        """Validation service processes reversals and marks them as ignored."""
+        # Create a PURCHASE and matching REVERSAL (same day, negated amount/units)
+        transactions = [
+            TransactionCreate(
+                transaction_date=datetime.date(2024, 6, 1),
+                type=TransactionType.PURCHASE,
+                description="Initial Purchase",
+                amount=Decimal("1000.00"),
+                units=Decimal("10.00"),
+                security_key="SEC001",
+                account_id=1,
+                properties={},
+            ),
+            TransactionCreate(
+                transaction_date=datetime.date(2024, 6, 1),
+                type=TransactionType.REVERSAL,
+                description="Reversal",
+                amount=Decimal("-1000.00"),
+                units=Decimal("-10.00"),
+                security_key="SEC001",
+                account_id=1,
+                properties={},
+            ),
+        ]
+
+        # Validate transactions
+        validated = validation_service.validate(transactions)
+
+        # Verify both transactions are returned
+        assert len(validated) == 2
+
+        # Verify both are marked as ignored (reversal matching worked)
+        assert all(txn.is_ignored for txn in validated)

@@ -109,7 +109,6 @@ class CASParser:
                         "DIVIDEND_REINVEST",
                         "PURCHASE",
                         "PURCHASE_SIP",
-                        "REVERSAL",
                         "SWITCH_IN",
                         "SWITCH_IN_MERGER",
                     ):
@@ -120,6 +119,8 @@ class CASParser:
                         "SWITCH_OUT_MERGER",
                     ):
                         txn_type = TransactionType.SALE
+                    elif transaction.type == "REVERSAL":
+                        txn_type = TransactionType.REVERSAL
                     else:
                         skipped += 1
                         continue  # Skip unknown transaction types

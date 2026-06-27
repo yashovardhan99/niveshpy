@@ -824,6 +824,7 @@ TRANSACTION_COLUMNS = (
     "account_id",
     "properties",
     "created",
+    "is_ignored",
 )
 """Mapping of TransactionPublic attributes to database column names for transactions."""
 
@@ -836,5 +837,6 @@ TRANSACTION_CREATE_COLUMNS = (
     "security_key",
     "account_id",
     "properties",
+    "is_ignored",
 )
 """Mapping of TransactionCreate attributes to database column names for transaction creation."""

@@ -298,7 +298,6 @@ class TestGetTransactions:
             "DIVIDEND_REINVEST",
             "SWITCH_IN",
             "SWITCH_IN_MERGER",
-            "REVERSAL",
         ],
     )
     def test_purchase_types_mapped(self, txn_type, accounts_for_transactions):
@@ -315,6 +314,21 @@ class TestGetTransactions:
 
         assert len(transactions) == 1
         assert transactions[0].type == TransactionType.PURCHASE
+
+    def test_reversal_type_mapped(self, accounts_for_transactions):
+        """Verify REVERSAL type maps to TransactionType.REVERSAL."""
+        txn = _make_transaction(type_="REVERSAL")
+        cas_data = _make_cas_data(
+            folios=[_make_folio(schemes=[_make_scheme(transactions=[txn])])]
+        )
+        with patch("niveshpy.parsers.cas.casparser") as mock_module:
+            mock_module.read_cas_pdf.return_value = cas_data
+            mock_module.CASData = type(cas_data)
+            p = CASParser(TEST_FILE_PATH, TEST_PASSWORD)
+            transactions = list(p.get_transactions(accounts_for_transactions))
+
+        assert len(transactions) == 1
+        assert transactions[0].type == TransactionType.REVERSAL
 
     @pytest.mark.parametrize(
         "txn_type",

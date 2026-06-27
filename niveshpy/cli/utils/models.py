@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from enum import StrEnum, auto
 from typing import Any, Generic, Literal, TypeVar
 
+from attrs import frozen
+
 
 class OutputFormat(StrEnum):
     """Enumeration of supported output formats."""
@@ -27,6 +29,22 @@ class TotalRow(Generic[TotalType]):
 
     total: TotalType
     description: str = "Total"
+
+
+T = TypeVar("T")
+
+
+@frozen
+class Row(Generic[T]):
+    """Class for representing a row in tabular output.
+
+    Attributes:
+        data (Any): The data associated with the row.
+        override_style (str, optional): Optional Rich style string to override the default row style.
+    """
+
+    data: T
+    override_style: str | None = None
 
 
 @dataclass(slots=True, frozen=True)

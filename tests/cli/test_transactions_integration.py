@@ -138,3 +138,98 @@ def test_transactions_delete_requires_force_in_no_input_mode(
     )
 
     assert "--force must be provided" in result.output
+
+
+def test_all_flag_valid_with_normal_transactions(cli_scenario: CliScenario) -> None:
+    """--all flag is valid when invoked with normal transactions."""
+    account_id = cli_scenario.add_account("Primary", "HDFC")
+    cli_scenario.add_security("INF123", "Test Fund")
+
+    cli_scenario.add_transaction(
+        "2025-01-10",
+        "purchase",
+        "Normal transaction",
+        "1000.00",
+        "10.000",
+        account_id,
+        "INF123",
+    )
+
+    # --all flag should work (output should be same as without flag for normal transactions)
+    result_without_flag = cli_scenario.invoke(["transactions", "list"])
+    result_with_flag = cli_scenario.invoke(["transactions", "list", "--all"])
+
+    assert result_without_flag.exit_code == 0
+    assert result_with_flag.exit_code == 0
+    # Both should have the transaction (check for partial match due to truncated output)
+    assert "Norm" in result_without_flag.output
+    assert "Norm" in result_with_flag.output
+
+
+def test_ignored_hidden_by_default(cli_scenario: CliScenario) -> None:
+    """Ignored transactions are hidden by default without --all flag."""
+    account_id = cli_scenario.add_account("Primary", "HDFC")
+    cli_scenario.add_security("INF123", "Test Fund")
+
+    # Add a normal transaction through CLI
+    cli_scenario.add_transaction(
+        "2025-01-10",
+        "purchase",
+        "Normal transaction",
+        "1000.00",
+        "10.000",
+        account_id,
+        "INF123",
+    )
+
+    # Seed an ignored transaction directly to the repository
+    cli_scenario.add_ignored_transaction(
+        "2025-01-11",
+        "purchase",
+        "Ignored transaction",
+        "500.00",
+        "5.000",
+        account_id,
+        "INF123",
+    )
+
+    # Without --all flag, ignored transaction should not be shown
+    result = cli_scenario.invoke(["transactions", "list"])
+    assert result.exit_code == 0
+    assert "Norm" in result.output
+    # The ignored transaction's description should NOT appear
+    assert "Igno" not in result.output
+
+
+def test_all_shows_ignored(cli_scenario: CliScenario) -> None:
+    """--all flag shows ignored transactions with [IGNORED] marker."""
+    account_id = cli_scenario.add_account("Primary", "HDFC")
+    cli_scenario.add_security("INF123", "Test Fund")
+
+    # Add a normal transaction through CLI
+    cli_scenario.add_transaction(
+        "2025-01-10",
+        "purchase",
+        "Normal transaction",
+        "1000.00",
+        "10.000",
+        account_id,
+        "INF123",
+    )
+
+    # Seed an ignored transaction directly to the repository
+    cli_scenario.add_ignored_transaction(
+        "2025-01-11",
+        "purchase",
+        "Ignored transaction",
+        "500.00",
+        "5.000",
+        account_id,
+        "INF123",
+    )
+
+    # With --all flag, both should be shown
+    result = cli_scenario.invoke(["transactions", "list", "--all"])
+    assert result.exit_code == 0
+    assert "Norm" in result.output
+    assert "Igno" in result.output

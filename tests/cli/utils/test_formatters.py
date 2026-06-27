@@ -3,11 +3,14 @@
 import datetime
 from decimal import Decimal
 
+import pytest
+
 from niveshpy.cli.utils.formatters import (
     format_datetime,
     format_decimal,
     format_percentage,
 )
+from niveshpy.models.transaction import TransactionType
 
 
 class TestFormatDecimal:
@@ -95,3 +98,20 @@ class TestFormatDatetime:
         result = format_datetime(dt)
         expected_date = dt.strftime("%d %b %Y")
         assert result == f"on {expected_date}"
+
+
+@pytest.mark.parametrize(
+    "transaction_type, expected_output",
+    [
+        (TransactionType.PURCHASE, "[green]Purchase"),
+        (TransactionType.SALE, "[red]Sale"),
+        (TransactionType.REVERSAL, "[yellow]Reversal"),
+        ("TRANSFER", "[reverse]Unknown"),
+        (None, "[reverse]Unknown"),
+    ],
+)
+def test_format_transaction_type(transaction_type, expected_output) -> None:
+    """Test formatting of TransactionType enum values."""
+    from niveshpy.cli.utils.formatters import format_transaction_type
+
+    assert format_transaction_type(transaction_type) == expected_output

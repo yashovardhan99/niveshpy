@@ -10,11 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add `uv lock --check` to CI/CD processes.
+- New transaction type: `REVERSAL`
+- New transaction validation service to find and match reversed transactions.
+- New `--all` flag to show ignored transactions.
+- New database fields - is_ignored.
+- New `--strict` flag to raise errors when parsing.
 
 ### Changed
 
 - (Internal) Improve various aspects of query builder.
 - Update uv version in GitHub Actions workflows.
+- When parsing transactions, if a reversed transaction is found, it will be matched with its original transaction and both will be ignored from all reports by default.
 
 ### Removed
 
