@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New transaction validation service to find and match reversed transactions.
 - New `--all` flag to show ignored transactions.
 - New database fields - is_ignored.
+- New `--strict` flag to raise errors when parsing.
 
 ### Changed
 

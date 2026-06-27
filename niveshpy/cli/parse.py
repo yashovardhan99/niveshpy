@@ -52,8 +52,15 @@ class ParserType(click.ParamType):
     default=None,
     help="Path to a file containing the password for encrypted files.",
 )
+@click.option(
+    "--strict", is_flag=True, default=False, help="Enable strict mode for parsing."
+)
 def parse(
-    ctx: click.Context, parser_key: str, file_path: Path, password_file: Path
+    ctx: click.Context,
+    parser_key: str,
+    file_path: Path,
+    password_file: Path,
+    strict: bool,
 ) -> None:
     """Parse custom statements and documents.
 
@@ -124,5 +131,5 @@ def parse(
             prog.update(task_map[stage], total=total, completed=current)
 
     with prog:
-        service = state.app.get_parsing_service(parser, update_progress)
+        service = state.app.get_parsing_service(parser, update_progress, strict=strict)
         service.parse_and_store_all()

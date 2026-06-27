@@ -107,6 +107,7 @@ class Application:
         self,
         parser: Parser,
         progress_callback: Callable[[str, int, int], None] | None = None,
+        strict: bool = False,
     ) -> ParsingService:
         """Get the parsing service for the given parser key."""
         from niveshpy.services.parsing_service import ParsingService
@@ -116,7 +117,7 @@ class Application:
             self.account_repository,
             self.security_repository,
             self.transaction_repository,
-            get_transaction_validation_service(),
+            get_transaction_validation_service(strict=strict),
             progress_callback=progress_callback,
         )
 
