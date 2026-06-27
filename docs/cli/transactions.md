@@ -18,11 +18,15 @@
     niveshpy transactions list gold # (1)
     niveshpy transactions list acct:Z123 # (2)
     niveshpy transactions list type:purchase # (3)
+    niveshpy transactions list --all # (4)
+    niveshpy transactions list type:reversal # (5)
     ```
 
     1. Filter by a security with 'gold' in its name or key.
     2. Filter by account 'Z123'.
     3. Filter by transaction type 'purchase'
+    4. Include ignored transactions as well.
+    5. Filter by transaction type 'reversal'.
 
 ## Model Reference
 
