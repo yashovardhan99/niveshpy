@@ -1,10 +1,10 @@
 -- Based on my own usage, I found that a new transaction type called "reversal"
 -- was needed to support the reversal of a transaction.  This migration adds the
--- "reversal" transaction type to the "transaction" table along with a new 
--- is_ignored flag and updates the existing transactions to use the new 
+-- "reversal" transaction type to the "transaction" table along with a new
+-- is_ignored flag and updates the existing transactions to use the new
 -- "reversal" type where appropriate.
--- 
--- 
+--
+--
 -- Rename existing table to temporary names:
 ALTER TABLE "transaction"
 RENAME TO transaction_old;

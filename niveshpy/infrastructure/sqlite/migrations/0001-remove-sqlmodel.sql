@@ -1,8 +1,8 @@
--- SQLModel support has been removed in favor of SQLAlchemy.  This migration 
--- updates the database schema to reflect the changes in the models.py file, 
+-- SQLModel support has been removed in favor of SQLAlchemy.  This migration
+-- updates the database schema to reflect the changes in the models.py file,
 -- which now uses SQLAlchemy instead of SQLModel.
--- 
--- 
+--
+--
 -- Rename existing tables to temporary names:
 ALTER TABLE account
 RENAME TO account_old;
