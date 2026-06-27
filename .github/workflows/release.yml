@@ -132,10 +132,10 @@ jobs:
 
       - parallel:
           - name: Smoke test (wheel)
-            run: uv run --isolated --no-project --with dist/*.whl niveshpy --help
+            run: uv run --isolated --no-project --with $(ls dist/*.whl) niveshpy --help
 
           - name: Smoke test (source distribution)
-            run: uv run --isolated --no-project --with dist/*.tar.gz niveshpy --help
+            run: uv run --isolated --no-project --with $(ls dist/*.tar.gz) niveshpy --help
 
       - name: Store the distribution packages
         uses: actions/upload-artifact@v7.0.1
