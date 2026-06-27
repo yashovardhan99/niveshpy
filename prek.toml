@@ -17,9 +17,8 @@ groups = [ "builtin" ]
 id     = "check-added-large-files"
 groups = [ "builtin" ]
 [[repos.hooks]]
-id     = "no-commit-to-branch"
-groups = [ "builtin" ]
-
+id     = "no-commit-to-branch" # Never use this in CI
+groups = [ "local" ]
 
 [[repos]]
 repo = "local"
