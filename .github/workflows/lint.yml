@@ -29,10 +29,10 @@ jobs:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.0
 
       - name: Install uv and set the Python version
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v8.2.0
         with:
           python-version: ${{ matrix.python-version }}
           # Install a specific version of uv.
@@ -48,14 +48,19 @@ jobs:
       - name: Install the project
         run: uv sync --locked --all-extras --dev
 
-      - name: Run Ruff lint check
-        run: |
-          uv run ruff check --no-fix --output-format=github
+      - parallel:
+          - name: Run Ruff lint check
+            run: |
+              uv run ruff check --no-fix --output-format=github
 
-      - name: Run Ruff format check
-        run: |
-          uv run ruff format --check
+          - name: Run Ruff format check
+            run: |
+              uv run ruff format --check
 
-      - name: Run ty type check
-        run: |
-          uv run ty check --output-format=github
+          - name: Run ty type check
+            run: |
+              uv run ty check --output-format=github
+
+          - name: Run prek pre-commit hooks
+            run: |
+              uv run prek run --show-diff-on-failure --color=always --all-files --group builtin
