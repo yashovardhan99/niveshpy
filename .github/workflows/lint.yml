@@ -7,7 +7,7 @@ on:
   push:
     branches: ["main"]
     paths:
-      - "niveshpy/**"
+      - "src/niveshpy/**"
       - "tests/**"
       - ".github/workflows/lint.yml"
       - "pyproject.toml"

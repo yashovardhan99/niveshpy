@@ -58,7 +58,7 @@ def test_accounts_add(cli_scenario):
 - **`assert` is allowed** in `tests/*` (ruff `S101` is disabled there). Plain `assert ...` is preferred over `unittest`-style asserts.
 - **Naming**: `test_<module>.py` mirroring the source module (e.g., `niveshpy/services/account.py` → `tests/services/test_account_service.py`).
 - **Decimal money**: in fixtures, pass amounts as strings (e.g., `"1000.50"`) so `Decimal` parsing is exercised. Never use `float`.
-- **Exceptions**: assert against the specific subclass from [niveshpy/exceptions.py](niveshpy/exceptions.py) (e.g., `pytest.raises(InvalidInputError)`), not bare `Exception`.
+- **Exceptions**: assert against the specific subclass from [src/niveshpy/exceptions.py](src/niveshpy/exceptions.py) (e.g., `pytest.raises(InvalidInputError)`), not bare `Exception`.
 - **Running tests**:
   ```sh
   uv run coverage run -m pytest                  # full suite

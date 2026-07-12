@@ -345,6 +345,7 @@ class TestMigrations:
         """Test that all migrations are recorded in the migration table."""
         migrations_path = (
             Path(__file__).parents[3]
+            / "src"
             / "niveshpy"
             / "infrastructure"
             / "sqlite"
